@@ -1,49 +1,49 @@
-# Protocolo: Deep (Stage 2 — Cross-review)
+# Protocol: Deep (Stage 2 — Cross-review)
 
-**Estado actual: STUB.** Esta versión del Council no ejecuta cross-review real. El flag `--deep` solo agrega una nota al output del Chairman explicando que Stage 2 está pendiente de implementación.
+**Current status: STUB.** This version of the Council does not run a real cross-review. The `--deep` flag only adds a note to the Chairman's output explaining that Stage 2 is pending implementation.
 
-Este archivo documenta el **diseño objetivo** para cuando se implemente, no el comportamiento actual.
-
----
-
-## Diseño objetivo (a implementar)
-
-### Cuándo se activa
-Cuando el usuario invoca el Council con el flag `--deep`. Ejemplo:
-
-```
-ask the council --deep: ¿debería contratar a una segunda persona para mi equipo?
-ask the council --deep --context example: ¿debería contratar a una segunda persona para mi equipo?
-```
-
-### Cómo funcionará
-
-Después de Stage 1 (los 5 asesores ya respondieron), antes del Chairman:
-
-1. **Anonimizar las 5 respuestas.** Cada asesor recibe las respuestas de los otros 4 etiquetadas como "Asesor A / B / C / D" — sin saber cuál es el Strategist, Adversary, etc. (Esto es lo que Karpathy hace en LLM Council para matar la sicofancia: si no sabes quién dijo qué, no puedes estar de acuerdo por deferencia).
-
-2. **Cada asesor responde a 3 preguntas:**
-   - **Insight más fuerte que yo no vi:** ¿Cuál de las 4 respuestas trae algo que mi propio razonamiento no incluyó y que cambia mi postura?
-   - **Insight más débil:** ¿Cuál de las 4 respuestas tiene una grieta lógica o un supuesto débil que puedo desmontar con evidencia?
-   - **Refinamiento de mi propia respuesta:** A la luz de lo que leí, ¿qué corrijo, refuerzo, o abandono de mi respuesta original?
-
-3. **El Chairman recibe ahora 5 respuestas originales + 5 reviews + 5 respuestas refinadas.** Su síntesis usa principalmente las refinadas, pero puede citar las originales si hubo un cambio importante (porque el cambio mismo es información).
-
-### Costo
-
-- Aproximadamente 2x los tokens y 2x el tiempo de Stage 1.
-- Solo se justifica para decisiones de alto costo de error o alta ambigüedad.
-
-### Output del Chairman en modo deep
-
-El Chairman agrega una sección breve al final:
-
-```
-**Cambios tras cross-review:** [1-2 oraciones. Qué se modificó en el veredicto al hacer Stage 2. Si el veredicto no cambió, dilo — es información valiosa que el primer instinto era correcto.]
-```
+This file documents the **target design** for when it is implemented, not the current behavior.
 
 ---
 
-## Por qué es stub por ahora
+## Target design (to be implemented)
 
-Implementar cross-review aislado de contexto en claude.ai requiere coordinar lecturas secuenciales con anonimización limpia, lo cual añade complejidad operativa que no agrega valor hasta que el Council ya haya probado utilidad en Stage 1. Se implementará una vez confirmado que el flujo standard funciona bien en producción.
+### When it activates
+When the user invokes the Council with the `--deep` flag. Example:
+
+```
+ask the council --deep: should I hire a second person for my team?
+ask the council --deep --context example: should I hire a second person for my team?
+```
+
+### How it will work
+
+After Stage 1 (the 5 advisors have already responded), before the Chairman:
+
+1. **Anonymize the 5 responses.** Each advisor receives the responses of the other 4 labeled as "Advisor A / B / C / D" — without knowing which one is the Strategist, the Adversary, etc. (This is what Karpathy does in LLM Council to kill sycophancy: if you don't know who said what, you can't agree out of deference).
+
+2. **Each advisor answers 3 questions:**
+   - **Strongest insight I missed:** Which of the 4 responses brings something my own reasoning did not include and that changes my stance?
+   - **Weakest insight:** Which of the 4 responses has a logical crack or a weak assumption I can dismantle with evidence?
+   - **Refinement of my own response:** In light of what I read, what do I correct, reinforce, or abandon from my original response?
+
+3. **The Chairman now receives 5 original responses + 5 reviews + 5 refined responses.** Its synthesis mainly uses the refined ones, but it can cite the originals if there was a significant change (because the change itself is information).
+
+### Cost
+
+- Roughly 2x the tokens and 2x the time of Stage 1.
+- Only justified for decisions with a high cost of error or high ambiguity.
+
+### Chairman output in deep mode
+
+The Chairman adds a short section at the end:
+
+```
+**Changes after cross-review:** [1-2 sentences. What changed in the verdict from running Stage 2. If the verdict did not change, say so — it's valuable information that the first instinct was correct.]
+```
+
+---
+
+## Why it is a stub for now
+
+Implementing context-isolated cross-review in claude.ai requires coordinating sequential reads with clean anonymization, which adds operational complexity that adds no value until the Council has proven its usefulness in Stage 1. It will be implemented once the standard flow is confirmed to work well in production.

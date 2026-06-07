@@ -1,25 +1,25 @@
-# Protocolo: Standard
+# Protocol: Standard
 
-Flujo default del Council. No requiere flags. Es el modo más rápido y suficiente para 90% de las decisiones.
+The Council's default flow. Requires no flags. It is the fastest mode and sufficient for 90% of decisions.
 
-## Pasos
+## Steps
 
-1. Parsear pregunta del usuario y flags (`--context` si está).
-2. Cargar hooks de contexto si aplica.
-3. Convocar a los 5 asesores en paralelo (Claude Code) o secuencialmente con aislamiento de contexto (claude.ai / Cowork).
-4. El Outsider NUNCA recibe contexto inyectado, aunque haya `--context`. Los otros 4 sí.
-5. Convocar al Chairman con las 5 respuestas + la pregunta original.
-6. Presentar al usuario: veredicto del Chairman primero, respuestas individuales después.
+1. Parse the user's question and flags (`--context` if present).
+2. Load context hooks if applicable.
+3. Convene the 5 advisors in parallel (Claude Code) or sequentially with context isolation (claude.ai / Cowork).
+4. The Outsider NEVER receives injected context, even if `--context` is present. The other 4 do.
+5. Convene the Chairman with the 5 responses + the original question.
+6. Present to the user: Chairman's verdict first, individual responses after.
 
-## Lo que NO se hace en Standard
+## What Standard does NOT do
 
-- No hay Stage 2 (cross-review).
-- No hay segundas rondas.
-- No hay "consenso forzado". Si el Chairman tiene que tomar postura sin consenso, lo hace.
+- No Stage 2 (cross-review).
+- No second rounds.
+- No "forced consensus". If the Chairman has to take a stance without consensus, it does.
 
-## Cuándo usar
+## When to use
 
-- Decisiones de táctica de día a día.
-- Cuestiones con bajo costo de error.
-- Cuando hay límites de tiempo o tokens.
-- Cuando el usuario no especificó `--deep`.
+- Day-to-day tactical decisions.
+- Questions with a low cost of error.
+- When there are time or token limits.
+- When the user did not specify `--deep`.

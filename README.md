@@ -13,7 +13,7 @@ ADCM public toolkits for Claude Code (open-source).
 > Marketplace state is per `CLAUDE_CONFIG_DIR` — run this once per profile.
 
 ```
-/plugin marketplace add <tu-usuario-github>/adcm
+/plugin marketplace add angel-carvajal/adcm
 /plugin install adcm-toolkits@adcm
 ```
 
@@ -23,7 +23,7 @@ ADCM public toolkits for Claude Code (open-source).
 
 ## Notes
 
-- Public open-source toolkit marketplace de ADCM. El plugin `adcm-toolkits` trae el framework Council (genérico, sin contexto confidencial) y el generador de contexto de proyectos de código. **No subas contexto privado a un fork público.**
+- Public open-source toolkit marketplace by ADCM. The `adcm-toolkits` plugin ships the Council multi-advisor deliberation framework (generic, no confidential context) and a code-project context generator. **Do not commit private context to a public fork.**
 - Per-plugin requirements: see each plugin's README.
 
 ## License

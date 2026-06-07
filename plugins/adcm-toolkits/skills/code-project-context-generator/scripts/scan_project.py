@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Code Project Scanner — Analiza un proyecto de código y produce un JSON estructurado
-con stack, árbol de carpetas, entry points, convenciones y términos de dominio.
+Code Project Scanner — Analyzes a code project and produces a structured JSON
+with stack, folder tree, entry points, conventions, and domain terms.
 
-El output está diseñado para alimentar la generación de un skill
-`code-project-context:[project-name]` con lazy-loading.
+The output is designed to feed the generation of a
+`code-project-context:[project-name]` skill with lazy-loading.
 
-Uso:
+Usage:
     python3 scan_project.py <project_path> [--output report.json] [--max-depth 4]
 
-El scanner es agnóstico de stack — detecta Node/TS, PHP, Python, Go, Rust, Java, Ruby.
+The scanner is stack-agnostic — it detects Node/TS, PHP, Python, Go, Rust, Java, Ruby.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Configuración
+# Configuration
 # ---------------------------------------------------------------------------
 
 SKIP_DIRS = {
@@ -125,7 +125,7 @@ CONFIG_FILES = {
     "LICENSE": "license",
 }
 
-# Mapeo de extensión → lenguaje
+# Extension → language mapping
 EXT_LANG = {
     ".ts": "typescript", ".tsx": "typescript-jsx",
     ".js": "javascript", ".jsx": "javascript-jsx", ".mjs": "javascript", ".cjs": "javascript",
@@ -151,108 +151,108 @@ EXT_LANG = {
     ".proto": "protobuf",
 }
 
-# Heurísticas de propósito por nombre de carpeta
+# Folder purpose heuristics by folder name
 FOLDER_PURPOSE_HINTS = {
     # Web/App
-    "src": "código fuente principal",
-    "app": "aplicación (entrypoint o módulos de app)",
-    "lib": "librerías internas reutilizables",
-    "pkg": "paquetes internos (convención Go)",
-    "packages": "monorepo: paquetes",
+    "src": "main source code",
+    "app": "application (entrypoint or app modules)",
+    "lib": "reusable internal libraries",
+    "pkg": "internal packages (Go convention)",
+    "packages": "monorepo: packages",
     "apps": "monorepo: apps",
-    "public": "assets estáticos servidos tal cual",
-    "static": "assets estáticos",
-    "assets": "recursos (imágenes, fuentes, etc.)",
+    "public": "static assets served as-is",
+    "static": "static assets",
+    "assets": "resources (images, fonts, etc.)",
     # Frontend
-    "components": "componentes UI reutilizables",
-    "pages": "páginas/rutas (Next, Nuxt, etc.)",
-    "routes": "definición de rutas",
-    "views": "vistas/pantallas",
-    "layouts": "layouts de página",
-    "hooks": "React hooks personalizados",
-    "composables": "composables de Vue",
-    "stores": "estado global (Redux, Pinia, Zustand)",
-    "styles": "estilos globales",
-    "templates": "plantillas",
+    "components": "reusable UI components",
+    "pages": "pages/routes (Next, Nuxt, etc.)",
+    "routes": "route definitions",
+    "views": "views/screens",
+    "layouts": "page layouts",
+    "hooks": "custom React hooks",
+    "composables": "Vue composables",
+    "stores": "global state (Redux, Pinia, Zustand)",
+    "styles": "global styles",
+    "templates": "templates",
     # Backend
-    "controllers": "controladores HTTP",
-    "services": "lógica de negocio",
-    "models": "modelos de datos / ORM",
-    "entities": "entidades de dominio",
-    "repositories": "acceso a persistencia",
-    "handlers": "handlers de eventos/requests",
-    "middleware": "middleware HTTP",
-    "middlewares": "middleware HTTP",
-    "api": "capa de API",
-    "graphql": "schema y resolvers GraphQL",
-    "resolvers": "resolvers GraphQL",
+    "controllers": "HTTP controllers",
+    "services": "business logic",
+    "models": "data models / ORM",
+    "entities": "domain entities",
+    "repositories": "persistence access",
+    "handlers": "event/request handlers",
+    "middleware": "HTTP middleware",
+    "middlewares": "HTTP middleware",
+    "api": "API layer",
+    "graphql": "GraphQL schema and resolvers",
+    "resolvers": "GraphQL resolvers",
     "dto": "data transfer objects",
-    "schemas": "esquemas de validación",
-    "validators": "validaciones de input",
+    "schemas": "validation schemas",
+    "validators": "input validation",
     "policies": "policies/authorization",
-    "guards": "guards de rutas/auth",
-    "jobs": "jobs en background/queues",
-    "workers": "workers de procesos async",
-    "tasks": "tareas programadas",
-    "commands": "comandos CLI",
-    "events": "eventos y listeners",
+    "guards": "route/auth guards",
+    "jobs": "background jobs/queues",
+    "workers": "async process workers",
+    "tasks": "scheduled tasks",
+    "commands": "CLI commands",
+    "events": "events and listeners",
     "listeners": "event listeners",
-    "notifications": "notificaciones",
+    "notifications": "notifications",
     # Database
-    "migrations": "migraciones de base de datos",
-    "seeders": "seeders de datos iniciales",
-    "seeds": "seeds de base de datos",
-    "fixtures": "datos de prueba",
-    "factories": "factories para tests/seeds",
+    "migrations": "database migrations",
+    "seeders": "initial data seeders",
+    "seeds": "database seeds",
+    "fixtures": "test data",
+    "factories": "factories for tests/seeds",
     # Config
-    "config": "configuración por entorno",
-    "configs": "configuración",
-    "env": "variables de entorno",
+    "config": "per-environment configuration",
+    "configs": "configuration",
+    "env": "environment variables",
     # Tests
     "test": "tests",
     "tests": "tests",
-    "__tests__": "tests (convención Jest)",
-    "spec": "specs de tests",
-    "e2e": "tests end-to-end",
-    "integration": "tests de integración",
-    "unit": "tests unitarios",
+    "__tests__": "tests (Jest convention)",
+    "spec": "test specs",
+    "e2e": "end-to-end tests",
+    "integration": "integration tests",
+    "unit": "unit tests",
     # Infra / DevOps
-    "docker": "configuración de Docker",
-    "infra": "infraestructura como código",
-    "infrastructure": "infraestructura como código",
-    "terraform": "módulos de Terraform",
-    "k8s": "manifiestos de Kubernetes",
-    "kubernetes": "manifiestos de Kubernetes",
-    "helm": "charts de Helm",
-    ".github": "workflows y configs de GitHub",
-    ".gitlab": "configs de GitLab",
-    "ci": "configuración de CI",
-    "scripts": "scripts administrativos/helpers",
-    "tools": "herramientas internas",
+    "docker": "Docker configuration",
+    "infra": "infrastructure as code",
+    "infrastructure": "infrastructure as code",
+    "terraform": "Terraform modules",
+    "k8s": "Kubernetes manifests",
+    "kubernetes": "Kubernetes manifests",
+    "helm": "Helm charts",
+    ".github": "GitHub workflows and configs",
+    ".gitlab": "GitLab configs",
+    "ci": "CI configuration",
+    "scripts": "administrative scripts/helpers",
+    "tools": "internal tools",
     # Docs
-    "docs": "documentación",
-    "doc": "documentación",
-    "documentation": "documentación",
+    "docs": "documentation",
+    "doc": "documentation",
+    "documentation": "documentation",
     # Assets/Media
-    "images": "imágenes",
-    "img": "imágenes",
-    "fonts": "fuentes tipográficas",
-    "locales": "archivos de i18n",
-    "i18n": "internacionalización",
-    "translations": "traducciones",
+    "images": "images",
+    "img": "images",
+    "fonts": "typographic fonts",
+    "locales": "i18n files",
+    "i18n": "internationalization",
+    "translations": "translations",
     # Utilities
-    "utils": "utilidades genéricas",
+    "utils": "generic utilities",
     "helpers": "helpers",
-    "common": "código compartido",
-    "shared": "código compartido entre módulos",
-    "core": "funcionalidad core/base",
-    "types": "tipos TypeScript",
-    "interfaces": "interfaces TypeScript",
-    "constants": "constantes",
-    "enums": "enumeraciones",
+    "common": "shared code",
+    "shared": "code shared across modules",
+    "core": "core/base functionality",
+    "types": "TypeScript types",
+    "interfaces": "TypeScript interfaces",
+    "constants": "constants",
+    "enums": "enumerations",
 }
 
-# Extensiones que cuentan como "código" (para detectar convenciones)
+# Extensions that count as "code" (for detecting conventions)
 CODE_EXTS = {".ts", ".tsx", ".js", ".jsx", ".py", ".php", ".go", ".rs", ".rb", ".java", ".kt",
              ".cs", ".swift", ".c", ".cpp", ".vue", ".svelte", ".astro"}
 
@@ -273,8 +273,8 @@ class ProjectScanner:
                 "total_size_bytes": 0,
             },
             "stack": {
-                "languages": {},         # ext count por lenguaje
-                "frameworks": [],        # detectados
+                "languages": {},         # ext count per language
+                "frameworks": [],        # detected
                 "runtimes": [],          # node, python, php, etc
                 "package_managers": [],  # npm, pnpm, composer, pip, etc
             },
@@ -288,23 +288,23 @@ class ProjectScanner:
             },
             "entry_points": {
                 "scripts": {},           # package.json scripts, composer scripts
-                "docker": [],            # Dockerfiles encontrados
+                "docker": [],            # Dockerfiles found
                 "ci": [],                # CI configs
                 "main_files": [],        # main.py, index.ts, artisan, manage.py
             },
-            "configs": [],               # lista de archivos config encontrados
-            "tree": {},                  # árbol anidado
-            "folders": [],               # lista plana con metadata
-            "conventions": [],           # detectadas
-            "domain_terms": [],          # candidatos a glosario
-            "docs": [],                  # READMEs y docs encontrados
+            "configs": [],               # list of config files found
+            "tree": {},                  # nested tree
+            "folders": [],               # flat list with metadata
+            "conventions": [],           # detected
+            "domain_terms": [],          # glossary candidates
+            "docs": [],                  # READMEs and docs found
         }
         self._symbol_counter: Counter[str] = Counter()
 
     # ---- main entry ----
     def scan(self) -> dict:
         if not self.root.exists():
-            raise FileNotFoundError(f"Root no existe: {self.root}")
+            raise FileNotFoundError(f"Root does not exist: {self.root}")
 
         self._walk()
         self._detect_frameworks()
@@ -316,13 +316,13 @@ class ProjectScanner:
     # ---- walker ----
     def _walk(self):
         for dirpath, dirnames, filenames in os.walk(self.root):
-            # depth relativo
+            # relative depth
             rel = Path(dirpath).relative_to(self.root)
             depth = 0 if str(rel) == "." else len(rel.parts)
 
-            # filtrar subdirs
+            # filter subdirs
             dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
-            # pero dejar pasar carpetas dot relevantes (.github, .gitlab)
+            # but let through relevant dot folders (.github, .gitlab)
             dirnames_lower_check = []
             for d in os.listdir(dirpath):
                 full = os.path.join(dirpath, d)
@@ -377,7 +377,7 @@ class ProjectScanner:
                 if fname.startswith("Dockerfile"):
                     self.result["entry_points"]["docker"].append(str(fpath.relative_to(self.root)))
 
-                # main files heurísticos
+                # heuristic main files
                 if fname in ("main.py", "manage.py", "artisan", "server.js", "server.ts",
                              "index.ts", "index.js", "app.py", "main.go", "main.rs", "main.ts"):
                     self.result["entry_points"]["main_files"].append(str(fpath.relative_to(self.root)))
@@ -386,11 +386,11 @@ class ProjectScanner:
                 if fname.lower() in ("readme.md", "readme.rst", "readme.txt", "readme"):
                     self.result["docs"].append(str(fpath.relative_to(self.root)))
 
-                # recolectar símbolos para glosario (solo a profundidad razonable)
+                # collect symbols for glossary (only at reasonable depth)
                 if depth <= 3 and ext in CODE_EXTS:
                     self._collect_symbols(fpath)
 
-            # CI en .github/workflows
+            # CI in .github/workflows
             if rel.name == "workflows" and rel.parent.name == ".github":
                 for fname in filenames:
                     if fname.endswith((".yml", ".yaml")):
@@ -401,7 +401,7 @@ class ProjectScanner:
             if folder_info["file_count"] > 0 or str(rel) != ".":
                 self.result["folders"].append(folder_info)
 
-    # ---- heurísticas ----
+    # ---- heuristics ----
     def _infer_purpose(self, folder_name: str) -> str | None:
         fn = folder_name.lower()
         return FOLDER_PURPOSE_HINTS.get(fn)
@@ -459,7 +459,7 @@ class ProjectScanner:
                 self.result["stack"]["runtimes"].append("python")
 
         elif kind == "python" and path.name == "pyproject.toml":
-            # parseo ligero sin tomllib
+            # lightweight parsing without tomllib
             deps = re.findall(r'^\s*"([^"]+)"\s*,?\s*$', text, re.MULTILINE)
             self.result["dependencies"]["python"].extend(deps[:50])
             if "python" not in self.result["stack"]["runtimes"]:
@@ -542,7 +542,7 @@ class ProjectScanner:
         if "pytest" in python_deps: detected.append("pytest")
         if "sqlalchemy" in python_deps: detected.append("SQLAlchemy")
 
-        # Go frameworks (por imports detectables)
+        # Go frameworks (via detectable imports)
         go_deps = " ".join(self.result["dependencies"]["go"]).lower()
         if "gin-gonic/gin" in go_deps: detected.append("Gin")
         if "labstack/echo" in go_deps: detected.append("Echo")
@@ -550,7 +550,7 @@ class ProjectScanner:
 
         self.result["stack"]["frameworks"] = sorted(set(detected))
 
-    # ---- árbol ----
+    # ---- tree ----
     def _build_tree(self):
         tree: dict = {}
         for folder in self.result["folders"]:
@@ -563,13 +563,13 @@ class ProjectScanner:
                 node = node.setdefault(p, {})
         self.result["tree"] = tree
 
-    # ---- símbolos / glosario ----
+    # ---- symbols / glossary ----
     def _collect_symbols(self, path: Path):
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             return
-        # patrones: class, function, interface, type, model definitions
+        # patterns: class, function, interface, type, model definitions
         patterns = [
             r"(?:class|interface|type|enum)\s+([A-Z][A-Za-z0-9_]+)",
             r"(?:function|def|fn)\s+([a-z_][A-Za-z0-9_]+)",
@@ -582,7 +582,7 @@ class ProjectScanner:
                     self._symbol_counter[name] += 1
 
     def _extract_domain_terms(self):
-        # Top 30 símbolos más frecuentes, excluyendo nombres genéricos
+        # Top 30 most frequent symbols, excluding generic names
         generic = {
             "Component", "Page", "Service", "Controller", "Model", "Props",
             "State", "Config", "Options", "Params", "Request", "Response",
@@ -595,7 +595,7 @@ class ProjectScanner:
                if name not in generic and count >= 3]
         self.result["domain_terms"] = top[:30]
 
-    # ---- convenciones ----
+    # ---- conventions ----
     def _detect_conventions(self):
         conventions = []
         folder_names = {f["path"].split(os.sep)[0] for f in self.result["folders"] if f["path"] != "."}
@@ -614,26 +614,26 @@ class ProjectScanner:
                 conventions.append("Next.js Pages Router")
         # Services + Controllers pattern
         if "services" in folder_names and ("controllers" in folder_names or "routes" in folder_names):
-            conventions.append("Controllers → Services (lógica en services/)")
+            conventions.append("Controllers → Services (logic in services/)")
         # Feature-based
         feature_dirs = [f for f in self.result["folders"]
                         if f["depth"] == 2 and f["path"].startswith(("src", "app"))
                         and f["purpose_hint"] is None]
         if len(feature_dirs) >= 3:
             conventions.append("Feature-based folders (src/feature-x, src/feature-y)")
-        # Tests co-ubicados
+        # Co-located tests
         if any(".test." in c["path"] or ".spec." in c["path"] for c in self.result["configs"]):
-            conventions.append("Tests co-ubicados junto al código (*.test.*, *.spec.*)")
+            conventions.append("Tests co-located next to the code (*.test.*, *.spec.*)")
         # TypeScript strict
         ts_configs = [c for c in self.result["configs"] if c["path"].endswith("tsconfig.json")]
         if ts_configs:
-            conventions.append("TypeScript configurado")
+            conventions.append("TypeScript configured")
         # Docker
         if self.result["entry_points"]["docker"]:
-            conventions.append(f"Dockerizado ({len(self.result['entry_points']['docker'])} Dockerfile(s))")
+            conventions.append(f"Dockerized ({len(self.result['entry_points']['docker'])} Dockerfile(s))")
         # CI
         if self.result["entry_points"]["ci"]:
-            conventions.append(f"CI configurado ({len(self.result['entry_points']['ci'])} workflow(s))")
+            conventions.append(f"CI configured ({len(self.result['entry_points']['ci'])} workflow(s))")
 
         self.result["conventions"] = conventions
 
@@ -643,30 +643,30 @@ class ProjectScanner:
 # ---------------------------------------------------------------------------
 
 def main():
-    # Requiere Python 3 (solo stdlib). El f-string y los type hints de este archivo
-    # ya fallarían en Python 2, pero damos un mensaje claro por si acaso.
+    # Requires Python 3 (stdlib only). The f-strings and type hints in this file
+    # would already fail in Python 2, but we give a clear message just in case.
     if sys.version_info[0] < 3:
-        sys.stderr.write("Error: este scanner requiere Python 3.\n")
+        sys.stderr.write("Error: this scanner requires Python 3.\n")
         return 2
 
-    parser = argparse.ArgumentParser(description="Escanea un proyecto y produce un JSON estructurado.")
-    parser.add_argument("path", help="Path absoluto al proyecto")
+    parser = argparse.ArgumentParser(description="Scans a project and produces a structured JSON.")
+    parser.add_argument("path", help="Absolute path to the project")
     parser.add_argument("--output", "-o", default="-",
-                        help="Archivo de output (default: stdout)")
+                        help="Output file (default: stdout)")
     parser.add_argument("--max-depth", type=int, default=4,
-                        help="Profundidad máxima del árbol (default: 4)")
-    parser.add_argument("--pretty", action="store_true", help="Output con indentación")
+                        help="Maximum tree depth (default: 4)")
+    parser.add_argument("--pretty", action="store_true", help="Output with indentation")
     args = parser.parse_args()
 
     root = Path(args.path).expanduser().resolve()
     if not root.exists():
-        sys.stderr.write(f"Error: el path '{root}' no existe.\n")
+        sys.stderr.write(f"Error: path '{root}' does not exist.\n")
         return 1
     if not root.is_dir():
-        sys.stderr.write(f"Error: el path '{root}' no es un directorio.\n")
+        sys.stderr.write(f"Error: path '{root}' is not a directory.\n")
         return 1
     if not os.access(root, os.R_OK):
-        sys.stderr.write(f"Error: el path '{root}' no es legible (permisos).\n")
+        sys.stderr.write(f"Error: path '{root}' is not readable (permissions).\n")
         return 1
 
     scanner = ProjectScanner(root, max_depth=args.max_depth)
@@ -676,7 +676,7 @@ def main():
         sys.stderr.write(f"Error: {exc}\n")
         return 1
     except OSError as exc:
-        sys.stderr.write(f"Error escaneando el proyecto: {exc}\n")
+        sys.stderr.write(f"Error scanning the project: {exc}\n")
         return 1
 
     out = json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False, default=str)
@@ -687,13 +687,13 @@ def main():
         try:
             Path(args.output).write_text(out, encoding="utf-8")
         except OSError as exc:
-            sys.stderr.write(f"Error: no se pudo escribir el output en '{args.output}': {exc}\n")
+            sys.stderr.write(f"Error: could not write the output to '{args.output}': {exc}\n")
             return 1
-        print(f"✓ Escaneo guardado en {args.output}", file=sys.stderr)
-        print(f"  - Archivos escaneados: {result['meta']['files_scanned']}", file=sys.stderr)
-        print(f"  - Lenguajes detectados: {list(result['stack']['languages'].keys())}", file=sys.stderr)
+        print(f"✓ Scan saved to {args.output}", file=sys.stderr)
+        print(f"  - Files scanned: {result['meta']['files_scanned']}", file=sys.stderr)
+        print(f"  - Detected languages: {list(result['stack']['languages'].keys())}", file=sys.stderr)
         print(f"  - Frameworks: {result['stack']['frameworks']}", file=sys.stderr)
-        print(f"  - Carpetas top-level: {len([f for f in result['folders'] if f['depth'] == 1])}", file=sys.stderr)
+        print(f"  - Top-level folders: {len([f for f in result['folders'] if f['depth'] == 1])}", file=sys.stderr)
 
     return 0
 

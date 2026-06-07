@@ -1,10 +1,10 @@
-# {{PROJECT_NAME}} — Arquitectura Detallada
+# {{PROJECT_NAME}} — Detailed Architecture
 
-Este archivo contiene el árbol completo del proyecto con una descripción de 1-2 líneas por carpeta. Cárgalo solo cuando necesites ver más allá del mapa alto-nivel del SKILL.md.
+This file contains the full project tree with a 1-2 line description per folder. Load it only when you need to see beyond the high-level map in the SKILL.md.
 
 ---
 
-## Árbol completo
+## Full tree
 
 ```
 {{FULL_TREE}}
@@ -12,36 +12,36 @@ Este archivo contiene el árbol completo del proyecto con una descripción de 1-
 
 ---
 
-## Descripción por carpeta (breadth-first)
+## Per-folder description (breadth-first)
 
 {{FOLDER_DESCRIPTIONS}}
 
-Formato por cada entrada:
+Format for each entry:
 
 ### `path/to/folder/`
-**Propósito:** [qué vive aquí]
-**Tipos predominantes:** [.ts, .tsx | .php | .py]
-**Tamaño:** [archivos / KB]
-**Observaciones:** [patrones detectados, puntos de entrada, módulos críticos]
-**Detalle completo:** `folders/path-to-folder.md` (si aplica)
+**Purpose:** [what lives here]
+**Predominant types:** [.ts, .tsx | .php | .py]
+**Size:** [files / KB]
+**Notes:** [detected patterns, entry points, critical modules]
+**Full detail:** `folders/path-to-folder.md` (if applicable)
 
 ---
 
-## Dependencias entre capas
+## Dependencies between layers
 
 {{LAYER_DEPENDENCIES}}
 
-Describe cómo fluye la dependencia: controllers → services → repositories → models, por ejemplo. Si el proyecto tiene múltiples capas o módulos que dependen entre sí, documenta el flujo aquí.
+Describe how the dependency flows: controllers → services → repositories → models, for example. If the project has multiple layers or modules that depend on each other, document the flow here.
 
 ---
 
-## Rutas canónicas (cheat-sheet)
+## Canonical paths (cheat-sheet)
 
 {{CANONICAL_PATHS}}
 
-Atajos para encontrar archivos comunes:
+Shortcuts for finding common files:
 - Auth → `[path]`
 - DB models → `[path]`
-- Config por entorno → `[path]`
+- Per-environment config → `[path]`
 - Tests → `[path]`
-- Scripts de migración → `[path]`
+- Migration scripts → `[path]`
