@@ -1,28 +1,28 @@
-# Context: Acme Widgets Co. (EJEMPLO FICTICIO)
+# Context: Acme Widgets Co. (FICTIONAL EXAMPLE)
 
-> Este es un hook de **muestra sanitizado** con una empresa inventada.
-> Sirve solo para enseñar el formato. Cópialo a `contexts/<tu-nombre>.md`,
-> reemplaza el contenido por tu dominio real, y elimina este archivo si no lo
-> necesitas. No pongas datos reales confidenciales en un repo público.
+> This is a **sanitized sample** hook with a made-up company.
+> It serves only to teach the format. Copy it to `contexts/<your-name>.md`,
+> replace the content with your real domain, and delete this file if you don't
+> need it. Do not put real confidential data in a public repo.
 
-## Qué es
-Acme Widgets Co. es un fabricante ficticio de pequeños accesorios de oficina que vende directo al consumidor (D2C) por su propia tienda online y por dos marketplaces.
+## What it is
+Acme Widgets Co. is a fictional maker of small office accessories that sells direct-to-consumer (D2C) through its own online store and two marketplaces.
 
-## Modelo / Cómo opera
-Diseña y manufactura widgets de bajo costo, los vende online con margen bruto del ~55%, y reinvierte en ads de adquisición. El crecimiento depende del CAC vs. LTV. Un equipo pequeño (5 personas) maneja producto, marketing y operaciones; la manufactura está tercerizada.
+## Model / How it operates
+It designs and manufactures low-cost widgets, sells them online with a gross margin of ~55%, and reinvests in acquisition ads. Growth depends on CAC vs. LTV. A small team (5 people) handles product, marketing, and operations; manufacturing is outsourced.
 
-## Estado actual
-Rentable a nivel unitario pero con crecimiento estancado los últimos dos trimestres. El canal orgánico funciona; el canal pagado está subiendo de costo. Se evalúa abrir un segundo SKU o un canal mayorista.
+## Current state
+Profitable at the unit level but with stalled growth over the last two quarters. The organic channel works; the paid channel is rising in cost. It is evaluating launching a second SKU or a wholesale channel.
 
-## Restricciones reales
-- Caja limitada: no más de 3 meses de runway para una apuesta nueva.
-- Equipo pequeño: no se puede abrir un frente nuevo sin descuidar el actual.
-- Sin deuda disponible a corto plazo.
+## Real constraints
+- Limited cash: no more than 3 months of runway for a new bet.
+- Small team: a new front can't be opened without neglecting the current one.
+- No debt available in the short term.
 
-## Apetito de riesgo
-Moderado. Dispuesto a invertir el equivalente a un trimestre de utilidad en una iniciativa nueva, pero no a poner en riesgo la operación base.
+## Risk appetite
+Moderate. Willing to invest the equivalent of one quarter's profit in a new initiative, but not to put the core operation at risk.
 
-## Lo que NO mencionar al exterior
-- Márgenes exactos y nombres de proveedores.
-- Cifras de caja específicas.
-(En tu hook real, lista aquí lo que el Council debe conocer internamente pero nunca repetir hacia afuera.)
+## What NOT to mention externally
+- Exact margins and supplier names.
+- Specific cash figures.
+(In your real hook, list here what the Council should know internally but never repeat externally.)

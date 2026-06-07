@@ -5,10 +5,9 @@ description: >
   Futurist) plus a Chairman to deliberate on a decision and deliver an
   actionable verdict. Inspired by Karpathy's LLM Council and Oli Limán's Claude
   Council. Use when the user says 'ask the council', 'council:', 'convene the
-  council', 'consult the council', 'consejo:', 'pregúntale al consejo',
-  'convoca al consejo', 'consulta al consejo', 'qué dice el council', or any
+  council', 'consult the council', 'what does the council say', or any
   variation requesting multi-perspective deliberation on a technical, business,
-  personal, or academic decision (Se activa con esos triggers). Supports a
+  personal, or academic decision. Supports a
   context flag (double-dash + the word context + comma-separated hook names that
   map to files in contexts/) to inject domain context into 4 of the 5 advisors.
   Supports a deep flag (double-dash + deep) to enable Stage 2 cross-review,
@@ -21,169 +20,169 @@ compatibility: >
   and claude.ai.
 ---
 
-# The Council — Skill de Deliberación Multi-Asesor
+# The Council — Multi-Advisor Deliberation Skill
 
-Inspirado en el [LLM Council de Andrej Karpathy](https://github.com/karpathy/llm-council) y en el [Claude Council de Oli Limán](https://www.linkedin.com/in/olilo/), pero rediseñado para ser un **consejo asesor accionable** que vive como skill nativo de Claude y funciona en Claude Code, Cowork y claude.ai.
+Inspired by [Andrej Karpathy's LLM Council](https://github.com/karpathy/llm-council) and [Oli Limán's Claude Council](https://www.linkedin.com/in/olilo/), but redesigned to be an **actionable advisory council** that lives as a native Claude skill and works in Claude Code, Cowork, and claude.ai.
 
-Cuando se activa, Claude convoca 5 asesores especializados que responden en paralelo (o secuencialmente con aislamiento de contexto, según el entorno), opcionalmente hacen cross-review, y un Chairman sintetiza un veredicto accionable.
-
----
-
-## Cuándo se activa
-
-Triggers explícitos del usuario:
-
-- `ask the council: <pregunta>`
-- `consejo: <pregunta>`
-- `pregúntale al consejo <pregunta>`
-- `convoca al consejo <pregunta>`
-- `council: <pregunta>`
-- Cualquier frase similar que indique "quiero deliberación multi-perspectiva sobre esto"
-
-Flags opcionales:
-
-- `--context <hook>` o `--context <hook1,hook2>` — inyecta contexto de negocio a 4 de los 5 asesores (el Outsider siempre es ciego al contexto por diseño). El nombre del hook corresponde a un archivo que el usuario coloca en `contexts/<hook>.md`. Hooks disponibles: ver carpeta `contexts/`.
-- `--deep` — activa Stage 2 (cross-review entre asesores). **Actualmente es un stub** — el flag se acepta pero solo deja una nota en el output. Se implementará en una iteración futura.
-
-Ejemplos:
-
-```
-ask the council: ¿debería contratar a una segunda persona para mi equipo?
-consejo --context example: ¿lanzo el nuevo producto ya o espero a validar 10 clientes?
-council --context example: ¿cómo divido mi semana entre dos prioridades?
-ask the council --deep --context example: <pregunta grande>
-```
-
-(`example` corresponde al archivo de muestra `contexts/example.md`. Reemplázalo por tus propios hooks — ver "Hooks de contexto" más abajo.)
+When triggered, Claude convenes 5 specialized advisors who respond in parallel (or sequentially with context isolation, depending on the environment), optionally do a cross-review, and a Chairman synthesizes an actionable verdict.
 
 ---
 
-## Idioma del output
+## When it activates
 
-**Detecta automáticamente** el idioma del prompt del usuario. Si el usuario escribe en español, todo el output (asesores + Chairman) va en español. Si escribe en inglés, todo va en inglés. No mezclar idiomas dentro de una misma deliberación.
+Explicit user triggers:
+
+- `ask the council: <question>`
+- `council: <question>`
+- `convene the council <question>`
+- `consult the council <question>`
+- `what does the council say? <question>`
+- Any similar phrase meaning "I want multi-perspective deliberation on this"
+
+Optional flags:
+
+- `--context <hook>` or `--context <hook1,hook2>` — injects business context into 4 of the 5 advisors (the Outsider is always context-blind by design). The hook name corresponds to a file the user places in `contexts/<hook>.md`. Available hooks: see the `contexts/` folder.
+- `--deep` — activates Stage 2 (cross-review among advisors). **Currently a stub** — the flag is accepted but only leaves a note in the output. It will be implemented in a future iteration.
+
+Examples:
+
+```
+ask the council: should I hire a second person for my team?
+ask the council --context example: do I launch the new product now or wait to validate 10 customers?
+council --context example: how do I split my week between two priorities?
+ask the council --deep --context example: <big question>
+```
+
+(`example` corresponds to the sample file `contexts/example.md`. Replace it with your own hooks — see "Context hooks" below.)
 
 ---
 
-## Flujo de ejecución
+## Output language
 
-### Paso 1 — Parsear la invocación
+**Automatically detects** the language of the user's prompt. If the user writes in Spanish, all output (advisors + Chairman) is in Spanish. If they write in English, everything is in English. Do not mix languages within a single deliberation.
 
-1. Extraer la **pregunta** (todo lo que va después del trigger y de los flags).
-2. Detectar flags presentes:
-   - `--context <lista>` → leer cada hook en `contexts/<hook>.md` y mantener su contenido como "contexto inyectable" para los asesores con contexto habilitado.
-   - `--deep` → marcar para activar Stage 2 (por ahora stub).
-3. Detectar idioma del prompt.
+---
 
-Si un hook de contexto referenciado no existe en `contexts/`, avisar al usuario y proceder sin contexto (no fallar).
+## Execution flow
 
-### Paso 2 — Convocar a los 5 asesores
+### Step 1 — Parse the invocation
 
-Cada asesor se ejecuta como un **bloque de pensamiento aislado** — Claude debe procesar su prompt sin que el output de los otros asesores lo contamine. En Claude Code esto se hace con sub-agentes paralelos vía el tool `Task`. En claude.ai/Cowork se hace secuencialmente pero leyendo el prompt de cada asesor por separado antes de redactar su respuesta.
+1. Extract the **question** (everything after the trigger and the flags).
+2. Detect which flags are present:
+   - `--context <list>` → read each hook in `contexts/<hook>.md` and keep its content as "injectable context" for the context-enabled advisors.
+   - `--deep` → mark to activate Stage 2 (stub for now).
+3. Detect the language of the prompt.
 
-Para cada asesor:
+If a referenced context hook does not exist in `contexts/`, warn the user and proceed without context (do not fail).
 
-1. Leer su prompt desde `agents/<nombre>.md`.
-2. Si el asesor recibe contexto (todos excepto el Outsider) y hay `--context` activo: inyectar el contenido de los hooks como sección "## Contexto adicional" al inicio del prompt del asesor.
-3. Pasarle la pregunta del usuario.
-4. Obtener su respuesta (forma estructurada que su propio prompt define).
+### Step 2 — Convene the 5 advisors
 
-Los 5 asesores son:
+Each advisor runs as an **isolated thinking block** — Claude must process its prompt without the other advisors' output contaminating it. In Claude Code this is done with parallel sub-agents via the `Task` tool. In claude.ai/Cowork it is done sequentially, but reading each advisor's prompt separately before drafting its response.
 
-- **Strategist** (`agents/strategist.md`) — Reformula el problema, identifica el verdadero "job to be done".
-- **Adversary** (`agents/adversary.md`) — Busca killer assumptions y modos de falla.
-- **Outsider** (`agents/outsider.md`) — Ciego al contexto. Ve la pregunta como un extraño y aporta perspectiva lateral.
-- **Operator** (`agents/operator.md`) — Aterriza la decisión en el siguiente paso accionable.
-- **Futurist** (`agents/futurist.md`) — Proyecta a 6, 18, 60 meses. Identifica trayectorias.
+For each advisor:
 
-### Paso 3 — Stage 2: Cross-review (opcional, actualmente stub)
+1. Read its prompt from `agents/<name>.md`.
+2. If the advisor receives context (all except the Outsider) and `--context` is active: inject the hook content as a "## Additional context" section at the start of the advisor's prompt.
+3. Pass it the user's question.
+4. Get its response (in the structured form its own prompt defines).
 
-Si `--deep` está activo: **por ahora**, no ejecutar cross-review real. Solo añadir al output del Chairman una nota:
+The 5 advisors are:
 
-> *Stage 2 (cross-review) está marcado como stub en esta versión del Council. Cuando se implemente, cada asesor recibirá las respuestas anonimizadas de los otros 4 e identificará el insight más fuerte, el más débil, y refinará su propia respuesta.*
+- **Strategist** (`agents/strategist.md`) — Reframes the problem, identifies the real "job to be done".
+- **Adversary** (`agents/adversary.md`) — Hunts for killer assumptions and failure modes.
+- **Outsider** (`agents/outsider.md`) — Context-blind. Sees the question as a stranger and brings lateral perspective.
+- **Operator** (`agents/operator.md`) — Grounds the decision in the next actionable step.
+- **Futurist** (`agents/futurist.md`) — Projects out to 6, 18, 60 months. Identifies trajectories.
 
-(Cuando se implemente, leer `protocols/deep.md`.)
+### Step 3 — Stage 2: Cross-review (optional, currently a stub)
 
-### Paso 4 — Convocar al Chairman
+If `--deep` is active: **for now**, do not run a real cross-review. Just add a note to the Chairman's output:
 
-Leer `chairman.md`. Pasarle:
+> *Stage 2 (cross-review) is marked as a stub in this version of the Council. When implemented, each advisor will receive the anonymized responses of the other 4 and identify the strongest insight, the weakest one, and refine its own response.*
 
-1. La pregunta original del usuario.
-2. Las 5 respuestas de los asesores.
-3. (Si Stage 2 estuviera activo) los reviews. Por ahora, solo las 5 respuestas.
+(When implemented, read `protocols/deep.md`.)
 
-El Chairman produce el output final estructurado (ver `chairman.md` para el formato exacto).
+### Step 4 — Convene the Chairman
 
-### Paso 5 — Presentar al usuario
+Read `chairman.md`. Pass it:
 
-Estructura del output al usuario:
+1. The user's original question.
+2. The 5 advisor responses.
+3. (If Stage 2 were active) the reviews. For now, just the 5 responses.
+
+The Chairman produces the final structured output (see `chairman.md` for the exact format).
+
+### Step 5 — Present to the user
+
+Structure of the output to the user:
 
 ```
-# Veredicto del Council
+# Council Verdict
 
-[Output del Chairman — veredicto, razón, próximo paso, killer assumption, disidencias]
+[Chairman output — verdict, reason, next step, killer assumption, dissents]
 
 ---
 
 <details>
-<summary>Ver respuestas individuales de los 5 asesores</summary>
+<summary>See the individual responses from the 5 advisors</summary>
 
 ## Strategist
-[respuesta]
+[response]
 
 ## Adversary
-[respuesta]
+[response]
 
 ## Outsider
-[respuesta]
+[response]
 
 ## Operator
-[respuesta]
+[response]
 
 ## Futurist
-[respuesta]
+[response]
 
 </details>
 ```
 
-En claude.ai, donde `<details>` puede no plegarse, presentar las respuestas individuales después del veredicto del Chairman con encabezados claros. **Lo importante es que el veredicto del Chairman vaya primero y arriba** — esa es la información accionable.
+In claude.ai, where `<details>` may not collapse, present the individual responses after the Chairman's verdict with clear headings. **The important thing is that the Chairman's verdict comes first and on top** — that is the actionable information.
 
 ---
 
-## Diseño: por qué el Outsider es ciego al contexto
+## Design: why the Outsider is context-blind
 
-Por diseño, el Outsider **nunca recibe los hooks de contexto inyectados**, aunque el usuario active `--context`. Su valor es ver la pregunta como un extraño que no sabe nada del negocio. Si conociera el contexto, sería redundante con los otros 4 asesores. Esto es deliberado, no un bug.
-
----
-
-## Hooks de contexto
-
-Los hooks viven en `contexts/<nombre>.md`. Cada uno es un resumen denso (300-500 palabras max) de un dominio (negocio, proyecto, persona) que Claude puede inyectar a 4 de los 5 asesores cuando el usuario activa `--context <nombre>`.
-
-**Esta es la parte que tú personalizas.** El framework no trae hooks de negocio reales — eso sería tu información privada. Para usar contexto:
-
-1. Crea un archivo en `contexts/<tu-nombre>.md` (p. ej. `contexts/miempresa.md`).
-2. Invoca con `--context tu-nombre`.
-
-Incluido en esta versión:
-
-- `contexts/example.md` — un hook de muestra sanitizado (empresa ficticia) que ilustra el formato. Cópialo y adáptalo, o bórralo.
-
-Para las reglas de escritura de un hook, ver `contexts/README.md`.
+By design, the Outsider **never receives the injected context hooks**, even if the user enables `--context`. Its value is seeing the question as a stranger who knows nothing about the business. If it knew the context, it would be redundant with the other 4 advisors. This is deliberate, not a bug.
 
 ---
 
-## Notas para Claude (operativas)
+## Context hooks
 
-1. **No improvises los asesores.** Sigue el formato de salida que cada `agents/*.md` define. Si el prompt del Strategist dice "responde en 3 secciones: Reformulación / Insight central / Trampa típica", entonces el Strategist responde exactamente así.
+Hooks live in `contexts/<name>.md`. Each one is a dense summary (300-500 words max) of a domain (business, project, person) that Claude can inject into 4 of the 5 advisors when the user enables `--context <name>`.
 
-2. **Mantén el aislamiento de contexto.** Antes de redactar la respuesta del asesor N, no leas las respuestas N-1, N-2, etc. Cada asesor responde como si fuera el único respondiendo. (Esto es lo que mata la sicofancia.)
+**This is the part you customize.** The framework ships no real business hooks — that would be your private information. To use context:
 
-3. **El Chairman sí ve todo.** Su trabajo es justamente sintetizar las 5 respuestas y tomar postura.
+1. Create a file in `contexts/<your-name>.md` (e.g. `contexts/mycompany.md`).
+2. Invoke with `--context your-name`.
 
-4. **No expandir la pregunta.** Si el usuario hace una pregunta corta, no la "rellenes" antes de pasarla a los asesores. Los asesores trabajan con la pregunta tal cual.
+Included in this version:
 
-5. **Detección de idioma:** mira el prompt del usuario, no los nombres de los archivos. Los prompts de los asesores están escritos en español pero deben responder en el idioma del usuario.
+- `contexts/example.md` — a sanitized sample hook (fictional company) that illustrates the format. Copy and adapt it, or delete it.
 
-6. **Si el usuario hace una pregunta sin trigger explícito pero pide "consejo"**, asume que quiere el Council y procede.
+For the rules on writing a hook, see `contexts/README.md`.
 
-7. **No agregues asesores ni cambies el número.** El Council son 5 + Chairman. Punto.
+---
+
+## Notes for Claude (operational)
+
+1. **Do not improvise the advisors.** Follow the output format that each `agents/*.md` defines. If the Strategist's prompt says "respond in 3 sections: Reframing / Core insight / Typical trap", then the Strategist responds exactly that way.
+
+2. **Maintain context isolation.** Before drafting advisor N's response, do not read responses N-1, N-2, etc. Each advisor responds as if it were the only one responding. (This is what kills sycophancy.)
+
+3. **The Chairman does see everything.** Its job is precisely to synthesize the 5 responses and take a stance.
+
+4. **Do not expand the question.** If the user asks a short question, do not "pad" it before passing it to the advisors. The advisors work with the question as-is.
+
+5. **Language detection:** look at the user's prompt, not the file names. The advisor prompts are written in English but must respond in the user's language.
+
+6. **If the user asks a question without an explicit trigger but asks for "advice"**, assume they want the Council and proceed.
+
+7. **Do not add advisors or change the count.** The Council is 5 + Chairman. Period.

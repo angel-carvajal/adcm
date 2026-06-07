@@ -1,16 +1,16 @@
-# {{PROJECT_NAME}} — Convenciones de Código
+# {{PROJECT_NAME}} — Code Conventions
 
-Cárgalo antes de escribir/modificar código en este proyecto para respetar el estilo establecido.
+Load it before writing/modifying code in this project to respect the established style.
 
 ---
 
-## Organización de carpetas
+## Folder organization
 
 {{FOLDER_CONVENTIONS}}
 
-- ¿Feature-based o layer-based?
-- ¿Monorepo o single-package?
-- ¿Tests co-ubicados o en carpeta aparte?
+- Feature-based or layer-based?
+- Monorepo or single-package?
+- Co-located tests or in a separate folder?
 
 ---
 
@@ -18,33 +18,33 @@ Cárgalo antes de escribir/modificar código en este proyecto para respetar el e
 
 {{NAMING_CONVENTIONS}}
 
-- Archivos: [kebab-case / camelCase / PascalCase / snake_case]
-- Clases: [convención]
-- Funciones: [convención]
-- Constantes: [convención]
-- Componentes (si aplica): [convención]
+- Files: [kebab-case / camelCase / PascalCase / snake_case]
+- Classes: [convention]
+- Functions: [convention]
+- Constants: [convention]
+- Components (if applicable): [convention]
 
 ---
 
-## Patrones arquitectónicos detectados
+## Detected architectural patterns
 
 {{ARCH_PATTERNS}}
 
 - MVC / Clean Architecture / Hexagonal / Feature Slices / etc.
-- Controllers → Services → Repositories (o variación)
+- Controllers → Services → Repositories (or a variation)
 - DI, factories, event buses, etc.
 
 ---
 
-## Estilo de código
+## Code style
 
 {{CODE_STYLE}}
 
-- ¿TypeScript strict? ¿qué flags?
-- ¿PHPStan level? ¿Psalm?
-- ¿Python type hints obligatorios? ¿mypy strict?
+- TypeScript strict? Which flags?
+- PHPStan level? Psalm?
+- Mandatory Python type hints? mypy strict?
 - Formatter: [Prettier / Black / PHP-CS-Fixer / ...]
-- Reglas del linter custom más importantes.
+- Most important custom linter rules.
 
 ---
 
@@ -52,10 +52,10 @@ Cárgalo antes de escribir/modificar código en este proyecto para respetar el e
 
 {{TEST_CONVENTIONS}}
 
-- ¿Dónde viven los tests?
-- ¿Qué patrón de naming? (`*.test.ts`, `test_*.py`, `*Spec.php`...)
-- ¿Factories, fixtures, mocks — cómo se manejan?
-- ¿Coverage mínimo exigido?
+- Where do the tests live?
+- What naming pattern? (`*.test.ts`, `test_*.py`, `*Spec.php`...)
+- Factories, fixtures, mocks — how are they handled?
+- Minimum required coverage?
 
 ---
 
@@ -63,18 +63,18 @@ Cárgalo antes de escribir/modificar código en este proyecto para respetar el e
 
 {{GIT_CONVENTIONS}}
 
-- Convención de commits (Conventional Commits, emojis, etc.)
+- Commit convention (Conventional Commits, emojis, etc.)
 - Branches (`main`, `develop`, `feature/*`, etc.)
-- Requerimientos de PR (tests, revisión, etc.)
+- PR requirements (tests, review, etc.)
 
 ---
 
-## Anti-patrones a evitar
+## Anti-patterns to avoid
 
 {{ANTIPATTERNS}}
 
-Cosas que el equipo explícitamente no quiere ver:
-- "Lógica en controllers"
-- "Magic numbers sin constantes"
-- "Cualquier `// @ts-ignore` sin justificación"
+Things the team explicitly doesn't want to see:
+- "Logic in controllers"
+- "Magic numbers without constants"
+- "Any `// @ts-ignore` without justification"
 - etc.

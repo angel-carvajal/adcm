@@ -1,263 +1,263 @@
 ---
 name: code-project-context-generator
 description: >
-  Escanea un proyecto de código, arma un mapa estructurado de su arquitectura y genera
-  un skill instalable tipo `code-project-context:[project-name]` con lazy-loading (el
-  SKILL.md resultante carga solo el índice y los detalles por carpeta se leen on-demand).
-  Se activa cuando el usuario pida 'crear contexto de proyecto', 'nuevo proyecto de código',
-  'escanear repo', 'mapear arquitectura', 'code project context', 'analizar proyecto',
-  'cargar contexto de código', 'nuevo repo', 'registrar proyecto', 'crear skill de proyecto',
-  'project init', 'architecture map', 'dame contexto de otro proyecto', 'tengo otro repo',
-  'mapear código', 'code map', o cualquier variación donde quiera que Claude entienda y
-  recuerde la arquitectura de un proyecto de código para futuras sesiones de trabajo.
+  Scans a code project, builds a structured map of its architecture, and generates
+  an installable skill of the form `code-project-context:[project-name]` with lazy-loading
+  (the resulting SKILL.md loads only the index, and per-folder details are read on-demand).
+  Triggers when the user asks to 'create project context', 'new code project',
+  'scan repo', 'map architecture', 'code project context', 'analyze project',
+  'load code context', 'new repo', 'register project', 'create project skill',
+  'project init', 'architecture map', 'give me context for another project', 'I have another repo',
+  'map code', 'code map', or any variation where they want Claude to understand and
+  remember the architecture of a code project for future working sessions.
 compatibility: >
-  Python 3 (solo stdlib, sin dependencias externas) para el scanner.
+  Python 3 (stdlib only, no external dependencies) for the scanner.
 ---
 
 # Code Project Context Generator
 
-Este skill guía el proceso de analizar un proyecto de código y generar un skill de contexto instalable tipo `code-project-context:[project-name]`. El skill resultante está diseñado con **lazy-loading**: su SKILL.md solo carga el mapa de alto nivel (árbol + short descriptions por carpeta + stack + entry points), y los detalles de cada carpeta se leen bajo demanda con Read cuando la sesión de trabajo lo requiera. Esto mantiene el contexto ligero mientras permite profundizar donde sea necesario.
+This skill guides the process of analyzing a code project and generating an installable context skill of the form `code-project-context:[project-name]`. The resulting skill is designed with **lazy-loading**: its SKILL.md loads only the high-level map (tree + short descriptions per folder + stack + entry points), and the details of each folder are read on-demand with Read when the working session requires them. This keeps context lightweight while still allowing deep dives where needed.
 
 ---
 
-## Propósito
+## Purpose
 
-Resolver el problema de "empezar a trabajar sobre un proyecto sin tener que explicarle a Claude qué hace cada carpeta, qué stack usa, cuál es el entry point y cuáles son las convenciones". Después de correr este skill una vez sobre un proyecto, las sesiones futuras pueden invocar el skill resultante y Claude ya sabrá dónde está cada cosa.
+Solve the problem of "starting work on a project without having to explain to Claude what each folder does, what stack it uses, where the entry point is, and what the conventions are". After running this skill once on a project, future sessions can invoke the resulting skill and Claude will already know where everything is.
 
 ---
 
-## Dependencias
+## Dependencies
 
-- Python 3 (solo stdlib, sin paquetes externos) para el scanner.
-- Script bundleado en este skill: `scripts/scan_project.py` (relativo al root del skill).
-- Cuando se necesite un path absoluto, el skill vive en
-  `${CLAUDE_PLUGIN_ROOT}/skills/code-project-context-generator/`, así que el scanner está en
+- Python 3 (stdlib only, no external packages) for the scanner.
+- Script bundled in this skill: `scripts/scan_project.py` (relative to the skill root).
+- When an absolute path is needed, the skill lives at
+  `${CLAUDE_PLUGIN_ROOT}/skills/code-project-context-generator/`, so the scanner is at
   `${CLAUDE_PLUGIN_ROOT}/skills/code-project-context-generator/scripts/scan_project.py`.
 
 ---
 
-## Flujo de Trabajo
+## Workflow
 
-### PASO 0: Obtener el path del proyecto
+### STEP 0: Get the project path
 
-El skill necesita el path absoluto del proyecto. Estrategia:
+The skill needs the absolute path of the project. Strategy:
 
-1. **Si hay un directorio de trabajo ya abierto/seleccionado en la sesión**, preguntar al usuario si ese es el proyecto a analizar.
-2. **Si no hay carpeta seleccionada**, pedir al usuario que indique el root del proyecto (o usar el mecanismo de selección de directorio disponible en el entorno).
-3. **Si el usuario prefiere pegar un path manual**, aceptarlo tal cual (útil para proyectos fuera del directorio de trabajo).
+1. **If there is a working directory already open/selected in the session**, ask the user whether that is the project to analyze.
+2. **If no folder is selected**, ask the user to indicate the project root (or use the directory-selection mechanism available in the environment).
+3. **If the user prefers to paste a manual path**, accept it as-is (useful for projects outside the working directory).
 
-Verifica que el path exista y que tenga indicadores típicos de proyecto (`.git/`, `package.json`, `composer.json`, `pyproject.toml`, `requirements.txt`, `Cargo.toml`, `go.mod`, etc.). Si no hay ninguno, confirmar con el usuario que es realmente un proyecto de código antes de seguir.
+Verify that the path exists and that it has typical project indicators (`.git/`, `package.json`, `composer.json`, `pyproject.toml`, `requirements.txt`, `Cargo.toml`, `go.mod`, etc.). If there are none, confirm with the user that it really is a code project before continuing.
 
-### PASO 1: Recolectar metadata mínima
+### STEP 1: Collect minimal metadata
 
-Usa AskUserQuestion para capturar lo que el scanner no puede inferir:
+Use AskUserQuestion to capture what the scanner cannot infer:
 
-**Ronda 1 — Identidad del proyecto:**
+**Round 1 — Project identity:**
 
-- ¿Cómo se llama el proyecto? (nombre corto para el slug del skill, ej: `hub-plus`, `schools-backend`, `ancefoodtrailers-web`)
-- ¿Hay algún nombre interno/comercial distinto al del repo?
-- ¿Qué hace el proyecto en una oración? (valor de negocio, no tech)
-- ¿Es un proyecto propio, de cliente, open source, o experimental?
+- What is the project called? (short name for the skill slug, e.g. `hub-plus`, `schools-backend`, `ancefoodtrailers-web`)
+- Is there an internal/commercial name different from the repo name?
+- What does the project do in one sentence? (business value, not tech)
+- Is it your own project, a client project, open source, or experimental?
 
-**Ronda 2 — Contexto operativo (opcional, si aplica):**
+**Round 2 — Operational context (optional, if applicable):**
 
-- ¿Hay cliente asociado? (vincularlo con algún `client-context-*` existente si aplica)
-- ¿Es frontend, backend, fullstack, mobile, CLI, library, infra?
-- ¿Tiene deploy/entorno live? (URLs, staging, prod)
-- ¿Hay documentación externa relevante? (Notion, Confluence, README remoto)
+- Is there an associated client? (link it to an existing `client-context-*` if applicable)
+- Is it frontend, backend, fullstack, mobile, CLI, library, infra?
+- Does it have a deploy/live environment? (URLs, staging, prod)
+- Is there relevant external documentation? (Notion, Confluence, remote README)
 
-Si el usuario ya dio parte de esta info al invocar el skill, no preguntes de nuevo — extráela del contexto.
+If the user already provided some of this info when invoking the skill, don't ask again — extract it from context.
 
-### PASO 2: Escanear el proyecto
+### STEP 2: Scan the project
 
-El scanner está bundleado en este skill en `scripts/scan_project.py` (relativo al root del skill).
-Ejecútalo apuntando al path del proyecto. Antes de correrlo, verifica las precondiciones:
+The scanner is bundled in this skill at `scripts/scan_project.py` (relative to the skill root).
+Run it pointing at the project path. Before running it, check the preconditions:
 
 ```bash
-# 1. Verificar que Python 3 esté disponible
-command -v python3 >/dev/null 2>&1 || { echo "Error: se requiere Python 3 (no encontrado en PATH)."; exit 1; }
+# 1. Verify that Python 3 is available
+command -v python3 >/dev/null 2>&1 || { echo "Error: Python 3 is required (not found in PATH)."; exit 1; }
 
-# 2. Resolver el scanner. En un plugin instalado usar ${CLAUDE_PLUGIN_ROOT};
-#    como fallback, una ruta relativa al root del skill.
+# 2. Resolve the scanner. In an installed plugin use ${CLAUDE_PLUGIN_ROOT};
+#    as a fallback, a path relative to the skill root.
 SCANNER="${CLAUDE_PLUGIN_ROOT:-.}/skills/code-project-context-generator/scripts/scan_project.py"
 [ -f "$SCANNER" ] || SCANNER="scripts/scan_project.py"
-[ -f "$SCANNER" ] || { echo "Error: no se encontró scan_project.py."; exit 1; }
+[ -f "$SCANNER" ] || { echo "Error: scan_project.py not found."; exit 1; }
 
-# 3. Verificar que el path del proyecto exista y sea legible
+# 3. Verify that the project path exists and is readable
 PROJECT_PATH="<PROJECT_PATH>"
-[ -d "$PROJECT_PATH" ] && [ -r "$PROJECT_PATH" ] || { echo "Error: el path '$PROJECT_PATH' no existe o no es legible."; exit 1; }
+[ -d "$PROJECT_PATH" ] && [ -r "$PROJECT_PATH" ] || { echo "Error: path '$PROJECT_PATH' does not exist or is not readable."; exit 1; }
 
-# 4. Escanear (el JSON va a un directorio temporal; ajusta el destino a tu <output-dir>)
+# 4. Scan (the JSON goes to a temp directory; adjust the destination to your <output-dir>)
 python3 "$SCANNER" "$PROJECT_PATH" --output "${TMPDIR:-/tmp}/project_scan.json"
 ```
 
-> Nota: el scanner ya valida internamente que el root exista (lanza `FileNotFoundError`).
-> Las comprobaciones de arriba dan mensajes claros antes de invocarlo.
+> Note: the scanner already validates internally that the root exists (it raises `FileNotFoundError`).
+> The checks above give clear messages before invoking it.
 
-El scanner produce un JSON con:
+The scanner produces a JSON with:
 
-- `meta` — nombre del root, tamaño, archivos escaneados
-- `stack` — lenguajes detectados, frameworks, runtimes, gestor de paquetes
-- `dependencies` — lista de deps críticas con versión (Node, PHP, Python, Go, Rust)
-- `entry_points` — scripts en package.json, artisan commands, main modules, Dockerfiles CMD, scripts de CI
-- `tree` — árbol de carpetas del proyecto con conteos y pesos
-- `folders` — cada carpeta con ruta, cantidad de archivos, tipos predominantes y un hash-tag tentativo de propósito (routing, models, services, tests, config, docs, etc.)
-- `configs` — archivos de configuración encontrados (`.env.example`, `docker-compose.yml`, CI, linters)
-- `conventions` — pistas detectadas (MVC, feature-based, monorepo, workspaces, etc.)
-- `domain_terms` — términos que aparecen repetidamente en nombres de archivos/clases (candidatos a glosario)
+- `meta` — root name, size, files scanned
+- `stack` — detected languages, frameworks, runtimes, package manager
+- `dependencies` — list of critical deps with version (Node, PHP, Python, Go, Rust)
+- `entry_points` — scripts in package.json, artisan commands, main modules, Dockerfile CMDs, CI scripts
+- `tree` — folder tree of the project with counts and sizes
+- `folders` — each folder with path, file count, predominant types, and a tentative purpose hash-tag (routing, models, services, tests, config, docs, etc.)
+- `configs` — configuration files found (`.env.example`, `docker-compose.yml`, CI, linters)
+- `conventions` — detected hints (MVC, feature-based, monorepo, workspaces, etc.)
+- `domain_terms` — terms that appear repeatedly in file/class names (glossary candidates)
 
-### PASO 3: Revisar con el usuario y completar huecos
+### STEP 3: Review with the user and fill the gaps
 
-Presenta al usuario un resumen del escaneo:
+Present the user with a summary of the scan:
 
-- Stack detectado
-- Top 10 carpetas por tamaño/relevancia
-- Entry points encontrados
-- Términos de dominio candidatos
+- Detected stack
+- Top 10 folders by size/relevance
+- Entry points found
+- Candidate domain terms
 
-Pregunta lo que el scanner no puede saber:
+Ask what the scanner cannot know:
 
-- Para las carpetas ambiguas (las que tienen un propósito no-obvio), pedir al usuario que describa qué hacen en una línea.
-- Confirmar o ajustar los términos del glosario de dominio.
-- Identificar "zonas peligrosas" o módulos críticos que Claude debe tocar con cuidado.
+- For ambiguous folders (the ones with a non-obvious purpose), ask the user to describe what they do in one line.
+- Confirm or adjust the domain glossary terms.
+- Identify "danger zones" or critical modules that Claude must touch carefully.
 
-### PASO 4: Generar el skill con lazy-loading
+### STEP 4: Generate the skill with lazy-loading
 
-Construir la estructura de output:
+Build the output structure:
 
 ```
 code-project-context-[project-name]/
-├── SKILL.md                    # Índice alto-nivel (SIEMPRE se carga)
-├── architecture.md             # Árbol completo + short descriptions (on-demand)
-├── stack.md                    # Stack, deps, versiones (on-demand)
-├── entry-points.md             # Cómo arrancar, rutas, build/run/test (on-demand)
-├── conventions.md              # Patrones de código detectados (on-demand)
-├── glossary.md                 # Términos de dominio (on-demand)
+├── SKILL.md                    # High-level index (ALWAYS loaded)
+├── architecture.md             # Full tree + short descriptions (on-demand)
+├── stack.md                    # Stack, deps, versions (on-demand)
+├── entry-points.md             # How to start, routes, build/run/test (on-demand)
+├── conventions.md              # Detected code patterns (on-demand)
+├── glossary.md                 # Domain terms (on-demand)
 └── folders/
-    ├── [folder-1].md           # Detalle de src/, app/, etc. (on-demand)
+    ├── [folder-1].md           # Detail of src/, app/, etc. (on-demand)
     ├── [folder-2].md
     └── ...
 ```
 
-**Regla de oro:** el SKILL.md NUNCA debe tener todos los detalles inline. Solo debe tener:
+**Golden rule:** the SKILL.md must NEVER have all the details inline. It should only have:
 
-1. Identidad del proyecto (1 párrafo)
-2. Stack en una línea (ej: `Node 20 • Next.js 14 • TypeScript • Prisma • PostgreSQL`)
-3. Mapa de alto nivel (árbol hasta 2 niveles con 1 línea por carpeta)
-4. Índice de archivos detallados: "Para detalles de X, leer `architecture.md`. Para stack completo, leer `stack.md`. Para la carpeta `src/api/`, leer `folders/src-api.md`."
-5. Reglas para Claude sobre cómo usar este contexto
+1. Project identity (1 paragraph)
+2. Stack in one line (e.g. `Node 20 • Next.js 14 • TypeScript • Prisma • PostgreSQL`)
+3. High-level map (tree up to 2 levels with 1 line per folder)
+4. Index of detailed files: "For details on X, read `architecture.md`. For the full stack, read `stack.md`. For the `src/api/` folder, read `folders/src-api.md`."
+5. Rules for Claude on how to use this context
 
-Usa los templates en `templates/` (relativo al root del skill) como base. Los templates incluyen placeholders que se rellenan con los datos del scanner.
+Use the templates in `templates/` (relative to the skill root) as a base. The templates include placeholders that are filled in with the scanner's data.
 
-### PASO 5: Empaquetar e instalar
+### STEP 5: Package and install
 
-1. Guardar todo bajo `<output-dir>/code-project-context-[project-name]/`, donde `<output-dir>` es
-   el directorio de salida que use el entorno (p. ej. el directorio de outputs de la sesión o un
-   path elegido por el usuario).
-2. (Opcional) Si el entorno provee un script de empaquetado de skills, úsalo.
-3. Zipearlo con extensión `.skill` para que el entorno lo muestre como instalable:
+1. Save everything under `<output-dir>/code-project-context-[project-name]/`, where `<output-dir>` is
+   the output directory used by the environment (e.g. the session's outputs directory or a
+   path chosen by the user).
+2. (Optional) If the environment provides a skill packaging script, use it.
+3. Zip it with the `.skill` extension so the environment shows it as installable:
    ```bash
    OUT_DIR="<output-dir>"
    SLUG="code-project-context-[project-name]"
    ( cd "$OUT_DIR" && zip -r "$SLUG.skill" "$SLUG/" )
    ```
-4. Entregar el archivo `.skill` resultante al usuario por el mecanismo disponible en el entorno.
+4. Deliver the resulting `.skill` file to the user through the mechanism available in the environment.
 
 ---
 
-## Estructura del SKILL.md resultante (template)
+## Structure of the resulting SKILL.md (template)
 
-El SKILL.md del skill generado debe seguir este esqueleto estricto para mantener el contexto ligero:
+The SKILL.md of the generated skill must follow this strict skeleton to keep context lightweight:
 
 ```markdown
 ---
 name: code-project-context:[project-name]
 description: >
-  Carga el contexto de arquitectura del proyecto [Name]. Carga solo el mapa de alto nivel — los
-  detalles de cada carpeta se leen on-demand con Read desde los archivos complementarios en el
-  mismo directorio.
-  Se activa cuando el usuario mencione '[project-name]', '[aliases]', [triggers específicos del proyecto].
+  Loads the architecture context of the [Name] project. Loads only the high-level map — the
+  details of each folder are read on-demand with Read from the complementary files in the
+  same directory.
+  Triggers when the user mentions '[project-name]', '[aliases]', [project-specific triggers].
 ---
 
-# [Project Name] — Contexto de Arquitectura
+# [Project Name] — Architecture Context
 
-**Qué hace:** [1 oración de valor de negocio]
-**Tipo:** [frontend/backend/fullstack/mobile/CLI/library]
-**Cliente/Dueño:** [nombre o "propio"]
-**Estado:** [activo / mantenimiento / archivado]
+**What it does:** [1 sentence of business value]
+**Type:** [frontend/backend/fullstack/mobile/CLI/library]
+**Client/Owner:** [name or "own"]
+**Status:** [active / maintenance / archived]
 
 ---
 
 ## Stack (one-liner)
 
-[Lenguaje N.N] • [Framework N.N] • [Runtime] • [DB] • [otros críticos]
+[Language N.N] • [Framework N.N] • [Runtime] • [DB] • [other critical]
 
-Para detalles completos: leer `stack.md`.
+For full details: read `stack.md`.
 
 ---
 
-## Mapa de Alto Nivel
+## High-Level Map
 
 ```
 project-root/
-├── src/              — código fuente principal
+├── src/              — main source code
 ├── tests/            — test suites (unit + e2e)
-├── docs/             — documentación interna
-├── scripts/          — tareas administrativas y CI helpers
-├── config/           — configuración por entorno
-└── [otros]/          — [1 línea]
+├── docs/             — internal documentation
+├── scripts/          — administrative tasks and CI helpers
+├── config/           — per-environment configuration
+└── [others]/         — [1 line]
 ```
 
-Para el árbol completo con profundidad: leer `architecture.md`.
-Para detalles de una carpeta específica: leer `folders/[nombre].md`.
+For the full tree with depth: read `architecture.md`.
+For details of a specific folder: read `folders/[name].md`.
 
 ---
 
-## Entry Points (resumen)
+## Entry Points (summary)
 
-- **Arrancar dev:** `[comando]`
-- **Build:** `[comando]`
-- **Tests:** `[comando]`
-- **Deploy:** [descripción breve]
+- **Start dev:** `[command]`
+- **Build:** `[command]`
+- **Tests:** `[command]`
+- **Deploy:** [brief description]
 
-Para rutas, APIs, y flujos completos: leer `entry-points.md`.
-
----
-
-## Convenciones Clave
-
-- [1 línea por convención: ej. "Controllers delgados, lógica en services/"]
-- [1 línea: ej. "Tests viven junto al código en `*.test.ts`"]
-
-Para el detalle completo: leer `conventions.md`.
+For routes, APIs, and full flows: read `entry-points.md`.
 
 ---
 
-## Glosario de Dominio (shortlist)
+## Key Conventions
 
-- **[Término 1]:** [1 línea]
-- **[Término 2]:** [1 línea]
+- [1 line per convention: e.g. "Thin controllers, logic in services/"]
+- [1 line: e.g. "Tests live next to the code in `*.test.ts`"]
 
-Para el glosario completo: leer `glossary.md`.
+For the full detail: read `conventions.md`.
 
 ---
 
-## Reglas Para Claude
+## Domain Glossary (shortlist)
 
-1. **Carga perezosa:** NO leas todos los archivos complementarios al inicio. Lee solo los que la tarea actual requiera.
-2. **Rutas:** Antes de tocar código, verifica la ubicación real con `Glob` o `Read`. El mapa es una referencia, no la verdad absoluta.
-3. **Convenciones:** Respeta las convenciones detectadas. Si el código usa services/, no crees controladores gordos.
-4. **Zonas peligrosas:** [módulos críticos que requieren cuidado extra — si aplica]
-5. **Actualización:** Si descubres que el mapa está desactualizado, sugiere correr `code-project-context-generator` otra vez.
+- **[Term 1]:** [1 line]
+- **[Term 2]:** [1 line]
+
+For the full glossary: read `glossary.md`.
+
+---
+
+## Rules For Claude
+
+1. **Lazy loading:** Do NOT read all the complementary files at the start. Read only the ones the current task requires.
+2. **Paths:** Before touching code, verify the real location with `Glob` or `Read`. The map is a reference, not absolute truth.
+3. **Conventions:** Respect the detected conventions. If the code uses services/, don't create fat controllers.
+4. **Danger zones:** [critical modules that require extra care — if applicable]
+5. **Updates:** If you discover the map is out of date, suggest running `code-project-context-generator` again.
 ```
 
 ---
 
-## Principios
+## Principles
 
-- **Lazy-loading estricto:** el SKILL.md resultante debe ser corto (< 200 líneas). Todo el peso va a los archivos complementarios.
-- **Short descriptions útiles:** cada carpeta del mapa debe tener 1 línea que responda "¿qué vive aquí y por qué me importaría?". Nada genérico tipo "source code folder".
-- **Triggers generosos:** la descripción del skill resultante debe incluir el nombre del proyecto, aliases, rutas base, nombres de módulos clave — cualquier cosa que el usuario podría mencionar para traer contexto.
-- **Agnóstico de stack:** el scanner detecta el stack, pero la lógica del skill no asume ninguno. Soporta Node/TS, PHP, Python, Go, Rust y cualquier mezcla.
-- **Sin dump bruto:** no pegar el output crudo del scanner en el skill. Todo pasa por interpretación humana (o de Claude) para generar short descriptions útiles.
-- **Vivo, no fósil:** el skill debe poder regenerarse fácil cuando el proyecto evolucione. Incluye al final del SKILL.md la fecha de último escaneo y un hint de cuándo re-correr.
+- **Strict lazy-loading:** the resulting SKILL.md must be short (< 200 lines). All the weight goes into the complementary files.
+- **Useful short descriptions:** each folder in the map must have 1 line that answers "what lives here and why would I care?". Nothing generic like "source code folder".
+- **Generous triggers:** the description of the resulting skill must include the project name, aliases, base paths, key module names — anything the user might mention to bring up context.
+- **Stack-agnostic:** the scanner detects the stack, but the skill's logic assumes none. It supports Node/TS, PHP, Python, Go, Rust and any mix.
+- **No raw dump:** do not paste the raw scanner output into the skill. Everything goes through human (or Claude's) interpretation to produce useful short descriptions.
+- **Living, not fossilized:** the skill should be easy to regenerate as the project evolves. Include at the end of the SKILL.md the date of the last scan and a hint on when to re-run.

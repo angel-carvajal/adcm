@@ -1,57 +1,57 @@
-# Hooks de Contexto
+# Context Hooks
 
-Los hooks viven en este folder como archivos `.md`. Cada uno resume un dominio (negocio, proyecto, persona) que se puede inyectar a los asesores del Council cuando el usuario invoca con `--context <nombre>`.
+Hooks live in this folder as `.md` files. Each one summarizes a domain (business, project, person) that can be injected into the Council's advisors when the user invokes with `--context <name>`.
 
-## Sintaxis de invocación
+## Invocation syntax
 
 ```
-ask the council --context example: <pregunta>
-ask the council --context miempresa: <pregunta>
-ask the council --context miempresa,otroproyecto: <pregunta>
+ask the council --context example: <question>
+ask the council --context mycompany: <question>
+ask the council --context mycompany,otherproject: <question>
 ```
 
-El nombre del hook corresponde al nombre del archivo sin la extensión `.md`. `--context example` lee `contexts/example.md`. Tú agregas tus propios hooks creando archivos `.md` en este folder.
+The hook name corresponds to the file name without the `.md` extension. `--context example` reads `contexts/example.md`. You add your own hooks by creating `.md` files in this folder.
 
-## Reglas de escritura de un hook
+## Rules for writing a hook
 
-1. **Máximo 500 palabras.** Si es más largo, es para un skill de business-init, no para un hook del Council. Los hooks son el destilado táctico, no la enciclopedia.
+1. **Maximum 500 words.** If it's longer, it belongs in a business-init skill, not in a Council hook. Hooks are the tactical distillate, not the encyclopedia.
 
-2. **Estructura recomendada:**
+2. **Recommended structure:**
 
    ```markdown
-   # Context: <Nombre>
+   # Context: <Name>
    
-   ## Qué es
-   1-3 oraciones. Identidad del negocio/proyecto/dominio.
+   ## What it is
+   1-3 sentences. Identity of the business/project/domain.
    
-   ## Modelo / Cómo opera
-   3-6 oraciones. Cómo gana dinero, qué hace, para quién.
+   ## Model / How it operates
+   3-6 sentences. How it makes money, what it does, for whom.
    
-   ## Estado actual
-   2-4 oraciones. Fase del negocio, qué funciona, qué está roto.
+   ## Current state
+   2-4 sentences. Business phase, what works, what's broken.
    
-   ## Restricciones reales
-   Lista corta. Lo que NO se puede hacer (financieras, legales, de capacidad).
+   ## Real constraints
+   Short list. What CANNOT be done (financial, legal, capacity).
    
-   ## Apetito de riesgo
-   1-2 oraciones. Cuánto está dispuesto a apostar el dueño en esta decisión.
+   ## Risk appetite
+   1-2 sentences. How much the owner is willing to bet on this decision.
    
-   ## Lo que NO mencionar al exterior
-   Lista corta. Info confidencial que el usuario protege.
+   ## What NOT to mention externally
+   Short list. Confidential info the user protects.
    ```
 
-3. **Sin floritura.** No es marketing. Es un cable de información para que los asesores tengan contexto real.
+3. **No flourish.** This is not marketing. It's an information feed so the advisors have real context.
 
-4. **Honestidad antes que aspiración.** Si el negocio está luchando, dilo. Si está creciendo, dilo. Los asesores aconsejan mejor con la realidad, no con la versión LinkedIn.
+4. **Honesty over aspiration.** If the business is struggling, say so. If it's growing, say so. Advisors advise better with reality, not with the LinkedIn version.
 
-## Hooks incluidos
+## Included hooks
 
-- `example.md` — hook de muestra sanitizado (empresa ficticia "Acme Widgets Co."). Sirve solo para mostrar el formato. Cópialo, adáptalo a tu dominio real, o bórralo. No metas información confidencial real en un repo público.
+- `example.md` — a sanitized sample hook (fictional company "Acme Widgets Co."). It serves only to show the format. Copy it, adapt it to your real domain, or delete it. Do not put real confidential information in a public repo.
 
-## Privacidad
+## Privacy
 
-Los hooks pueden contener información sensible de tu negocio. Si vas a publicar o compartir tu copia de este skill, **no incluyas tus hooks reales en `contexts/`** — mantenlos locales o en un repo privado. El framework público solo trae `example.md`.
+Hooks can contain sensitive information about your business. If you're going to publish or share your copy of this skill, **do not include your real hooks in `contexts/`** — keep them local or in a private repo. The public framework only ships `example.md`.
 
-## Recordatorio sobre el Outsider
+## Reminder about the Outsider
 
-El Outsider **nunca** recibe estos hooks, aunque el usuario los active. Eso es por diseño — su valor es ser ciego al contexto. No intentes "ayudarlo" pasándole el hook.
+The Outsider **never** receives these hooks, even if the user enables them. That is by design — its value is being context-blind. Don't try to "help it" by passing it the hook.

@@ -1,25 +1,25 @@
 ---
 name: code-project-context:{{PROJECT_SLUG}}
 description: >
-  Carga el contexto de arquitectura del proyecto {{PROJECT_NAME}}. Carga SOLO el mapa de
-  alto nivel del proyecto; los detalles de cada carpeta viven en archivos complementarios
+  Loads the architecture context of the {{PROJECT_NAME}} project. Loads ONLY the
+  high-level map of the project; the details of each folder live in complementary files
   (architecture.md, stack.md, entry-points.md, conventions.md, glossary.md, folders/*.md)
-  y se leen on-demand con Read cuando la tarea actual lo requiera (no cargar todos los
-  archivos al inicio — hacerlo perezosamente según necesidad).
-  Se activa cuando el usuario mencione '{{PROJECT_NAME}}', {{ALIASES_LIST}}, o cualquier
-  variación relacionada con trabajar en el código, arquitectura, rutas, módulos o estructura
-  de este proyecto, así como tareas de debugging, refactor, nuevas features, code reviews o
-  mapear dónde vive cada cosa en este repo.
+  and are read on-demand with Read when the current task requires them (do not load all
+  the files at the start — do it lazily as needed).
+  Triggers when the user mentions '{{PROJECT_NAME}}', {{ALIASES_LIST}}, or any
+  variation related to working on the code, architecture, routes, modules, or structure
+  of this project, as well as debugging tasks, refactors, new features, code reviews, or
+  mapping where each thing lives in this repo.
 ---
 
-# {{PROJECT_NAME}} — Contexto de Arquitectura
+# {{PROJECT_NAME}} — Architecture Context
 
-**Qué hace:** {{ONE_LINE_DESCRIPTION}}
-**Tipo:** {{PROJECT_TYPE}}
-**Cliente/Dueño:** {{OWNER}}
-**Estado:** {{STATUS}}
-**Root path habitual:** `{{ROOT_HINT}}`
-**Último escaneo:** {{SCAN_DATE}}
+**What it does:** {{ONE_LINE_DESCRIPTION}}
+**Type:** {{PROJECT_TYPE}}
+**Client/Owner:** {{OWNER}}
+**Status:** {{STATUS}}
+**Usual root path:** `{{ROOT_HINT}}`
+**Last scan:** {{SCAN_DATE}}
 
 ---
 
@@ -27,59 +27,59 @@ description: >
 
 {{STACK_ONELINER}}
 
-Para versiones exactas, dependencias completas y gestores de paquetes → leer `stack.md`.
+For exact versions, full dependencies, and package managers → read `stack.md`.
 
 ---
 
-## Mapa de Alto Nivel
+## High-Level Map
 
 ```
 {{HIGH_LEVEL_TREE}}
 ```
 
-Para el árbol completo con profundidad y short descriptions por carpeta → leer `architecture.md`.
-Para profundizar en una carpeta específica → leer `folders/{{nombre-slug}}.md`.
+For the full tree with depth and short descriptions per folder → read `architecture.md`.
+To dive into a specific folder → read `folders/{{name-slug}}.md`.
 
 ---
 
-## Entry Points (resumen)
+## Entry Points (summary)
 
-- **Arrancar en dev:** `{{DEV_COMMAND}}`
+- **Start in dev:** `{{DEV_COMMAND}}`
 - **Build:** `{{BUILD_COMMAND}}`
 - **Tests:** `{{TEST_COMMAND}}`
 - **Deploy:** {{DEPLOY_SUMMARY}}
 
-Para rutas, APIs principales, flujos de auth y scripts completos → leer `entry-points.md`.
+For routes, main APIs, auth flows, and full scripts → read `entry-points.md`.
 
 ---
 
-## Convenciones Clave (shortlist)
+## Key Conventions (shortlist)
 
 {{CONVENTIONS_SHORTLIST}}
 
-Para el detalle completo y ejemplos → leer `conventions.md`.
+For the full detail and examples → read `conventions.md`.
 
 ---
 
-## Glosario de Dominio (shortlist)
+## Domain Glossary (shortlist)
 
 {{GLOSSARY_SHORTLIST}}
 
-Para el glosario completo → leer `glossary.md`.
+For the full glossary → read `glossary.md`.
 
 ---
 
-## Skills Relacionados
+## Related Skills
 
 {{RELATED_SKILLS}}
 
 ---
 
-## Reglas Para Claude
+## Rules For Claude
 
-1. **Carga perezosa:** NO leas todos los archivos complementarios al inicio. Lee solo los que la tarea actual requiera. Ejemplo: para modificar el auth, lee `folders/auth.md`, no toda la arquitectura.
-2. **Verificación antes de tocar:** El mapa es una referencia derivada de un escaneo — puede estar desactualizado. Antes de modificar código, confirma la ubicación real con `Glob` o `Read`.
-3. **Respeta las convenciones:** Si el proyecto usa services/, no metas lógica en controllers. Si los tests están co-ubicados, no crees una carpeta tests/ separada.
-4. **Zonas peligrosas:** {{DANGER_ZONES}}
-5. **Cuando el mapa esté obsoleto:** Si descubres drift entre el mapa y el código real, avisa al usuario y sugiere re-ejecutar `code-project-context-generator` sobre el root del proyecto.
-6. **Triggers de actualización:** Re-escanear cuando se agregan módulos/features mayores, cambia el stack o se hace un refactor estructural.
+1. **Lazy loading:** Do NOT read all the complementary files at the start. Read only the ones the current task requires. Example: to modify auth, read `folders/auth.md`, not the entire architecture.
+2. **Verify before touching:** The map is a reference derived from a scan — it may be out of date. Before modifying code, confirm the real location with `Glob` or `Read`.
+3. **Respect the conventions:** If the project uses services/, don't put logic in controllers. If tests are co-located, don't create a separate tests/ folder.
+4. **Danger zones:** {{DANGER_ZONES}}
+5. **When the map is stale:** If you find drift between the map and the real code, let the user know and suggest re-running `code-project-context-generator` on the project root.
+6. **Update triggers:** Re-scan when major modules/features are added, the stack changes, or a structural refactor happens.
