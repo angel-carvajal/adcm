@@ -1,0 +1,14 @@
+{
+  "name": "adcm",
+  "owner": {
+    "name": "Angel Carvajal"
+  },
+  "description": "ADCM public toolkits for Claude Code (open-source).",
+  "plugins": [
+    {
+      "name": "adcm-toolkits",
+      "source": "./plugins/adcm-toolkits",
+      "description": "Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context) and a code-project context generator that scaffolds lazy-loading project docs. Use for structured multi-perspective decisions or to document a codebase."
+    }
+  ]
+}

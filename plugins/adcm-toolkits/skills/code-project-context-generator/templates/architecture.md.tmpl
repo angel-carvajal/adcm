@@ -1,0 +1,47 @@
+# {{PROJECT_NAME}} — Arquitectura Detallada
+
+Este archivo contiene el árbol completo del proyecto con una descripción de 1-2 líneas por carpeta. Cárgalo solo cuando necesites ver más allá del mapa alto-nivel del SKILL.md.
+
+---
+
+## Árbol completo
+
+```
+{{FULL_TREE}}
+```
+
+---
+
+## Descripción por carpeta (breadth-first)
+
+{{FOLDER_DESCRIPTIONS}}
+
+Formato por cada entrada:
+
+### `path/to/folder/`
+**Propósito:** [qué vive aquí]
+**Tipos predominantes:** [.ts, .tsx | .php | .py]
+**Tamaño:** [archivos / KB]
+**Observaciones:** [patrones detectados, puntos de entrada, módulos críticos]
+**Detalle completo:** `folders/path-to-folder.md` (si aplica)
+
+---
+
+## Dependencias entre capas
+
+{{LAYER_DEPENDENCIES}}
+
+Describe cómo fluye la dependencia: controllers → services → repositories → models, por ejemplo. Si el proyecto tiene múltiples capas o módulos que dependen entre sí, documenta el flujo aquí.
+
+---
+
+## Rutas canónicas (cheat-sheet)
+
+{{CANONICAL_PATHS}}
+
+Atajos para encontrar archivos comunes:
+- Auth → `[path]`
+- DB models → `[path]`
+- Config por entorno → `[path]`
+- Tests → `[path]`
+- Scripts de migración → `[path]`

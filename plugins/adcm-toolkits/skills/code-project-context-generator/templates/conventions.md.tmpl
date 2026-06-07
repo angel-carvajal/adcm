@@ -1,0 +1,80 @@
+# {{PROJECT_NAME}} — Convenciones de Código
+
+Cárgalo antes de escribir/modificar código en este proyecto para respetar el estilo establecido.
+
+---
+
+## Organización de carpetas
+
+{{FOLDER_CONVENTIONS}}
+
+- ¿Feature-based o layer-based?
+- ¿Monorepo o single-package?
+- ¿Tests co-ubicados o en carpeta aparte?
+
+---
+
+## Naming
+
+{{NAMING_CONVENTIONS}}
+
+- Archivos: [kebab-case / camelCase / PascalCase / snake_case]
+- Clases: [convención]
+- Funciones: [convención]
+- Constantes: [convención]
+- Componentes (si aplica): [convención]
+
+---
+
+## Patrones arquitectónicos detectados
+
+{{ARCH_PATTERNS}}
+
+- MVC / Clean Architecture / Hexagonal / Feature Slices / etc.
+- Controllers → Services → Repositories (o variación)
+- DI, factories, event buses, etc.
+
+---
+
+## Estilo de código
+
+{{CODE_STYLE}}
+
+- ¿TypeScript strict? ¿qué flags?
+- ¿PHPStan level? ¿Psalm?
+- ¿Python type hints obligatorios? ¿mypy strict?
+- Formatter: [Prettier / Black / PHP-CS-Fixer / ...]
+- Reglas del linter custom más importantes.
+
+---
+
+## Tests
+
+{{TEST_CONVENTIONS}}
+
+- ¿Dónde viven los tests?
+- ¿Qué patrón de naming? (`*.test.ts`, `test_*.py`, `*Spec.php`...)
+- ¿Factories, fixtures, mocks — cómo se manejan?
+- ¿Coverage mínimo exigido?
+
+---
+
+## Commits / Branches / PRs
+
+{{GIT_CONVENTIONS}}
+
+- Convención de commits (Conventional Commits, emojis, etc.)
+- Branches (`main`, `develop`, `feature/*`, etc.)
+- Requerimientos de PR (tests, revisión, etc.)
+
+---
+
+## Anti-patrones a evitar
+
+{{ANTIPATTERNS}}
+
+Cosas que el equipo explícitamente no quiere ver:
+- "Lógica en controllers"
+- "Magic numbers sin constantes"
+- "Cualquier `// @ts-ignore` sin justificación"
+- etc.
