@@ -1,0 +1,8 @@
+{
+  "name": "adcm-toolkits",
+  "description": "Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context) and a code-project context generator that scaffolds lazy-loading project docs. Use for structured multi-perspective decisions or to document a codebase.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Angel Carvajal"
+  }
+}
