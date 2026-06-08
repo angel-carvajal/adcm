@@ -2,34 +2,59 @@
 name: code-project-context:{{PROJECT_SLUG}}
 description: >
   Loads the architecture context of the {{PROJECT_NAME}} project. Loads ONLY the
-  high-level map of the project; the details of each folder live in complementary files
-  (architecture.md, stack.md, entry-points.md, conventions.md, glossary.md, folders/*.md)
-  and are read on-demand with Read when the current task requires them (do not load all
-  the files at the start — do it lazily as needed).
-  Triggers when the user mentions '{{PROJECT_NAME}}', {{ALIASES_LIST}}, or any
-  variation related to working on the code, architecture, routes, modules, or structure
-  of this project, as well as debugging tasks, refactors, new features, code reviews, or
-  mapping where each thing lives in this repo.
+  high-level map; details of each area live in complementary files (stack, architecture,
+  entry-points, conventions, glossary, api-surface, data-models, config-env, testing,
+  business-flows, security, tech-debt, folders/*) and are read on-demand with Read when
+  the current task needs them (do not load everything up front — do it lazily).
+  Triggers when the user mentions '{{PROJECT_NAME}}', {{ALIASES_LIST}}, or any variation
+  related to working on the code, architecture, routes, modules, data models, auth,
+  security, tests, or structure of this project — debugging, refactors, new features,
+  code reviews, or mapping where each thing lives.
+status: {{STATUS}}
+stack: {{STACK_ONELINER}}
+default_branch: {{DEFAULT_BRANCH}}
+last_scanned: {{SCAN_DATE}}
 ---
 
 # {{PROJECT_NAME}} — Architecture Context
 
 **What it does:** {{ONE_LINE_DESCRIPTION}}
-**Type:** {{PROJECT_TYPE}}
-**Client/Owner:** {{OWNER}}
-**Status:** {{STATUS}}
+**Type:** {{PROJECT_TYPE}}  ·  **Client/Owner:** {{OWNER}}  ·  **Status:** {{STATUS}}
 **Usual root path:** `{{ROOT_HINT}}`
-**Last scan:** {{SCAN_DATE}}
 
 ---
+
+## Context files (read on-demand)
+
+Read only what the task needs. `auto` files are regenerated on every scan — never hand-edit them. `human` files are written once and **preserved** across re-scans.
+
+| File | What's in it | Kind |
+|------|--------------|------|
+| `stack.md` | languages, frameworks, versions, package managers, DB | auto |
+| `architecture.md` | full folder tree + purpose per folder | auto |
+| `entry-points.md` | how to run/build/test/deploy, main routes | auto |
+| `api-surface.md` | endpoints/routes, methods, specs | auto |
+| `data-models.md` | entities, ORM, migrations, schema files | auto |
+| `config-env.md` | env var names (no values), config files | auto |
+| `testing.md` | frameworks, test dirs, coverage, CI | auto |
+| `conventions.md` | naming, patterns, code style | auto |
+| `glossary.md` | domain terms | auto |
+| `folders/*.md` | per-folder detail | auto |
+| `business-flows.md` | critical end-to-end journeys | human |
+| `security.md` | auth, sensitive data, gaps, human-first zones | human |
+| `tech-debt.md` | known quirks & gotchas (`file:line`) | human |
+
+**Suggested reading order:** **L1** (orient) this file → `stack.md` · **L2** (build) `architecture.md` + `data-models.md` + `entry-points.md` · **L3** (work) `api-surface.md` + `business-flows.md` + `security.md` + `config-env.md` + `conventions.md` · **L4** (deep) `testing.md` + `tech-debt.md` + `glossary.md` + `folders/*`.
+
+---
+
+<!-- auto-generated: scan {{SCAN_DATE}} — do not edit; refresh by re-running code-project-context-generator -->
 
 ## Stack (one-liner)
 
 {{STACK_ONELINER}}
 
-For exact versions, full dependencies, and package managers → read `stack.md`.
-
----
+→ exact versions and dependencies in `stack.md`.
 
 ## High-Level Map
 
@@ -37,35 +62,35 @@ For exact versions, full dependencies, and package managers → read `stack.md`.
 {{HIGH_LEVEL_TREE}}
 ```
 
-For the full tree with depth and short descriptions per folder → read `architecture.md`.
-To dive into a specific folder → read `folders/{{name-slug}}.md`.
-
----
+→ full tree in `architecture.md`; a specific folder in `folders/{{name-slug}}.md`.
 
 ## Entry Points (summary)
 
-- **Start in dev:** `{{DEV_COMMAND}}`
-- **Build:** `{{BUILD_COMMAND}}`
-- **Tests:** `{{TEST_COMMAND}}`
+- **Dev:** `{{DEV_COMMAND}}`  ·  **Build:** `{{BUILD_COMMAND}}`  ·  **Tests:** `{{TEST_COMMAND}}`
 - **Deploy:** {{DEPLOY_SUMMARY}}
 
-For routes, main APIs, auth flows, and full scripts → read `entry-points.md`.
+→ routes and flows in `entry-points.md` and `api-surface.md`.
 
----
+## At a glance
+
+- **API:** {{API_GLANCE}} → `api-surface.md`
+- **Data:** {{DATA_GLANCE}} → `data-models.md`
+- **Config:** {{ENV_GLANCE}} → `config-env.md`
+- **Tests:** {{TEST_GLANCE}} → `testing.md`
 
 ## Key Conventions (shortlist)
 
 {{CONVENTIONS_SHORTLIST}}
 
-For the full detail and examples → read `conventions.md`.
-
----
+→ full detail in `conventions.md`.
 
 ## Domain Glossary (shortlist)
 
 {{GLOSSARY_SHORTLIST}}
 
-For the full glossary → read `glossary.md`.
+→ full glossary in `glossary.md`.
+
+<!-- end auto-generated -->
 
 ---
 
@@ -77,9 +102,9 @@ For the full glossary → read `glossary.md`.
 
 ## Rules For Claude
 
-1. **Lazy loading:** Do NOT read all the complementary files at the start. Read only the ones the current task requires. Example: to modify auth, read `folders/auth.md`, not the entire architecture.
-2. **Verify before touching:** The map is a reference derived from a scan — it may be out of date. Before modifying code, confirm the real location with `Glob` or `Read`.
-3. **Respect the conventions:** If the project uses services/, don't put logic in controllers. If tests are co-located, don't create a separate tests/ folder.
+1. **Lazy loading:** read only the complementary files the current task needs (e.g. to change auth, read `security.md` + the relevant `folders/*.md`, not the whole context).
+2. **Verify before touching:** the map is scan-derived and may be stale — confirm real locations with `Glob`/`Read`.
+3. **Respect conventions:** follow `conventions.md`. Honor the **human-first zones** in `security.md`.
 4. **Danger zones:** {{DANGER_ZONES}}
-5. **When the map is stale:** If you find drift between the map and the real code, let the user know and suggest re-running `code-project-context-generator` on the project root.
-6. **Update triggers:** Re-scan when major modules/features are added, the stack changes, or a structural refactor happens.
+5. **Auto vs human files:** `auto` files are overwritten on re-scan — don't hand-edit them. Put durable notes in the `human` files (`business-flows.md`, `security.md`, `tech-debt.md`).
+6. **When stale:** if the map drifts from the code, tell the user and suggest re-running `code-project-context-generator` (refresh mode regenerates `auto` files and preserves `human` ones).

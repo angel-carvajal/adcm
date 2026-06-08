@@ -8,7 +8,7 @@
     {
       "name": "adcm-toolkits",
       "source": "./plugins/adcm-toolkits",
-      "description": "Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context) and a code-project context generator that scaffolds lazy-loading project docs. Use for structured multi-perspective decisions or to document a codebase."
+      "description": "Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context) and a code-project context generator that builds a lazy-loading, refreshable knowledge base of a codebase (architecture, API surface, data models, config, security, conventions). Use for structured multi-perspective decisions or to document a codebase."
     }
   ]
 }

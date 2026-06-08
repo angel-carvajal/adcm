@@ -1,0 +1,52 @@
+# {{PROJECT_NAME}} — Business Flows
+
+> Human-authored (semantic). **Preserved across re-scans** — the generator never overwrites this file. Update it yourself or ask Claude to re-derive it.
+
+Load it when you need to understand *what the system does* end-to-end: the critical user journeys and how data moves across modules. This is the highest-value onboarding context — it explains intent, not just structure.
+
+---
+
+## How to author this (Claude, STEP 3.5)
+
+Read the entry points, route files, key services and models the scan surfaced, then describe the 3–7 **critical flows**. For each flow:
+
+- **Name + trigger:** what starts it (a user action, a webhook, a cron).
+- **Participants:** which modules/repos/services take part.
+- **Steps:** the ordered hops (request → controller → service → repo → DB → external API → response).
+- **Outcome & side effects:** what changes (records created, events emitted, notifications).
+- Optionally a Mermaid `sequenceDiagram` and, for entities with lifecycle, a `stateDiagram-v2`.
+
+Document the **"why"** (business rule), not the line-by-line code. If you can't determine a flow from the code, write `<!-- TODO: needs manual authoring -->` rather than guessing.
+
+---
+
+## 1. {{FLOW_NAME}}
+
+{{FLOW_DESCRIPTION}}
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant API as Backend
+    participant DB as Database
+    U->>API: Action
+    API->>DB: Query/Write
+    DB-->>API: Result
+    API-->>U: Response
+```
+
+---
+
+## 2. {{ENTITY}} lifecycle (state machine)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created
+    Created --> Active
+    Active --> Completed
+    Completed --> [*]
+```
+
+---
+
+*(Add one section per critical flow. Keep it to the journeys that matter — not every endpoint.)*

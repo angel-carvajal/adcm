@@ -1,0 +1,41 @@
+<!-- auto-generated: scan {{SCAN_DATE}} — do not edit; refresh by re-running code-project-context-generator -->
+
+# {{PROJECT_NAME}} — Testing Strategy
+
+Load it when you need to write or run tests: which framework, where tests live, and whether CI runs them.
+
+---
+
+## Frameworks
+
+{{TEST_FRAMEWORKS}}
+
+(Jest, Vitest, PHPUnit, Pest, pytest, Playwright, Cypress, … — detected from configs and deps.)
+
+---
+
+## Where tests live
+
+{{TEST_DIRS}}
+
+- Test files counted: `{{TEST_FILE_COUNT}}`
+- Common patterns: `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.go`, `*_spec.rb`, `*Test.php`.
+
+---
+
+## Coverage & CI
+
+{{TEST_COVERAGE_CI}}
+
+- Coverage config present: `{{COVERAGE_CONFIG}}`
+- CI runs tests: `{{CI_RUNS_TESTS}}`
+
+---
+
+## How to run
+
+{{TEST_RUN_COMMAND}}
+
+The command(s) to run the suite — cross-reference `entry-points.md` for the exact script.
+
+<!-- end auto-generated -->
