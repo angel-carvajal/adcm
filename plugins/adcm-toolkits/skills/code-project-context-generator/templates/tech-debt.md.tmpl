@@ -1,0 +1,37 @@
+# {{PROJECT_NAME}} — Known Quirks & Tech Debt
+
+> Human-authored (semantic). **Preserved across re-scans** — the generator never overwrites this file.
+
+Load it before a non-trivial change to avoid re-discovering known traps. This is the highest-ROI "save me hours" file: gotchas, workarounds, legacy patterns, and where the bodies are buried.
+
+---
+
+## How to author this (Claude, STEP 3.5)
+
+As you read the codebase, capture anything surprising: hardcoded values that should be config, disabled features, fragile coupling, "do not touch" areas, slow paths, half-finished migrations, naming that lies. Cite `file:line`. Be honest — this file is most useful when it's blunt. Use `<!-- TODO: needs manual authoring -->` if you have no findings yet.
+
+---
+
+## Quirks & gotchas
+
+{{QUIRKS_TABLE}}
+
+| # | Quirk | Where (`file:line`) | Why it matters / workaround |
+|---|-------|---------------------|------------------------------|
+| 1 | ...   | ...                 | ...                          |
+
+---
+
+## Tech debt
+
+{{TECH_DEBT}}
+
+Larger structural debt: legacy patterns being migrated away from, modules pending refactor, missing tests in risky areas, dependencies pinned to old versions for a reason.
+
+---
+
+## "Here be dragons"
+
+{{DANGER_AREAS}}
+
+The parts where changes ripple unexpectedly — touch with extra care and verify with tests. Cross-reference `security.md` human-first zones.

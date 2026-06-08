@@ -1,0 +1,38 @@
+<!-- auto-generated: scan {{SCAN_DATE}} — do not edit; refresh by re-running code-project-context-generator -->
+
+# {{PROJECT_NAME}} — Data Models & Schema
+
+Load it when you need to know the persistent entities, the ORM in use, or where the schema/migrations live. Names are scanned from model/entity/schema files — read the actual files for fields and relationships.
+
+---
+
+## ORM / Persistence
+
+{{DATA_ORM}}
+
+(e.g. Eloquent, Prisma, TypeORM, Sequelize, Django ORM, SQLAlchemy, Mongoose — or none detected)
+
+---
+
+## Entities
+
+{{DATA_ENTITIES}}
+
+The model/entity class names detected. For fields, casts and relationships, open the corresponding file under the model folders.
+
+---
+
+## Migrations
+
+{{DATA_MIGRATIONS}}
+
+- Migration files counted: `{{MIGRATIONS_COUNT}}`
+- Schema files: `{{SCHEMA_FILES}}`
+
+---
+
+## Notes
+
+- This is a structural inventory, not an ERD. **This file is regenerated on each scan** — do not record durable notes here. To document entity relationships or data movement, write them in a human-preserved file: `business-flows.md` (how data moves) or `tech-debt.md` (schema quirks).
+
+<!-- end auto-generated -->

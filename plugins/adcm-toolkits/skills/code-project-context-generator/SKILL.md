@@ -54,7 +54,7 @@ Use AskUserQuestion to capture what the scanner cannot infer:
 
 **Round 1 — Project identity:**
 
-- What is the project called? (short name for the skill slug, e.g. `hub-plus`, `schools-backend`, `ancefoodtrailers-web`)
+- What is the project called? (short name for the skill slug, e.g. `acme-web`, `billing-api`, `shop-backend`)
 - Is there an internal/commercial name different from the repo name?
 - What does the project do in one sentence? (business value, not tech)
 - Is it your own project, a client project, open source, or experimental?
@@ -98,13 +98,20 @@ The scanner produces a JSON with:
 
 - `meta` — root name, size, files scanned
 - `stack` — detected languages, frameworks, runtimes, package manager
-- `dependencies` — list of critical deps with version (Node, PHP, Python, Go, Rust)
+- `dependencies` — list of critical deps with version (Node, PHP/Composer, Python, Go, Rust, Ruby)
 - `entry_points` — scripts in package.json, artisan commands, main modules, Dockerfile CMDs, CI scripts
 - `tree` — folder tree of the project with counts and sizes
 - `folders` — each folder with path, file count, predominant types, and a tentative purpose hash-tag (routing, models, services, tests, config, docs, etc.)
 - `configs` — configuration files found (`.env.example`, `docker-compose.yml`, CI, linters)
 - `conventions` — detected hints (MVC, feature-based, monorepo, workspaces, etc.)
 - `domain_terms` — terms that appear repeatedly in file/class names (glossary candidates)
+- `docs` — READMEs and other documentation files found
+- `api_surface` — detected endpoints/routes (`{style, endpoints:[{method,path,source}], openapi, count}`) — Laravel/Express/Nest/FastAPI/Flask/Next.js
+- `data_models` — entities/ORM (`{orm, entities, migrations_count, schema_files}`) — Eloquent/Prisma/TypeORM/Sequelize/Django/SQLAlchemy/Mongoose
+- `config_env` — env var **names only** from `.env.example`/`.env.sample` (`{files, vars:[{name,comment,sensitive}]}`) — never values
+- `testing` — test strategy (`{frameworks, test_dirs, test_file_count, coverage_config, ci_runs_tests}`)
+
+These four feed the **auto** sections (`api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`). The scanner does not produce the **semantic** sections — those are authored in STEP 3.5.
 
 ### STEP 3: Review with the user and fill the gaps
 
@@ -121,23 +128,48 @@ Ask what the scanner cannot know:
 - Confirm or adjust the domain glossary terms.
 - Identify "danger zones" or critical modules that Claude must touch carefully.
 
+### STEP 3.5: Author the semantic sections (hybrid)
+
+The scanner gives you the auto/structural sections for free. The high-value **semantic** sections (`business-flows.md`, `security.md`, `tech-debt.md`) cannot be scanned — **you author them** by reading the code the scan pointed at. This is the hybrid model: scanner for structure, Claude for judgment.
+
+For each, read the relevant evidence and write substance (not placeholders):
+
+- **`business-flows.md`** — read the entry points, the route files (`api_surface.source`), and the top services/controllers. Describe the 3–7 critical end-to-end journeys (trigger → participants → steps → side effects). Document the *why* (business rule), optionally with a Mermaid `sequenceDiagram`/`stateDiagram`.
+- **`security.md`** — read the auth middleware/guards, the user/role model, the validation layer, and the `config_env` var names. Fill: authentication & authorization model, sensitive-data/PII classification, input validation, **known gaps** (be honest), and **human-first zones** (auth, payments, crypto, PII).
+- **`tech-debt.md`** — capture quirks, gotchas, hardcoded values, disabled features, fragile coupling, "do not touch" areas — each with `file:line`. This is the highest-ROI file; be blunt.
+
+Rules for this pass:
+- **Accuracy over completeness.** If you can't determine a section from the code, write `<!-- TODO: needs manual authoring -->` instead of inventing.
+- **Never include secret values** — only variable names and purposes.
+- These files are **human-owned**: they carry NO `<!-- auto-generated -->` wrapper, so a future re-scan will preserve them.
+
 ### STEP 4: Generate the skill with lazy-loading
 
-Build the output structure:
+Build the output structure (`auto` = scan-derived, wrapped in `<!-- auto-generated -->`; `human` = authored in STEP 3.5, no wrapper):
 
 ```
 code-project-context-[project-name]/
-├── SKILL.md                    # High-level index (ALWAYS loaded)
-├── architecture.md             # Full tree + short descriptions (on-demand)
-├── stack.md                    # Stack, deps, versions (on-demand)
-├── entry-points.md             # How to start, routes, build/run/test (on-demand)
-├── conventions.md              # Detected code patterns (on-demand)
-├── glossary.md                 # Domain terms (on-demand)
+├── SKILL.md                    # High-level index (ALWAYS loaded) — auto block wrapped + human rules
+├── stack.md                    # Stack, deps, versions, DB (auto)
+├── architecture.md             # Full tree + short descriptions (auto)
+├── entry-points.md             # How to start, routes, build/run/test (auto)
+├── api-surface.md              # Endpoints/routes, methods, specs (auto)
+├── data-models.md              # Entities, ORM, migrations, schema (auto)
+├── config-env.md               # Env var names (no values), configs (auto)
+├── testing.md                  # Frameworks, test dirs, coverage, CI (auto)
+├── conventions.md              # Detected code patterns (auto)
+├── glossary.md                 # Domain terms (auto)
+├── business-flows.md           # Critical end-to-end journeys (human)
+├── security.md                 # Auth, sensitive data, gaps, human-first zones (human)
+├── tech-debt.md                # Known quirks & tech debt, file:line (human)
 └── folders/
-    ├── [folder-1].md           # Detail of src/, app/, etc. (on-demand)
-    ├── [folder-2].md
+    ├── [folder-1].md           # Detail of src/, app/, etc. (auto)
     └── ...
 ```
+
+**Wrapping rule:** every `auto` file (and the scan-derived block of `SKILL.md`) starts with
+`<!-- auto-generated: scan [date] — do not edit; refresh by re-running code-project-context-generator -->`
+and ends with `<!-- end auto-generated -->`. The `human` files carry no such marker. This is what makes the refresh in STEP 4.5 safe.
 
 **Golden rule:** the SKILL.md must NEVER have all the details inline. It should only have:
 
@@ -148,6 +180,16 @@ code-project-context-[project-name]/
 5. Rules for Claude on how to use this context
 
 Use the templates in `templates/` (relative to the skill root) as a base. The templates include placeholders that are filled in with the scanner's data.
+
+### STEP 4.5: Refresh mode (when the context already exists)
+
+If a `code-project-context-[project-name]/` already exists (the user is re-running on an evolved project), do **not** regenerate from scratch. Refresh incrementally:
+
+1. **Regenerate the `auto` files** wholesale from the fresh scan: `stack.md`, `architecture.md`, `entry-points.md`, `api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `conventions.md`, `glossary.md`, `folders/*.md`, and the wrapped block of `SKILL.md`. (These start with the `<!-- auto-generated -->` marker — safe to overwrite.)
+2. **Preserve the `human` files** untouched: `business-flows.md`, `security.md`, `tech-debt.md`, and the identity/danger-zone prose of `SKILL.md` (anything outside the markers).
+3. **Update `last_scanned`** in the `SKILL.md` frontmatter and the wrapper comments.
+4. **Flag drift:** if the scan changed materially (new modules, stack change, endpoints added/removed), prepend a one-line note to the affected human files: `> ⚠ possible drift since last scan — review.` Do not edit their content.
+5. Tell the user what was refreshed vs preserved.
 
 ### STEP 5: Package and install
 
@@ -165,99 +207,28 @@ Use the templates in `templates/` (relative to the skill root) as a base. The te
 
 ---
 
-## Structure of the resulting SKILL.md (template)
+## Structure of the resulting SKILL.md
 
-The SKILL.md of the generated skill must follow this strict skeleton to keep context lightweight:
+The canonical skeleton is `templates/SKILL.md.tmpl` (render its `{{placeholders}}` from the scan + the user's answers). It must keep context lightweight, so it only contains:
 
-```markdown
----
-name: code-project-context:[project-name]
-description: >
-  Loads the architecture context of the [Name] project. Loads only the high-level map — the
-  details of each folder are read on-demand with Read from the complementary files in the
-  same directory.
-  Triggers when the user mentions '[project-name]', '[aliases]', [project-specific triggers].
----
+1. Frontmatter: `name`, a generous `description` (triggers), plus `status`, `stack`, `default_branch`, `last_scanned`.
+2. Identity (1–2 lines): what it does, type, owner, status — **human, outside the wrapper**.
+3. **Context files table** — the index of every complementary doc, each tagged `auto` or `human`, with a suggested L1–L4 reading order.
+4. The wrapped **auto block**: stack one-liner, high-level tree, entry-points summary, an "at a glance" line (API/data/config/tests), conventions + glossary shortlists.
+5. **Related Skills** (optional) — links to sibling/`client-context-*` skills; human, outside the wrapper. Omit if none.
+6. **Rules For Claude** — lazy loading, verify-before-touch, respect conventions/human-first zones, auto-vs-human files, refresh-when-stale.
 
-# [Project Name] — Architecture Context
-
-**What it does:** [1 sentence of business value]
-**Type:** [frontend/backend/fullstack/mobile/CLI/library]
-**Client/Owner:** [name or "own"]
-**Status:** [active / maintenance / archived]
-
----
-
-## Stack (one-liner)
-
-[Language N.N] • [Framework N.N] • [Runtime] • [DB] • [other critical]
-
-For full details: read `stack.md`.
-
----
-
-## High-Level Map
-
-```
-project-root/
-├── src/              — main source code
-├── tests/            — test suites (unit + e2e)
-├── docs/             — internal documentation
-├── scripts/          — administrative tasks and CI helpers
-├── config/           — per-environment configuration
-└── [others]/         — [1 line]
-```
-
-For the full tree with depth: read `architecture.md`.
-For details of a specific folder: read `folders/[name].md`.
-
----
-
-## Entry Points (summary)
-
-- **Start dev:** `[command]`
-- **Build:** `[command]`
-- **Tests:** `[command]`
-- **Deploy:** [brief description]
-
-For routes, APIs, and full flows: read `entry-points.md`.
-
----
-
-## Key Conventions
-
-- [1 line per convention: e.g. "Thin controllers, logic in services/"]
-- [1 line: e.g. "Tests live next to the code in `*.test.ts`"]
-
-For the full detail: read `conventions.md`.
-
----
-
-## Domain Glossary (shortlist)
-
-- **[Term 1]:** [1 line]
-- **[Term 2]:** [1 line]
-
-For the full glossary: read `glossary.md`.
-
----
-
-## Rules For Claude
-
-1. **Lazy loading:** Do NOT read all the complementary files at the start. Read only the ones the current task requires.
-2. **Paths:** Before touching code, verify the real location with `Glob` or `Read`. The map is a reference, not absolute truth.
-3. **Conventions:** Respect the detected conventions. If the code uses services/, don't create fat controllers.
-4. **Danger zones:** [critical modules that require extra care — if applicable]
-5. **Updates:** If you discover the map is out of date, suggest running `code-project-context-generator` again.
-```
+Never inline per-folder or per-section detail into the SKILL.md — that defeats the lazy-loading.
 
 ---
 
 ## Principles
 
 - **Strict lazy-loading:** the resulting SKILL.md must be short (< 200 lines). All the weight goes into the complementary files.
-- **Useful short descriptions:** each folder in the map must have 1 line that answers "what lives here and why would I care?". Nothing generic like "source code folder".
-- **Generous triggers:** the description of the resulting skill must include the project name, aliases, base paths, key module names — anything the user might mention to bring up context.
-- **Stack-agnostic:** the scanner detects the stack, but the skill's logic assumes none. It supports Node/TS, PHP, Python, Go, Rust and any mix.
-- **No raw dump:** do not paste the raw scanner output into the skill. Everything goes through human (or Claude's) interpretation to produce useful short descriptions.
-- **Living, not fossilized:** the skill should be easy to regenerate as the project evolves. Include at the end of the SKILL.md the date of the last scan and a hint on when to re-run.
+- **Auto vs human:** `auto` files are scan-derived, wrapped in `<!-- auto-generated -->`, and rewritten on every scan. `human` files (`business-flows.md`, `security.md`, `tech-debt.md`) are authored once and **preserved** on refresh. Never hand-edit an `auto` file; never let a re-scan clobber a `human` one.
+- **Accuracy over completeness:** for semantic sections, write `<!-- TODO: needs manual authoring -->` rather than inventing. Omit sections that don't apply (no DB → no data section) instead of leaving empty scaffolding.
+- **Never leak secrets:** `config-env.md` lists variable **names only** — no values, ever.
+- **Useful short descriptions:** each folder/entity gets 1 line answering "what lives here and why would I care?". Nothing generic like "source code folder".
+- **Generous triggers:** the resulting skill's `description` must include the project name, aliases, base paths, key module names — anything the user might mention.
+- **Stack-agnostic:** supports Node/TS, PHP, Python, Go, Rust, Ruby and any mix; degrade gracefully when a detector finds nothing.
+- **Living, not fossilized:** re-runnable as the project evolves — refresh mode (STEP 4.5) updates `auto` files and `last_scanned` while preserving `human` ones.

@@ -1,0 +1,36 @@
+<!-- auto-generated: scan {{SCAN_DATE}} — do not edit; refresh by re-running code-project-context-generator -->
+
+# {{PROJECT_NAME}} — Configuration & Environment
+
+Load it when you need to know which environment variables the project expects (for local setup, CI, or debugging a missing-config error). **Variable names only — no values are ever captured.**
+
+---
+
+## Source files
+
+{{ENV_FILES}}
+
+(`.env.example` / `.env.sample` — the committed templates, never real `.env`.)
+
+---
+
+## Environment variables
+
+{{ENV_VARS_TABLE}}
+
+| Variable | Sensitive? | Note |
+|----------|------------|------|
+| ...      | ...        | ...  |
+
+- **Sensitive?** = the name matches a secret-like pattern (`KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `DSN`, `CREDENTIAL`, `PRIVATE`, `API`, `AUTH`). Provide these via a secrets manager, never commit real values.
+- **Note** = the inline/preceding comment from the template file (if any). Values are intentionally omitted.
+
+---
+
+## Config files
+
+{{CONFIG_FILES_LIST}}
+
+Other configuration files detected (framework configs, linters, CI). See `stack.md` for the full list.
+
+<!-- end auto-generated -->

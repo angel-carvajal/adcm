@@ -1,0 +1,58 @@
+# {{PROJECT_NAME}} — Security & Auth
+
+> Human-authored (semantic). **Preserved across re-scans** — the generator never overwrites this file.
+
+Load it before touching authentication, authorization, payments, encryption, or anything handling personal/sensitive data. Covers how access is controlled, what data is sensitive, and the known gaps.
+
+---
+
+## How to author this (Claude, STEP 3.5)
+
+Read the auth middleware/guards, the user/role model, the validation layer, and `.env` variable names. Then fill the sections below. Document **what is**, plus **known gaps** (don't hide them). Cite `file:line` where useful. If something can't be determined from the code, write `<!-- TODO: needs manual authoring -->`.
+
+---
+
+## Authentication & Authorization
+
+{{AUTH_MODEL}}
+
+- **Authentication:** how users/services prove identity (session, JWT, OAuth/OIDC, API key, SSO). Token TTLs if known.
+- **Authorization:** the access model (RBAC/ABAC, roles, permissions, policies, tenant isolation) and where it's enforced (middleware, guards, policies).
+
+---
+
+## Sensitive data & PII
+
+{{SENSITIVE_DATA}}
+
+| Data type | Where it lives | Protection |
+|-----------|----------------|------------|
+| ...       | ...            | ...        |
+
+Classify the personal/financial/secret data this project handles and how it's protected (encryption at rest/in transit, hashing, masking in logs).
+
+---
+
+## Input validation & boundaries
+
+{{VALIDATION}}
+
+Where untrusted input enters and how it's validated (request validation, parameterized queries, output encoding, rate limiting).
+
+---
+
+## Known security gaps
+
+{{SECURITY_GAPS}}
+
+| # | Gap | Affected area | Recommendation |
+|---|-----|---------------|----------------|
+| 1 | ... | ...           | ...            |
+
+---
+
+## Human-first zones
+
+{{HUMAN_FIRST_ZONES}}
+
+Modules where AI-generated changes **must** get senior human review (auth, payments, crypto, PII handling, money movement). List them explicitly.
