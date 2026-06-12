@@ -1,0 +1,147 @@
+<!--
+Template: plans.html — single-file visual version of propuesta-ejecutiva +
+plan-maestro + plan-detallado. The executive proposal is tab 1, active by default:
+it's what stakeholders see first.
+How to instantiate:
+- Replace {{placeholders}} and render the content of the THREE markdown docs into the
+  three <article> blocks: h2 per section (## → .sec with an id), markdown tables →
+  <table>, task entries → .task cards, ⚠ gates → <span class="badge gate">⚠ gate</span>,
+  status → .badge.ok / .badge.pending / .badge.blocked, the proposal's approval
+  checklist → a .task-style card with checkboxes.
+- Rebuild each doc's TOC <nav> from its h2 ids.
+- Keep it self-contained: no external assets except the font CDN (falls back to
+  system-ui offline). Generate text in the user's language.
+-->
+<!doctype html>
+<html lang="{{lang}}" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{project_name}} · Plans</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://cdn.jsdelivr.net/npm/geist@1/dist/fonts/geist-sans/style.css" rel="stylesheet">
+<style>
+:root{--bg:#FAFAFF;--surface:#F8F8FC;--raised:#F0F0F8;--text:#09090F;--muted:#74748A;
+--border:#E4E4EF;--border-strong:#C7C7D6;--primary:#6366F1;--ring:#6366F1;
+--code-bg:#EEEEF6;--glass-bg:rgba(255,255,255,.72);--glass-bd:rgba(0,0,0,.06);--r:12px}
+[data-theme="dark"]{--bg:#0A0A0F;--surface:#14141B;--raised:#1C1C25;--text:#ECECF1;
+--muted:#8888A0;--border:#2A2A36;--border-strong:#3B3B4A;--primary:#818CF8;--ring:#818CF8;
+--code-bg:#20202B;--glass-bg:rgba(20,20,27,.62);--glass-bd:rgba(255,255,255,.08)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+font:15px/1.65 'Geist',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:6px;
+padding:.1em .4em;font:.85em ui-monospace,SFMono-Regular,monospace}
+.hero{padding:64px 24px 40px;text-align:center;border-bottom:1px solid var(--border);
+background:linear-gradient(180deg,color-mix(in srgb,var(--primary) 7%,var(--bg)),var(--bg))}
+.hero h1{margin:0 0 8px;font-size:clamp(26px,4vw,40px);letter-spacing:-.02em}
+.hero p{margin:0 auto;max-width:640px;color:var(--muted)}
+.topbar{position:sticky;top:0;z-index:9;display:flex;gap:8px;align-items:center;
+justify-content:center;flex-wrap:wrap;padding:10px 16px;backdrop-filter:blur(12px);
+background:var(--glass-bg);border-bottom:1px solid var(--glass-bd)}
+.doc-nav-link,.btn{appearance:none;cursor:pointer;border:1px solid var(--border);
+background:var(--surface);color:var(--text);border-radius:999px;padding:7px 16px;
+font:inherit;font-size:13.5px}
+.doc-nav-link.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.doc-nav-link:hover:not(.active),.btn:hover{border-color:var(--border-strong)}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;
+max-width:1180px;margin:0 auto;padding:32px 24px 96px}
+.toc{position:sticky;top:64px;align-self:start;max-height:calc(100vh - 90px);
+overflow:auto;font-size:13.5px}
+.toc a{display:block;color:var(--muted);padding:5px 12px;border-left:2px solid var(--border)}
+.toc a:hover,.toc a.on{color:var(--primary);border-left-color:var(--primary);text-decoration:none}
+.content{min-width:0}
+.sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+padding:24px 28px;margin:0 0 20px}
+.sec h2{margin:0 0 14px;font-size:20px;letter-spacing:-.01em}
+.sec h3{margin:22px 0 8px;font-size:16px}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+tr:hover td{background:color-mix(in srgb,var(--primary) 4%,transparent)}
+.badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;
+font-weight:600;border:1px solid var(--border);background:var(--raised)}
+.badge.gate{color:#B45309;border-color:#F59E0B55;background:#F59E0B14}
+.badge.ok{color:#15803D;border-color:#22C55E55;background:#22C55E14}
+.badge.pending{color:var(--muted)}
+.badge.blocked{color:#B91C1C;border-color:#EF444455;background:#EF444414}
+.task{border:1px solid var(--border);border-left:3px solid var(--primary);
+border-radius:var(--r);background:var(--raised);padding:14px 18px;margin:12px 0}
+.task .tid{font:600 12px ui-monospace,monospace;color:var(--primary)}
+.task h4{margin:2px 0 8px;font-size:15px}
+.task .meta{font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.task ul{margin:6px 0;padding-left:20px}
+article[hidden]{display:none}
+@media(max-width:840px){.layout{grid-template-columns:1fr}.toc{display:none}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <h1>{{project_name}} · {{initiative_title}}</h1>
+  <p>{{one-line summary of the initiative}}</p>
+</header>
+
+<div class="topbar">
+  <button class="doc-nav-link active" data-doc="propuesta">Executive proposal</button>
+  <button class="doc-nav-link" data-doc="maestro">Master plan</button>
+  <button class="doc-nav-link" data-doc="detallado">Detailed plan</button>
+  <button class="btn" id="theme">◐</button>
+</div>
+
+<div class="layout">
+  <nav class="toc" id="toc"><!-- rebuilt by script from the visible article --></nav>
+  <main class="content">
+
+    <article id="doc-propuesta">
+      <section class="sec" id="p-idea">
+        <h2>The idea in one sentence</h2>
+        {{rendered content of propuesta-ejecutiva.md — one .sec per ## section:
+        idea · how it will be used · what we gain · scope · simplified architecture ·
+        the plan in N steps · when (table) · who · investment & risk · what we ask to
+        approve (checklist card)}}
+      </section>
+      <!-- {{...remaining proposal sections...}} -->
+    </article>
+
+    <article id="doc-maestro" hidden>
+      <section class="sec" id="m-decision">
+        <h2>1. Core decision</h2>
+        {{rendered content of plan-maestro.md — one .sec per ## section, same ids in
+        the TOC. Use tables for §2/§3/§5/§6/§7 and an ordered list for §8.}}
+      </section>
+      <!-- {{...remaining plan-maestro sections...}} -->
+    </article>
+
+    <article id="doc-detallado" hidden>
+      <section class="sec" id="d-w1">
+        <h2>Wave W1 — {{wave_title}} <span class="badge gate">⚠ gate</span></h2>
+        <div class="task">
+          <span class="tid">T-W1-1</span> <span class="badge pending">pending</span>
+          <h4>{{task_title}}</h4>
+          <div class="meta">Repo: <code>{{repo}}</code> · Owner: {{owner}} · Depends on: {{deps}}</div>
+          <p>{{technical description}}</p>
+          <ul>{{DoD items as <li>}}</ul>
+        </div>
+        <!-- {{...more .task cards or a <table> for homogeneous waves...}} -->
+      </section>
+      <!-- {{...remaining waves...}} -->
+    </article>
+
+  </main>
+</div>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+$('#theme').onclick=()=>{const h=document.documentElement;
+h.dataset.theme=h.dataset.theme==='dark'?'light':'dark'};
+function buildToc(){const art=$$('article').find(a=>!a.hidden);
+$('#toc').innerHTML=[...art.querySelectorAll('.sec')].map(s=>
+`<a href="#${s.id}">${s.querySelector('h2').textContent.replace('⚠ gate','').trim()}</a>`).join('')}
+$$('.doc-nav-link').forEach(b=>b.onclick=()=>{
+$$('.doc-nav-link').forEach(x=>x.classList.toggle('active',x===b));
+$$('article').forEach(a=>a.hidden=a.id!=='doc-'+b.dataset.doc);buildToc()});
+buildToc();
+</script>
+</body>
+</html>

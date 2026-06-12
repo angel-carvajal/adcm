@@ -1,0 +1,112 @@
+<!--
+Template: execute.md — the HOW: execution protocol + instantiated wave prompts.
+§7 holds ONE copy-paste prompt per wave, instantiated from wave-prompt.tmpl with the
+real task IDs, commands and paths found during analysis. If a task spec changes in
+plan-detallado.md, regenerate the affected wave prompt.
+Generate in the user's language; keep GOAL/TASKS/LOOP/WORKFLOW/GUARDRAILS & CLOSE in
+English — they are protocol keywords. Keep the document name execute.md.
+-->
+# {{project_name}} — Execution protocol ({{initiative_title}})
+
+> **What this is.** The operating manual of the build. It defines HOW the catalog in
+> `plan-detallado.md` gets executed: **wave sessions** (not 1 task = 1 session),
+> self-verified loops with the **DoD-auto as the exit criterion**, workflow fan-out
+> where parallelism helps, and **mandatory adversarial verification at ⚠gates**. The
+> copy-paste prompts per wave are at the end (§7). Keep in sync with `task.md`
+> (state) and `plan-maestro.md` (rationale). Prompts are tuned for Fable at high
+> effort but run on any model.
+
+## 1. Principles
+
+1. **Session = one wave: 1–4 coupled tasks, one branch/MR per wave.**
+2. **The loop ends by DoD, not by fatigue.** Each wave defines its **DoD-auto**: a
+   list 100% verifiable by command. While it isn't green the loop continues:
+   implement → verify → fix. Max 5 rounds; if the SAME failure doesn't converge in
+   **3 attempts** → stop, report, **never degrade tests to pass**.
+3. **DoD-auto ≠ DoD-human.** Actions only {{owner}} can take (dashboards, DNS,
+   purchases, approvals) live in the **DoD-human**: when the DoD-auto is exhausted
+   the task is marked `blocked` with the human checklist rendered at close. It only
+   becomes `completed` when {{owner}} confirms.
+4. **Implementers never self-approve at gates.** On ⚠gate waves the loop does NOT
+   close without **adversarial verification**: a sub-agent that did NOT see the
+   implementation, given only the diff + the DoD + that wave's attack checklist (§6).
+5. **Inviolable decisions** (no session may contradict them — from
+   `plan-maestro.md` §8): {{list_them_inline}}.
+6. **No hardcoded dates**: the logbook uses the date of the day of execution.
+
+## 2. Canonical wave-prompt template
+
+```text
+Start a clean session. Load the skill `{{project_context_skill}}`, read
+`{{docs_dir}}/execute.md` (this protocol).
+
+# GOAL — Wave <Wx>: <titles>
+Work EXACTLY the tasks <IDs> (specs: plan-detallado.md — read them in full; they are
+the specification).
+DoD-auto (the loop's EXIT criterion; everything by command):
+- [ ] <command> → <expected result>
+
+# TASKS
+Create one task per ID (TaskCreate), mark it in_progress on entry and completed on
+verification. Checkpoint commit (Conventional) at each internal task close.
+
+# LOOP
+implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 attempts on the
+same failure without converging → stop and report (don't degrade tests, don't mark
+done what isn't done).
+
+# WORKFLOW (fan-out)
+<wave-specific parallelization: sub-agents with EXCLUSIVE ownership of disjoint
+files/folders; on ⚠gates: adversarial verification with the attack checklist from §6>
+
+# GUARDRAILS & CLOSE
+Touch nothing outside the tasks' scope. No secrets in code/commits. When the DoD-auto
+is green: <delivery per §3>, append the logbook entry in task.md (today's date + wave
++ branch/MR + notes + wall clock), and list any pending DoD-human marking those tasks
+blocked.
+```
+
+## 3. Delivery / merge policy
+
+| Wave type | Delivery |
+|---|---|
+| NO-gate | {{e.g. auto-merge the MR if pipeline green and DoD-auto passed / commit without push for review}} |
+| ⚠gate ({{gate_wave_ids}}) | **No merge** — {{owner}} reviews after the adversarial verification |
+
+## 4. Checkpoint / resume
+
+If a session dies mid-wave: partial state lives in (a) the wave branch's checkpoint
+commits and (b) a `[PARTIAL]` logbook entry with: internal tasks closed, exact step in
+progress, and the next command to run. The resuming session reads the `[PARTIAL]`
+entry, checks out the branch and continues the loop — it does NOT restart.
+
+## 5. Wave map (identity; fine ORDER is set by task.md)
+
+| Wave | Tasks | Gate | Skills to load | Base branch | Depends on |
+|---|---|---|---|---|---|
+| **W1** | {{ids}} | — | {{skills}} | {{branch}} | — |
+| **W2** | {{ids}} | ⚠ | {{skills}} | {{branch}} | W1 |
+
+## 6. Attack checklists (adversarial verification per gate)
+
+- **W{{x}} ({{ids}})**: {{concrete attacks the verifier must attempt against the
+  diff: privilege/tenant escapes, data loss paths, regressions in named flows,
+  injection, broken invariants. Each item must be actionable, not generic.}}
+
+## 7. Wave prompts (instantiated, copy-paste)
+
+> Generated from the task specs (source of truth). If a spec changes, regenerate the
+> affected wave's prompt.
+
+### Wave W1
+
+```text
+{{full prompt instantiated from wave-prompt.tmpl with W1's real tasks, real commands
+and real paths}}
+```
+
+### Wave W2
+
+```text
+{{...}}
+```
