@@ -1,0 +1,72 @@
+<!--
+Template: propuesta-ejecutiva.md — the PITCH: the first document of the family.
+Audience: stakeholders who APPROVE (non-technical or semi-technical). Rules:
+- One-page equivalent. No task IDs, no commands, no code, no jargon — if a term needs
+  the glossary, rewrite the sentence.
+- Derived from plan-maestro.md content, but it does not replace it: this document
+  answers "what is sought, what it costs, what we ask you to approve".
+- Generate in the user's language; keep the document name propuesta-ejecutiva.md.
+-->
+# {{project_name}} — Executive proposal: {{initiative_title}}
+
+## The idea in one sentence
+
+{{One sentence a stakeholder can repeat in a meeting: what changes and why it
+matters. No qualifiers, no parentheses.}}
+
+## How it will be used
+
+{{2-4 sentences: who touches the result day-to-day and what their work looks like
+after. Concrete, from the user's seat — not from the system's.}}
+
+## What we gain
+
+- {{benefit — measurable or observable: speed, cost, risk removed, capability gained}}
+- {{benefit}}
+- {{benefit}}
+
+## Scope
+
+**In:** {{what this initiative delivers}}
+**Out (explicitly):** {{what it does NOT touch — the line that prevents scope creep}}
+
+## The architecture, simplified
+
+{{Stakeholder-level picture: 2-4 layers/boxes and one sentence each on what they do.
+A small table or ASCII diagram is fine. No framework names unless they ARE the
+decision.}}
+
+## The plan in {{N}} steps
+
+1. **{{step_title}}** — {{one line: what gets done and what it unblocks}}
+2. **{{step_title}}** — {{...}}
+{{One step per phase or wave-group — never per task. 3-6 steps total.}}
+
+## When
+
+| | |
+|---|---|
+| Start | {{start_date}} |
+| {{milestone}} | {{date}} |
+| Delivery | {{end_date}} |
+
+## Who
+
+{{Team size and shape, and what runs in parallel: "{{n}} people in {{m}} parallel
+streams: {{stream}} ({{who}}), {{stream}} ({{who}})."}}
+
+## Investment & risk
+
+- **Effort:** {{person-weeks / sessions / cost unit the stakeholder uses}}
+- **Main risks:** {{top 2-3 risks in plain words, each with its one-line mitigation.
+  Full register in plan-maestro.md §6.}}
+- **What happens if we don't do it:** {{the cost of no — one or two sentences}}
+
+## What we ask to approve
+
+- [ ] {{decision_1 — e.g. the approach, the timeline, the team allocation}}
+- [ ] {{decision_2}}
+- [ ] {{decision_3}}
+
+> Detail behind this proposal: strategy and decisions in `plan-maestro.md`, full task
+> catalog in `plan-detallado.md`, execution protocol in `execute.md`.

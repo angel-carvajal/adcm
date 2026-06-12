@@ -1,0 +1,61 @@
+<!--
+Template: one instantiated wave prompt (goes inside execute.md §7, in a ```text block).
+Rules when instantiating:
+- Every {{placeholder}} filled with REAL data from the analysis: exact task IDs, exact
+  commands that exist in that repo, exact paths. Never invent.
+- The five sections are mandatory. WORKFLOW is ALWAYS present — even if the executing
+  session has no ultracode enabled, the prompt itself instructs the fan-out.
+- Write for Fable at high effort: dense, precise, zero ambiguity, no filler. Must
+  still be executable by any model.
+- Generate in the user's language; keep the five section names in English.
+-->
+Start a clean session. Load the skill `{{project_context_skill}}`, read
+`{{docs_dir}}/execute.md` (this protocol). {{Wave-specific preamble: extra skills to
+load, repos to open, state assumptions — e.g. "W2 must be merged" — and what to do if
+an assumption fails.}}
+
+# GOAL — Wave {{Wx}}: {{task_titles}}
+Work EXACTLY the tasks {{IDs}} (specs: `{{docs_dir}}/plan-detallado.md` §{{section}} —
+read them in full; they are the specification). {{Mandatory internal order if any,
+e.g. "T-W2-1 closes before T-W2-3 starts (shared schema)."}}
+DoD-auto (the loop's EXIT criterion; everything by command):
+- [ ] {{command}} → {{expected_result}}
+- [ ] {{command}} → {{expected_result}}
+{{One block per internal task if it helps, plus an "Integration (whole wave)" block
+with the repo-wide quality commands.}}
+
+# TASKS
+Create one task per ID (TaskCreate): {{IDs}}. Mark each in_progress on entry and
+completed when its slice of the DoD-auto is verified. All work on the wave's single
+branch (`{{branch_name}}`), checkpoint commit (Conventional, footer `Refs: <ID>`) at
+each internal task close.
+
+# LOOP
+implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 attempts on the
+SAME failure without converging → stop and report (don't degrade tests, don't mark
+done what isn't done). {{Wave-specific failure policy: known flaky checks, retries
+that don't count as failures, when to stop early and leave DoD-human.}}
+
+# WORKFLOW (fan-out)
+{{ALWAYS spell out the parallelization, e.g.:
+1. {{task}} runs serial first (it's the base of the wave).
+2. Then launch {{N}} sub-agents IN PARALLEL with EXCLUSIVE ownership of disjoint
+   files/folders: A ({{scope}}), B ({{scope}}), C ({{scope}}). Sub-agents do NOT run
+   {{expensive_global_check}}; their gate is {{cheap_scoped_command}}.
+3. Convergence is done by YOU, the main agent: integrate, then run the FULL DoD-auto
+   yourself — never trust a sub-agent's self-report.}}
+{{If ⚠gate: "Before closing: MANDATORY adversarial verification — launch a sub-agent
+that did NOT implement, give it only the diff + the DoD + the attack checklist for
+{{Wx}} in execute.md §6. Every finding is fixed and re-verified before close."}}
+{{If NO-gate: "Wave is NO-gate (§5): no adversarial verification required."}}
+
+# GUARDRAILS & CLOSE
+Touch nothing outside the scope of {{IDs}} ({{explicit allowed paths}}). No secrets in
+code/commits/logs. {{Wave-specific hard limits: "do NOT upgrade dependency X", "do NOT
+touch folder Y (Wave 3's scope)", inviolable decisions from plan-maestro §8 that this
+wave could violate.}} When the DoD-auto is green: {{delivery per execute.md §3 —
+open MR / commit without push}}, append the logbook entry in `{{docs_dir}}/task.md`
+(TODAY's date — the day of execution, never hardcoded — + wave {{Wx}} + branch/MR +
+notes + wall clock), and list the pending DoD-human marking those tasks blocked until
+{{owner}} confirms:
+- {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}

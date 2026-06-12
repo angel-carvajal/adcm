@@ -1,0 +1,74 @@
+<!--
+Template: plan-maestro.md — the WHY of the plan.
+Replace every {{placeholder}}. Delete sections that genuinely don't apply (rare).
+Generate in the user's language; keep the document name plan-maestro.md.
+-->
+# {{project_name}} — Master plan: {{initiative_title}}
+
+> **What this is.** The strategic source of truth for {{initiative_short}}. It captures
+> the core decision and its rationale, the target architecture, the wave order, the
+> timeline with exit gates, and the live risks. The executable task catalog lives in
+> `plan-detallado.md`; execution state in `task.md`; the protocol and per-wave prompts
+> in `execute.md`.
+
+## 0. Project, owner and team
+
+| Role | Who | Responsibility |
+|---|---|---|
+| Owner | {{owner}} | {{owner_responsibility}} |
+| {{role}} | {{person}} | {{responsibility}} |
+
+## 1. Core decision
+
+{{What was decided and WHY — 2-4 paragraphs. Include: the problem, the chosen
+approach, the alternatives that were rejected and why. This section is what prevents
+future sessions from re-litigating the decision.}}
+
+## 2. Target architecture
+
+{{Target state: layers, boundaries, who may depend on whom. Use a table or diagram.
+Include the boundary rules a wave prompt can enforce ("X never imports Y").}}
+
+| Layer / module | Contains | May depend on |
+|---|---|---|
+| {{layer}} | {{contents}} | {{deps}} |
+
+## 3. Current vs target
+
+| Dimension | Today | Target | Decision |
+|---|---|---|---|
+| {{dimension}} | {{current}} | {{target}} | {{decision_and_rationale}} |
+
+## 4. Wave order and rationale
+
+{{Why the waves are ordered this way: dependency graph, risk-first or value-first
+ordering, what each wave unblocks. One short paragraph per wave.}}
+
+- **W1 — {{wave_title}}**: {{rationale}}
+- **W2 — {{wave_title}}**: {{rationale}}
+
+## 5. Phases and timeline
+
+| Phase | When | Content (waves) | Exit gate |
+|---|---|---|---|
+| {{phase}} | {{dates_or_relative}} | {{waves}} | {{verifiable_exit_criterion}} |
+
+## 6. Live risks
+
+| ID | Risk | Impact | Mitigation |
+|---|---|---|---|
+| R1 | {{risk}} | {{impact}} | {{mitigation}} |
+
+## 7. Affected repos
+
+| Repo | Role in this plan |
+|---|---|
+| {{repo}} | {{role}} |
+
+## 8. Inviolable decisions
+
+Rules NO session or wave may contradict (each wave prompt's guardrails inherit them):
+
+1. {{inviolable_rule — e.g. security boundaries, secrets policy, commit conventions,
+   directories that must not be touched}}
+2. {{...}}

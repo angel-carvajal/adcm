@@ -1,0 +1,39 @@
+<!--
+Template: task.md — the STATE: wave map + burn + logbook.
+This is the only document that mutates during execution. Wave prompts append to the
+logbook at close. Never hardcode dates — entries use the date of the day they run.
+Generate in the user's language; keep the document name task.md.
+-->
+# {{project_name}} — Task tracker: {{initiative_title}}
+
+> Execution state of {{initiative_short}}. Task specs live in `plan-detallado.md`;
+> the protocol and per-wave prompts in `execute.md`. Mark a wave ✅ only when its
+> DoD-auto passed AND its DoD-human (if any) was confirmed by {{owner}}.
+
+## Wave map
+
+| Status | Wave | Tasks | Gate | Skills to load | Base branch | Depends on |
+|---|---|---|---|---|---|---|
+| ☐ | **W1** | T-W1-1 + T-W1-2 | — | {{project_context_skill}} | {{branch}} | — |
+| ☐ | **W2** | {{task_ids}} | ⚠ | {{skills}} | {{branch}} | W1 |
+
+Status legend: ☐ pending · 🔄 in progress · ⛔ blocked (DoD-human pending) · ✅ done.
+
+## Weekly burn
+
+Every {{weekday}}: waves planned vs closed. **If burn < 70% → cut scope of the next
+cycle (move waves out), never accumulate.**
+
+| Week | Planned | Closed | Burn | Action |
+|---|---|---|---|---|
+
+## Logbook
+
+Append one entry per wave session (including `[PARTIAL]` ones — see `execute.md` §4):
+
+### {{date_of_execution}} — Wave {{Wx}} {{[PARTIAL] if unfinished}}
+
+- **Branch/MR:** {{branch_or_mr}}
+- **Tasks closed:** {{ids}} · **Blocked:** {{ids + pending DoD-human}}
+- **Notes/decisions:** {{what future sessions must know}}
+- **Wall clock:** {{duration — becomes the baseline for similar waves}}

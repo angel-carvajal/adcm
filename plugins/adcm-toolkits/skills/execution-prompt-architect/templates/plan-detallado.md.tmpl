@@ -1,0 +1,51 @@
+<!--
+Template: plan-detallado.md — the WHAT: the executable task catalog.
+One entry per task, grouped by wave. Every DoD line must be objectively checkable;
+prefer command → expected result. Task IDs: T-<WAVE>-<n> (e.g. T-W1-3).
+Generate in the user's language; keep the document name plan-detallado.md.
+-->
+# {{project_name}} — Detailed plan: {{initiative_title}}
+
+> Executable backlog of {{initiative_short}}. Strategy and rationale live in
+> `plan-maestro.md`; wave state in `task.md`; the per-wave prompts in `execute.md` §7.
+
+## 0. Conventions
+
+- **Task ID**: `T-<WAVE>-<n>`. **Status**: ☐ pending · 🔄 in progress · ⛔ blocked · ✅ done.
+- **Repo aliases**: {{alias}} = {{full_repo_path_or_url}}
+- **Base DoD** (applies to EVERY task, on top of its own DoD):
+  - [ ] {{repo_quality_command — e.g. lint/typecheck/tests of that repo}} → exit 0
+  - [ ] No files touched outside the task's scope
+  - [ ] No secrets in code, commits or docs
+  - [ ] Conventional commit(s), atomic, referencing the task ID
+
+---
+
+## Wave W1 — {{wave_title}}
+
+### ☐ T-W1-1 — {{task_title}}
+
+- **Repo(s):** `{{repo}}`
+- **Owner:** {{owner}}
+- **Technical description:** {{2-5 sentences of real technical depth: exact files/
+  modules/surfaces touched, counts found in the analysis ("34 call sites of X"),
+  key implementation decisions, order within the task.}}
+- **DoD:**
+  - [ ] {{command}} → {{expected_result}}
+  - [ ] {{observable_assertion}}
+- **Depends on:** {{task_ids_or_none}}. **Blocks:** {{task_ids_or_what_it_unblocks}}.
+
+### ☐ T-W1-2 — {{task_title}}
+
+{{...same anatomy...}}
+
+---
+
+## Wave W2 — {{wave_title}} {{add ⚠GATE to the heading if this wave has a gate}}
+
+{{For large homogeneous waves (e.g. migrating N similar components), a table is
+allowed instead of one entry per task:}}
+
+| ID | Title | Repo | Owner | Specific DoD | Depends on |
+|---|---|---|---|---|---|
+| T-W2-1 | {{title}} | {{repo}} | {{owner}} | {{dod_summary}} | {{deps}} |
