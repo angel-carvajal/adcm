@@ -45,6 +45,7 @@ Work EXACTLY the tasks <IDs> (specs: plan-detallado.md — read them in full; th
 the specification).
 DoD-auto (the loop's EXIT criterion; everything by command):
 - [ ] <command> → <expected result>
+- [ ] (if the wave touches UI) a REVIEWED screenshot of the render — see "VISUAL CHECK"
 
 # TASKS
 Create one task per ID (TaskCreate), mark it in_progress on entry and completed on
@@ -54,6 +55,13 @@ verification. Checkpoint commit (Conventional) at each internal task close.
 implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 attempts on the
 same failure without converging → stop and report (don't degrade tests, don't mark
 done what isn't done).
+
+# VISUAL CHECK (MANDATORY if the wave touches UI: .pug/.html/.scss/.css/components)
+grep + build only prove the code is THERE, not that it LOOKS right (they never catch real width,
+wrong-language text, overflow/overlap). Before marking a UI task completed: render the page in headless
+Chrome and review the screenshot YOURSELF — local server (full env) or the deployed URL. Use a screenshot
+helper (Playwright/Puppeteer + the system browser); capture desktop (≥1280) AND mobile (375), both languages
+if i18n. Verify width/responsive (not "compacted"), i18n, no overlaps, design-system fonts/colors.
 
 # WORKFLOW (fan-out)
 <wave-specific parallelization: sub-agents with EXCLUSIVE ownership of disjoint

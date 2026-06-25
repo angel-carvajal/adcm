@@ -21,6 +21,7 @@ e.g. "T-W2-1 closes before T-W2-3 starts (shared schema)."}}
 DoD-auto (the loop's EXIT criterion; everything by command):
 - [ ] {{command}} → {{expected_result}}
 - [ ] {{command}} → {{expected_result}}
+{{If the wave touches UI, also: "- [ ] reviewed screenshot of the rendered page (see VISUAL CHECK)".}}
 {{One block per internal task if it helps, plus an "Integration (whole wave)" block
 with the repo-wide quality commands.}}
 
@@ -35,6 +36,17 @@ implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 atte
 SAME failure without converging → stop and report (don't degrade tests, don't mark
 done what isn't done). {{Wave-specific failure policy: known flaky checks, retries
 that don't count as failures, when to stop early and leave DoD-human.}}
+
+# VISUAL CHECK (mandatory if the wave touches UI: .pug/.html/.scss/.css/components)
+grep + build only prove the code is THERE, not that it LOOKS right — they never catch real width,
+wrong-language text, or overflow/overlap. Before marking a UI task completed, render the page in headless
+Chrome and review the screenshot YOURSELF:
+- Render against a local server (full env) or, if it can't boot, the deployed URL.
+- Screenshot with a headless-Chrome helper (Playwright/Puppeteer + the system browser, e.g.
+  `node {{repo}}/scripts/shot.cjs <url> <out.png> [lang] [width]`). Capture desktop (≥1280) AND mobile (375);
+  both languages if the app is i18n. {{If the project has no screenshot helper, the FIRST UI task creates one.}}
+- Read the PNG and verify: width/responsive (not "compacted"), i18n correct, no overlaps, design-system
+  fonts/colors. Only then mark the UI task completed.
 
 # WORKFLOW (fan-out)
 {{ALWAYS spell out the parallelization, e.g.:

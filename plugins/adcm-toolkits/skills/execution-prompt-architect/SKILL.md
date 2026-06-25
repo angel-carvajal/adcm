@@ -135,6 +135,11 @@ Non-negotiable rules:
 6. Each prompt is self-contained: starts with "Start a clean session", loads the
    project context skill, reads `execute.md`, and names the EXACT task IDs and spec
    sections it works on.
+7. **UI waves require a VISUAL CHECK.** Any wave touching `.pug`/`.html`/`.scss`/`.css`/components must,
+   before marking a UI task done, render the page in headless Chrome (Playwright/Puppeteer + the system
+   browser) and have the agent REVIEW the screenshot — desktop (≥1280) + mobile (375), both languages if
+   i18n. `grep`/`build` never catch real width, wrong-language text, or overlap. The wave-prompt emits a
+   `# VISUAL CHECK` section for these waves; if the project has no screenshot helper, the first UI task creates one.
 
 ### Step 6 — Optional HTML version of the plans
 
