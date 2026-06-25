@@ -13,6 +13,13 @@ Generate in the user's language; keep the document name plan-detallado.md.
 
 - **Task ID**: `T-<WAVE>-<n>`. **Status**: ☐ pending · 🔄 in progress · ⛔ blocked · ✅ done.
 - **Repo aliases**: {{alias}} = {{full_repo_path_or_url}}
+- **Code legibility (no indentation hell)**: keep code flat and readable, not just
+  correct — the diff of every task must read top-to-bottom. Max ~3-4 nesting levels;
+  use early returns / guard clauses instead of nested `if/else`; extract named helpers
+  (e.g. `ensureUserId()`, `insertMenu(parentId, items)`) instead of 4-5-level loops in
+  scripts/seeders, and split deep JSX into subcomponents instead of `<div>` + nested
+  className ternaries; flatten nested ternaries. Exclude deeply-nested HTML (emails with
+  table + MSO conditionals) from the auto-formatter if it worsens them (`.prettierignore`).
 - **Base DoD** (applies to EVERY task, on top of its own DoD):
   - [ ] {{repo_quality_command — e.g. lint/typecheck/tests of that repo}} → exit 0
   - [ ] No files touched outside the task's scope

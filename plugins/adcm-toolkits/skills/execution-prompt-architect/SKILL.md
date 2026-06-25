@@ -165,3 +165,8 @@ documents.
 - No hardcoded dates in templates' logbooks — "today's date at execution time".
 - If the project is too small for waves (a single simple task), still produce the
   five documents with a single wave W1 — the protocol is the value.
+- Code legibility is a deliverable, not optional: `plan-detallado.md` §0 Conventions
+  always carries the anti-indentation-hell rule (max ~3-4 nesting levels, early
+  returns/guard clauses, extract named helpers, flatten ternaries, deep HTML out of the
+  formatter). The adversarial verification on ⚠gate waves may flag indentation hell as a
+  maintainability finding.
