@@ -68,6 +68,7 @@ touch folder Y (Wave 3's scope)", inviolable decisions from plan-maestro §8 tha
 wave could violate.}} When the DoD-auto is green: {{delivery per execute.md §3 —
 open MR / commit without push}}, append the logbook entry in `{{docs_dir}}/task.md`
 (TODAY's date — the day of execution, never hardcoded — + wave {{Wx}} + branch/MR +
-notes + wall clock), and list the pending DoD-human marking those tasks blocked until
-{{owner}} confirms:
+notes + wall clock), **flip this wave's Status to ✅ in `{{docs_dir}}/task.md`'s wave map AND in its
+`execute.md §7` prompt header** (or ⛔ if blocked on a DoD-human), and list the pending DoD-human marking
+those tasks blocked until {{owner}} confirms:
 - {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}

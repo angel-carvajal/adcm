@@ -70,7 +70,8 @@ files/folders; on ⚠gates: adversarial verification with the attack checklist f
 # GUARDRAILS & CLOSE
 Touch nothing outside the tasks' scope. No secrets in code/commits. When the DoD-auto
 is green: <delivery per §3>, append the logbook entry in task.md (today's date + wave
-+ branch/MR + notes + wall clock), and list any pending DoD-human marking those tasks
++ branch/MR + notes + wall clock), flip this wave's Status to ✅ in task.md's wave map AND in its §7
+prompt header (⛔ if blocked on a DoD-human), and list any pending DoD-human marking those tasks
 blocked.
 ```
 
@@ -104,7 +105,8 @@ entry, checks out the branch and continues the loop — it does NOT restart.
 ## 7. Wave prompts (instantiated, copy-paste)
 
 > Generated from the task specs (source of truth). If a spec changes, regenerate the
-> affected wave's prompt.
+> affected wave's prompt. **Each wave header carries a status marker** (`— ✅ DONE (date)` / `🔄 EN CURSO` /
+> `⛔ BLOCKED` / `☐`); the canonical status is the `task.md` wave map. Update BOTH at CLOSE.
 
 ### Wave W1
 
