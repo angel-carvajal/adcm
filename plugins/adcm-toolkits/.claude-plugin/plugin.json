@@ -1,7 +1,7 @@
 {
   "name": "adcm-toolkits",
-  "description": "Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context), a code-project context generator that builds a lazy-loading, refreshable knowledge base of a codebase (architecture, API surface, data models, config, security, conventions), and an execution-prompt architect that turns goals + deep code analysis into a five-document execution plan (executive proposal, master plan, detailed plan, task tracker, execution protocol) with copy-paste prompts per wave. Use for structured multi-perspective decisions, to document a codebase, or to plan and prompt large tasks and migrations.",
-  "version": "0.3.1",
+  "description": "Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context), a code-project context generator that builds a lazy-loading, refreshable knowledge base of a codebase (architecture, API surface, data models, config, security, conventions), and an execution-prompt architect that turns goals + deep code analysis into a six-document execution plan (executive proposal, master plan, detailed plan, timeframe plan with critical path and week-by-week schedule, task tracker, execution protocol) with copy-paste prompts per wave and an optional single-file HTML with a CSS Gantt timeline. Use for structured multi-perspective decisions, to document a codebase, or to plan and prompt large tasks and migrations.",
+  "version": "0.3.2",
   "author": {
     "name": "Angel Carvajal"
   }
