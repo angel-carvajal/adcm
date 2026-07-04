@@ -1,0 +1,80 @@
+<!--
+Template: plan-timeframe.md — the WHEN: the calendar schedule of the plan.
+Built from the wave inventory (Step 3) + the user's time-frame answers (Step 4):
+target date or available weeks, sessions/week dedication, fixed external milestones.
+Rules when instantiating:
+- Durations come from the analysis' wave/task estimates — never invented. Express
+  every wave in BOTH sessions and calendar days (sessions ÷ sessions-per-week).
+- Always include a 15–20% buffer between the raw end and the committed close date.
+- DoD-human items are calendar events too: they block waves, so schedule them.
+- If the math does not fit a fixed target date, keep the honest date here and record
+  the conflict in §5 — never compress estimates to fit.
+- No hardcoded "today": dates are computed at generation time from the user's answers.
+Generate in the user's language; keep the document name plan-timeframe.md.
+-->
+# {{project_name}} — Timeframe plan: {{initiative_title}}
+
+> Calendar source of truth for {{initiative_short}}. Wave contents live in
+> `plan-detallado.md`; strategy in `plan-maestro.md`; live state in `task.md`; the
+> per-wave prompts in `execute.md` §7. If waves are re-scoped, regenerate this
+> schedule — dates here are estimates, the wave map in `task.md` is the truth of
+> what actually closed.
+
+## 0. Summary
+
+| | |
+|---|---|
+| Start date | {{start_date}} |
+| Target date | {{target_date — or "none, estimated from effort"}} |
+| Dedication | {{n}} sessions/week · {{owner}} {{full-time / part-time}} for reviews & DoD-human |
+| Total effort | {{n_waves}} waves · {{n_sessions}} sessions ≈ {{n_weeks}} calendar weeks |
+| Buffer | {{15–20}}% → {{buffer_in_sessions_or_days}} |
+| **Estimated close (with buffer)** | **{{estimated_close_date}}** |
+
+## 1. Schedule per wave
+
+| Wave | Duration (sessions) | Duration (days) | Depends on | Parallel with | Estimated week |
+|---|---|---|---|---|---|
+| **W1 — {{wave_title}}** | {{n}} | {{n}} | — | {{waves_or_—}} | {{week_n_or_date_range}} |
+| **W2 — {{wave_title}}** | {{n}} | {{n}} | W1 | {{waves_or_—}} | {{week_n_or_date_range}} |
+
+{{Calendar days = sessions ÷ sessions-per-week, rounded to real working days.
+"Parallel with" only lists waves with DISJOINT scope (see execute.md WORKFLOW rules);
+⚠gate waves add the adversarial-verification pass to their duration.}}
+
+## 2. Critical path
+
+{{The dependency chain that sets the close date, e.g. W1 → W2 → W5 → W7. One line
+per link on WHY it is on the path, and which waves have slack — how many days each
+can slip without moving the close date.}}
+
+- **Path:** {{W1 → Wx → Wy}} ({{n}} sessions ≈ {{n}} days end-to-end)
+- **Slack:** {{wave}} can slip {{n}} days; {{wave}} …
+
+## 3. Milestones and DoD-human calendar
+
+Milestones from Step 4 (external, fixed) + internal exit gates + every DoD-human,
+placed on the calendar — a DoD-human that waits blocks its wave's close.
+
+| Week / date | Milestone | Type | Blocks |
+|---|---|---|---|
+| {{week_or_date}} | {{milestone — demo, launch, contractual date}} | {{external / internal gate / DoD-human}} | {{waves_blocked_until_done}} |
+
+## 4. Week by week
+
+| Week | Dates | Waves running | Sessions | Expected outcome |
+|---|---|---|---|---|
+| 1 | {{date_range}} | {{W1}} | {{n}} | {{what is demonstrably done at week's end}} |
+| 2 | {{date_range}} | {{waves}} | {{n}} | {{...}} |
+| {{…every week through the buffered close, buffer weeks marked "buffer"}} | | | | |
+
+## 5. Assumptions and calendar risks
+
+- **Assumptions:** {{what the schedule presumes — sessions/week held, {{owner}}'s
+  review turnaround (e.g. ≤48h per DoD-human), no scope additions, environments and
+  access available from day 1}}
+- **Risks:** {{top calendar risks, each with schedule impact + mitigation — e.g.
+  DoD-human latency (impact: blocks Wx; mitigation: batch human actions early),
+  ⚠gate rework after adversarial findings (impact: +1 session on gate waves;
+  mitigation: covered by buffer), external milestone slip, fixed-date conflict
+  found at generation (see §0) with the proposed scope cut}}

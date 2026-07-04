@@ -1,13 +1,29 @@
 <!--
 Template: plans.html — single-file visual version of propuesta-ejecutiva +
-plan-maestro + plan-detallado. The executive proposal is tab 1, active by default:
-it's what stakeholders see first.
+plan-maestro + plan-detallado + plan-timeframe. The executive proposal is tab 1,
+active by default: it's what stakeholders see first.
 How to instantiate:
-- Replace {{placeholders}} and render the content of the THREE markdown docs into the
-  three <article> blocks: h2 per section (## → .sec with an id), markdown tables →
+- Replace {{placeholders}} and render the content of the FOUR markdown docs into the
+  four <article> blocks: h2 per section (## → .sec with an id), markdown tables →
   <table>, task entries → .task cards, ⚠ gates → <span class="badge gate">⚠ gate</span>,
   status → .badge.ok / .badge.pending / .badge.blocked, the proposal's approval
   checklist → a .task-style card with checkboxes.
+- Timeline tab (doc-timeframe): render plan-timeframe.md as a pure-CSS Gantt + the
+  week-by-week table. Populating the Gantt from the markdown (§1 schedule table):
+  · On .gantt set --gw = total weeks (columns) and --gr = rows (waves + 1 buffer row).
+  · One .g-h header cell per week at style="grid-column:{{w+1}}" (week w → column w+1;
+    column 1 is the label column). Label them W1/W2… or "Sem 1"… per language.
+  · Per wave (row i, top to bottom): a .g-lab at style="grid-row:{{i+1}}" (row 1 is
+    the header) + a .g-bar at style="grid-row:{{i+1}};grid-column:{{start_week+1}}/{{end_week+2}}"
+    with a stream color class s1…s5 (same stream as plan-maestro's parallel streams;
+    legend must match) and title="Wx · n sessions".
+  · Buffer: last row, a .g-bar.buf (hatched) spanning the buffer weeks.
+  · Today marker: one .g-today div at style="grid-column:{{current_week+1}}"
+    data-label="{{today}}" — omit it if execution hasn't started.
+  · Milestones (§3): a .g-mile diamond at style="grid-row:{{r}};grid-column:{{week+1}}"
+    with title="{{milestone}}" (class .human for DoD-human milestones).
+  · Below the Gantt: .g-legend (one .g-key per stream + buffer + milestone + today),
+    then §2 critical path, §3 milestones table, §4 week-by-week <table>, §5 lists.
 - Rebuild each doc's TOC <nav> from its h2 ids.
 - Keep it self-contained: no external assets except the font CDN (falls back to
   system-ui offline). Generate text in the user's language.
@@ -72,6 +88,31 @@ border-radius:var(--r);background:var(--raised);padding:14px 18px;margin:12px 0}
 .task h4{margin:2px 0 8px;font-size:15px}
 .task .meta{font-size:12.5px;color:var(--muted);margin-bottom:6px}
 .task ul{margin:6px 0;padding-left:20px}
+/* Gantt (Timeline tab) — pure CSS grid; --gw = weeks, --gr = wave rows (+buffer) */
+.gantt{display:grid;grid-template-columns:170px repeat(var(--gw),minmax(26px,1fr));
+grid-template-rows:30px repeat(var(--gr),36px);position:relative;margin:14px 0 8px;
+border:1px solid var(--border);border-radius:var(--r);background:var(--raised);
+padding:10px 14px 14px;overflow-x:auto}
+.g-h{grid-row:1/-1;border-left:1px dashed color-mix(in srgb,var(--border-strong) 55%,transparent);
+padding-top:3px;text-align:center;font-size:11px;color:var(--muted)}
+.g-lab{grid-column:1;align-self:center;padding-right:12px;font-size:12.5px;font-weight:600;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g-bar{align-self:center;height:18px;min-width:8px;border-radius:6px;background:var(--primary);z-index:1}
+.g-bar.s1{background:var(--primary)}.g-bar.s2{background:#22C55E}.g-bar.s3{background:#F59E0B}
+.g-bar.s4{background:#EC4899}.g-bar.s5{background:#06B6D4}
+.g-bar.buf{background:repeating-linear-gradient(45deg,var(--border-strong) 0 5px,transparent 5px 11px);
+border:1px dashed var(--border-strong)}
+.g-mile{width:11px;height:11px;align-self:center;justify-self:center;transform:rotate(45deg);
+border-radius:2.5px;background:var(--text);z-index:2}
+.g-mile.human{background:#EF4444}
+.g-today{grid-row:1/-1;justify-self:start;border-left:2px dashed #EF4444;position:relative;
+z-index:3;pointer-events:none}
+.g-today::after{content:attr(data-label);position:absolute;top:18px;left:5px;font-size:10px;
+font-weight:600;color:#EF4444;white-space:nowrap}
+.g-legend{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0 14px;font-size:12px;color:var(--muted)}
+.g-key{display:inline-flex;align-items:center;gap:6px}
+.g-dot{width:12px;height:12px;border-radius:4px;background:var(--primary)}
+.g-dot.mile{width:10px;height:10px;transform:rotate(45deg);border-radius:2px;background:var(--text)}
 article[hidden]{display:none}
 @media(max-width:840px){.layout{grid-template-columns:1fr}.toc{display:none}}
 </style>
@@ -86,6 +127,7 @@ article[hidden]{display:none}
   <button class="doc-nav-link active" data-doc="propuesta">Executive proposal</button>
   <button class="doc-nav-link" data-doc="maestro">Master plan</button>
   <button class="doc-nav-link" data-doc="detallado">Detailed plan</button>
+  <button class="doc-nav-link" data-doc="timeframe">Timeline</button>
   <button class="btn" id="theme">◐</button>
 </div>
 
@@ -126,6 +168,42 @@ article[hidden]{display:none}
         <!-- {{...more .task cards or a <table> for homogeneous waves...}} -->
       </section>
       <!-- {{...remaining waves...}} -->
+    </article>
+
+    <article id="doc-timeframe" hidden>
+      <section class="sec" id="t-gantt">
+        <h2>Schedule</h2>
+        <p>{{one line from plan-timeframe.md §0: start → estimated close (with
+        buffer) · sessions/week · buffer %}}</p>
+        <div class="gantt" style="--gw:{{total_weeks}};--gr:{{n_waves_plus_buffer_row}}">
+          <div class="g-h" style="grid-column:2">W1</div>
+          <!-- {{...one .g-h per week: grid-column 3, 4, …}} -->
+          <div class="g-lab" style="grid-row:2">W1 — {{wave_title}}</div>
+          <div class="g-bar s1" style="grid-row:2;grid-column:2/4" title="W1 · {{n}} sessions"></div>
+          <!-- {{...one .g-lab + .g-bar (stream class s1…s5) per wave; milestone
+          diamonds: <div class="g-mile" style="grid-row:R;grid-column:C" title="…">;
+          then the buffer row:}} -->
+          <div class="g-lab" style="grid-row:{{last_row}}">{{Buffer}}</div>
+          <div class="g-bar buf" style="grid-row:{{last_row}};grid-column:{{buffer_start}}/{{buffer_end}}"></div>
+          <div class="g-today" style="grid-column:{{current_week+1}}" data-label="{{today}}"></div>
+        </div>
+        <div class="g-legend">
+          <span class="g-key"><span class="g-dot"></span>{{stream_1_name}}</span>
+          <!-- {{...one .g-key per stream: <span class="g-dot" style="background:#22C55E"></span> etc...}} -->
+          <span class="g-key"><span class="g-dot mile"></span>{{Milestone}}</span>
+          <span class="g-key"><span class="g-dot" style="background:repeating-linear-gradient(45deg,var(--border-strong) 0 3px,transparent 3px 6px)"></span>{{Buffer}}</span>
+        </div>
+      </section>
+      <section class="sec" id="t-critical">
+        <h2>Critical path &amp; milestones</h2>
+        {{rendered §2 (critical path + slack) and §3 (milestones + DoD-human
+        calendar) of plan-timeframe.md — milestones as a <table>}}
+      </section>
+      <section class="sec" id="t-weeks">
+        <h2>Week by week</h2>
+        {{§4 of plan-timeframe.md as a <table>, then §5 assumptions & calendar
+        risks as lists}}
+      </section>
     </article>
 
   </main>
