@@ -1,0 +1,89 @@
+---
+name: business-init-{{BUSINESS_SLUG}}
+description: >
+  Loads the full business context of {{BUSINESS_NAME}}. Loads ONLY the identity,
+  the hard rules and the index; per-topic detail lives in references/ files
+  (company, offering, market, brand, sales, operations, objectives, INTERNAL)
+  read on-demand with Read when the current task needs them. This skill only
+  loads context — it executes no actions. Triggers when the user mentions
+  '{{BUSINESS_NAME}}', {{ALIASES_AND_TRIGGERS}}, or any task related to this
+  business — documents, reports, quotes, marketing, lead replies, analysis,
+  decisions. {{DISAMBIGUATION_NOTE}}
+last_updated: {{DATE}}
+---
+
+# {{BUSINESS_NAME}} — Business Context
+
+**In 30 seconds:** {{THIRTY_SECOND_SUMMARY}}
+
+**Identity:** {{BRAND}} · {{LEGAL_ENTITY}} · {{LOCATION}} · {{CONTACT_AND_WEB}}
+
+> Everything in `references/INTERNAL.md` is **confidential**: it may inform your
+> work, but its content is never copied into anything a customer, prospect, or
+> third party will see.
+
+---
+
+## Hard rules (always apply — even if no reference file is loaded)
+
+{{HARD_RULES_LIST}}
+<!-- 3–8 numbered, inviolable rules stated by the owner. The kind of rule that
+prevents expensive mistakes: "never quote prices without confirming with the
+owner", "never mention <internal fact> publicly", "do not confuse this business
+with <sibling business>". -->
+
+---
+
+## Context files (read on-demand)
+
+| File | What's in it | Sensitivity |
+|---|---|---|
+| `references/company.md` | extended identity, history & stage, sibling businesses, team & decisions, glossary, legal | public-safe |
+| `references/offering.md` | what it sells / does NOT sell, catalog, value prop, track record | public-safe |
+| `references/market.md` | segments & personas, geography, competition | public-safe |
+| `references/brand.md` | voice & tone, public narrative, visual identity, content | public-safe |
+| `references/sales.md` | lead channels, sales process, pricing policy, financing, FAQs, policies | public-safe |
+| `references/operations.md` | delivery process, capacity, suppliers, tools | internal-ok |
+| `references/objectives.md` | goals & KPIs, roadmap, risks, pending context | internal |
+| `references/INTERNAL.md` | real prices, margins, framing secrets, named clients | **CONFIDENTIAL** |
+<!-- Drop the row of any file that was omitted at generation time. -->
+
+## Task → files map
+
+| If the task is… | Read |
+|---|---|
+| Marketing, posts, ads, improving web/social | `brand.md` + `offering.md` + `market.md` |
+| Replying to leads, prospect emails/messages | `sales.md` + `offering.md` + `brand.md` |
+| Quotes, proposals, contracts | `sales.md` + `offering.md` + `INTERNAL.md` (confirm prices) |
+| Reports, analysis, business decisions | `objectives.md` + `INTERNAL.md` + `market.md` |
+| Operations, deliveries, team messages | `operations.md` + `company.md` |
+| Pricing, margins, discounts | `INTERNAL.md` + `sales.md` |
+| Who decides / delegation / legal questions | `company.md` |
+| General question about the business | this file only; ask if more is needed |
+<!-- Remove or reroute any row that references a file omitted at generation
+time, and drop omitted file names from the frontmatter description's list. -->
+
+---
+
+## Related skills
+
+{{RELATED_SKILLS}}
+<!-- Sibling skills to chain to (quote generator, contract generator, content
+engine, code-project context). Omit this whole section if there are none. -->
+
+---
+
+## Rules for Claude
+
+1. **Lazy loading:** read only the reference files the task→files map indicates.
+2. **Audience first:** before delivering any output, identify the audience
+   (customer/prospect/public vs owner/team) and filter accordingly. When in
+   doubt, treat information as internal and ask.
+3. **`[TO BE DEFINED]`:** if a needed datum is marked so, ask the owner — never
+   invent values, especially prices, dates, and policies.
+4. **Tone by audience:** with the owner → {{OWNER_TONE}}; with customers → the
+   voice in `brand.md`; public content → the public narrative in `brand.md`,
+   never the internal reality.
+5. **Living context:** if the owner gives information that contradicts or
+   completes this context, point it out and offer to update the relevant file
+   (and `last_updated`).
