@@ -2,18 +2,19 @@
 Template: execute.md — the HOW: execution protocol + instantiated wave prompts.
 §7 holds ONE copy-paste prompt per wave, instantiated from wave-prompt.tmpl with the
 real task IDs, commands and paths found during analysis. If a task spec changes in
-plan-detallado.md, regenerate the affected wave prompt.
-Generate in the user's language; keep GOAL/TASKS/LOOP/WORKFLOW/GUARDRAILS & CLOSE in
-English — they are protocol keywords. Keep the document name execute.md.
+detailed-plan.md, regenerate the affected wave prompt.
+Generate in the user's language; keep GOAL/TASKS/SCOPE/LOOP/VISUAL CHECK/WORKFLOW/
+GUARDRAILS & CLOSE in English — they are protocol keywords. Keep the document name
+execute.md.
 -->
 # {{project_name}} — Execution protocol ({{initiative_title}})
 
 > **What this is.** The operating manual of the build. It defines HOW the catalog in
-> `plan-detallado.md` gets executed: **wave sessions** (not 1 task = 1 session),
+> `detailed-plan.md` gets executed: **wave sessions** (not 1 task = 1 session),
 > self-verified loops with the **DoD-auto as the exit criterion**, workflow fan-out
 > where parallelism helps, and **mandatory adversarial verification at ⚠gates**. The
 > copy-paste prompts per wave are at the end (§7). Keep in sync with `task.md`
-> (state) and `plan-maestro.md` (rationale). Prompts are tuned for Fable at high
+> (state) and `master-plan.md` (rationale). Prompts are tuned for Fable at high
 > effort but run on any model.
 
 ## 1. Principles
@@ -31,17 +32,20 @@ English — they are protocol keywords. Keep the document name execute.md.
    close without **adversarial verification**: a sub-agent that did NOT see the
    implementation, given only the diff + the DoD + that wave's attack checklist (§6).
 5. **Inviolable decisions** (no session may contradict them — from
-   `plan-maestro.md` §8): {{list_them_inline}}.
+   `master-plan.md` §8): {{list_them_inline}}.
 6. **No hardcoded dates**: the logbook uses the date of the day of execution.
 
 ## 2. Canonical wave-prompt template
 
 ```text
-Start a clean session. Load the skill `{{project_context_skill}}`, read
+Start a clean session in EXECUTION mode (auto-accept edits — e.g. `claude
+--permission-mode acceptEdits`). Do NOT enter plan mode: the plan IS this prompt
+(# SCOPE); the only re-planning trigger is a diverging census.
+Load the skill `{{project_context_skill}}`, read
 `{{docs_dir}}/execute.md` (this protocol).
 
 # GOAL — Wave <Wx>: <titles>
-Work EXACTLY the tasks <IDs> (specs: plan-detallado.md — read them in full; they are
+Work EXACTLY the tasks <IDs> (specs: detailed-plan.md — read them in full; they are
 the specification).
 DoD-auto (the loop's EXIT criterion; everything by command):
 - [ ] <command> → <expected result>
@@ -50,6 +54,16 @@ DoD-auto (the loop's EXIT criterion; everything by command):
 # TASKS
 Create one task per ID (TaskCreate), mark it in_progress on entry and completed on
 verification. Checkpoint commit (Conventional) at each internal task close.
+
+# SCOPE (manifest)
+<per task, inlined from its Scope manifest card in detailed-plan.md: Modify/Create
+with a 1-line why per file · Read first exemplars · Impact (shared surface ← N
+consumers; contract kept or adaptation in scope; DoD covers the consumers) · Census
+command → expected N · tolerance (exact/±1 for small counts; ±X% only for large) ·
+Symbol notes when they fit the budget, else the pointer to the card. The
+investigation already ran: do NOT re-derive these lists. Census FIRST; divergence
+beyond tolerance ⇒ STOP and re-scope against detailed-plan. Budget ~15 lines/task
+(hard cap 25 for multi-file tasks), ≤60/wave — overflow stays in the card.>
 
 # LOOP
 implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 attempts on the
@@ -69,11 +83,40 @@ files/folders; on ⚠gates: adversarial verification with the attack checklist f
 
 # GUARDRAILS & CLOSE
 Touch nothing outside the tasks' scope. No secrets in code/commits. When the DoD-auto
-is green: <delivery per §3>, append the logbook entry in task.md (today's date + wave
-+ branch/MR + notes + wall clock), flip this wave's Status to ✅ in task.md's wave map AND in its §7
-prompt header (⛔ if blocked on a DoD-human), and list any pending DoD-human marking those tasks
+is green: <delivery per §3>, then run the FULL doc-sync at close (§2b — "append the
+logbook" means ALL of it), and list any pending DoD-human marking those tasks
 blocked.
 ```
+
+## 2b. Doc-sync at close (mandatory — "append the logbook" means ALL of this)
+
+Closing a wave (DoD-auto green) — and every later status change (e.g. {{owner}}
+merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit:
+
+1. **`task.md`** — logbook entry with the extended schema (date of execution ·
+   branch/MR · tasks closed · **files touched** · **manifest drift** · notes · wall
+   clock) AND the wave-map status flip.
+2. **`execute.md` §7** — this wave's prompt header flip (`☐` → `✅ DONE (date)` /
+   `🔄` / `⛔`).
+3. **`detailed-plan.md`** — mark the tasks done; update their Scope manifests with
+   what was ACTUALLY touched; for every LATER wave whose manifest names surfaces this
+   wave changed, refresh its file lists and census expected counts.
+4. **`execute.md` §7** — regenerate the prompt of any later wave whose manifest
+   changed in (3): its `# SCOPE` must match detailed-plan.
+5. **Project context skill — DELTA refresh**: with the logbook's files-touched list,
+   update only the affected references of `{{project_context_skill}}` (usage-map
+   consumer counts, folder inventories, entry hints if new surfaces were born) and
+   bump their `last_scanned`. Use the generator's incremental mode
+   (`scan_project.py --update <paths>`) when available. Every closed wave leaves the
+   brain AND the code map fresh — freshness never depends on manual re-scans.
+6. {{master-plan.md execution-state block / plans.html, if the project keeps them}}
+7. {{If this plan family coexists with an INCUMBENT protocol (the project already
+   keeps its own live TASKS/EXECUTION docs): state explicitly which docs THIS family
+   owns and which belong to the incumbent — never write to the incumbent's docs from
+   these prompts; report the pending incumbent update to {{owner}} instead.}}
+
+⚠gate nuance: at session exit the wave is "verified, pending {{owner}}", not ✅;
+re-run this doc-sync when {{owner}} pushes/merges.
 
 ## 3. Delivery / merge policy
 
@@ -101,12 +144,18 @@ entry, checks out the branch and continues the loop — it does NOT restart.
 - **W{{x}} ({{ids}})**: {{concrete attacks the verifier must attempt against the
   diff: privilege/tenant escapes, data loss paths, regressions in named flows,
   injection, broken invariants. Each item must be actionable, not generic.}}
+{{Advisory tier — for NO-gate waves whose task spec still asks for an independent
+review: list an "advisory checklist" here the same way; the reviewer's findings are
+fixed before close but don't change the delivery policy (§3).}}
 
 ## 7. Wave prompts (instantiated, copy-paste)
 
 > Generated from the task specs (source of truth). If a spec changes, regenerate the
-> affected wave's prompt. **Each wave header carries a status marker** (`— ✅ DONE (date)` / `🔄 EN CURSO` /
-> `⛔ BLOCKED` / `☐`); the canonical status is the `task.md` wave map. Update BOTH at CLOSE.
+> affected wave's prompt. **Each wave header carries a status marker** (`— ✅ DONE (date)` / `🔄 IN PROGRESS` /
+> `⛔ BLOCKED` / `☐`); the canonical status is the `task.md` wave map. Update BOTH at CLOSE (§2b).
+> **Launch mode:** run each prompt in a clean session in EXECUTION mode (auto-accept
+> edits — e.g. `claude --permission-mode acceptEdits`), never in plan mode — the plan
+> already lives in the prompt's `# SCOPE`.
 
 ### Wave W1
 

@@ -28,23 +28,41 @@ last_scanned: {{SCAN_DATE}}
 
 Read only what the task needs. `auto` files are regenerated on every scan — never hand-edit them. `human` files are written once and **preserved** across re-scans.
 
-| File | What's in it | Kind |
-|------|--------------|------|
-| `stack.md` | languages, frameworks, versions, package managers, DB | auto |
-| `architecture.md` | full folder tree + purpose per folder | auto |
-| `entry-points.md` | how to run/build/test/deploy, main routes | auto |
-| `api-surface.md` | endpoints/routes, methods, specs | auto |
-| `data-models.md` | entities, ORM, migrations, schema files | auto |
-| `config-env.md` | env var names (no values), config files | auto |
-| `testing.md` | frameworks, test dirs, coverage, CI | auto |
-| `conventions.md` | naming, patterns, code style | auto |
-| `glossary.md` | domain terms | auto |
-| `folders/*.md` | per-folder detail | auto |
-| `business-flows.md` | critical end-to-end journeys | human |
-| `security.md` | auth, sensitive data, gaps, human-first zones | human |
-| `tech-debt.md` | known quirks & gotchas (`file:line`) | human |
+| File | What's in it | Start here when… | Kind |
+|------|--------------|------------------|------|
+| `stack.md` | languages, frameworks, versions, package managers, DB | ← picking a library / checking versions | auto |
+| `architecture.md` | full folder tree + purpose per folder | ← "where does X live?" | auto |
+| `entry-points.md` | how to run/build/test/deploy, main routes | ← running or building the project | auto |
+| `api-surface.md` | endpoints/routes, methods, specs | ← adding/changing an endpoint | auto |
+| `data-models.md` | entities, ORM, migrations, schema files | ← schema/migration work | auto |
+| `config-env.md` | env var names (no values), config files | ← env/config issues | auto |
+| `testing.md` | frameworks, test dirs, coverage, CI | ← writing or fixing tests | auto |
+| `conventions.md` | naming, patterns, code style | ← writing any new code | auto |
+| `glossary.md` | domain terms | ← unfamiliar domain vocabulary | auto |
+| `usage-map.md` | shared surfaces → consumer census + re-census commands | ← touching ANY shared component/util | auto |
+| `folders/*.md` | per-folder detail | ← deep work inside one folder | auto |
+| `business-flows.md` | critical end-to-end journeys | ← touching a money/user-critical flow | human |
+| `security.md` | auth, sensitive data, gaps, human-first zones | ← auth/permissions/PII work | human |
+| `tech-debt.md` | known quirks & gotchas (`file:line`) | ← something behaves weirdly | human |
 
 **Suggested reading order:** **L1** (orient) this file → `stack.md` · **L2** (build) `architecture.md` + `data-models.md` + `entry-points.md` · **L3** (work) `api-surface.md` + `business-flows.md` + `security.md` + `config-env.md` + `conventions.md` · **L4** (deep) `testing.md` + `tech-debt.md` + `glossary.md` + `folders/*`.
+
+**Routing by task type** (read ONLY these, in order):
+
+| Task type | Read |
+|---|---|
+| Add/change an endpoint | `api-surface.md` · `conventions.md` · `testing.md` |
+| Modify a shared component/util | `usage-map.md` (census FIRST) · its `folders/*.md` |
+| Auth / permissions / PII | `security.md` · `tech-debt.md` |
+| Schema change / migration | `data-models.md` · `architecture.md` · `tech-debt.md` |
+| Bug hunt (unknown cause) | `entry-points.md` · `tech-debt.md` · `business-flows.md` |
+| Build/CI/deploy issue | `entry-points.md` · `config-env.md` |
+| First session in this repo | this file · `stack.md` · `architecture.md` |
+{{EXTRA_ROUTING_ROWS}}
+
+{{AI_BRAIN_ROW — if the project keeps an execution brain (e.g. `ai-brain/`), add:
+"**Planned work:** for a task with an ID, open `{{AI_BRAIN_PATH}}/tasks/<ID>.md` FIRST —
+its spec embeds the pre-resolved read list and scope; this map covers unplanned work."}}
 
 ---
 
@@ -102,9 +120,10 @@ Read only what the task needs. `auto` files are regenerated on every scan — ne
 
 ## Rules For Claude
 
-1. **Lazy loading:** read only the complementary files the current task needs (e.g. to change auth, read `security.md` + the relevant `folders/*.md`, not the whole context).
-2. **Verify before touching:** the map is scan-derived and may be stale — confirm real locations with `Glob`/`Read`.
-3. **Respect conventions:** follow `conventions.md`. Honor the **human-first zones** in `security.md`.
-4. **Danger zones:** {{DANGER_ZONES}}
-5. **Auto vs human files:** `auto` files are overwritten on re-scan — don't hand-edit them. Put durable notes in the `human` files (`business-flows.md`, `security.md`, `tech-debt.md`).
-6. **When stale:** if the map drifts from the code, tell the user and suggest re-running `code-project-context-generator` (refresh mode regenerates `auto` files and preserves `human` ones).
+1. **Lazy loading:** read only the complementary files the current task routes to (use the routing table above) — never the whole context.
+2. **Verify before touching:** the map is scan-derived and may be stale — confirm real locations with `Glob`/`Read`, and re-census `usage-map.md` counts before relying on them.
+3. **Impact first on shared surfaces:** before modifying anything under {{SHARED_ROOTS}}, open `usage-map.md` and check its consumers. Keep the contract for ALL of them or bring their adaptation into scope — and make the verification cover the consumers, not just the edited file.
+4. **Respect conventions:** follow `conventions.md`. Honor the **human-first zones** in `security.md`.
+5. **Danger zones:** {{DANGER_ZONES}}
+6. **Auto vs human files:** `auto` files are overwritten on re-scan — don't hand-edit them. Put durable notes in the `human` files (`business-flows.md`, `security.md`, `tech-debt.md`).
+7. **When stale:** if the map drifts from the code, tell the user and suggest re-running `code-project-context-generator` — full refresh, or delta after a closed wave: `scan_project.py <root> --update <changed-paths>` regenerates only the affected `folders/*.md` and `usage-map.md` rows (auto files only; `human` ones are always preserved).

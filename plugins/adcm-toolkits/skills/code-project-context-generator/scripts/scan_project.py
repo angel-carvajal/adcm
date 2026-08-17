@@ -257,6 +257,22 @@ FOLDER_PURPOSE_HINTS = {
 CODE_EXTS = {".ts", ".tsx", ".js", ".jsx", ".py", ".php", ".go", ".rs", ".rb", ".java", ".kt",
              ".cs", ".swift", ".c", ".cpp", ".vue", ".svelte", ".astro"}
 
+# Folders whose contents are "shared surfaces": code consumed from elsewhere in the
+# project. Exports defined here get a consumer census in `usage_map`.
+SHARED_DIR_HINTS = {"shared", "lib", "libs", "packages", "components", "ui", "common",
+                    "core", "utils", "helpers", "dpl", "design-system", "widgets"}
+
+# Symbols too generic to census (would match everywhere)
+USAGE_STOPWORDS = {"default", "index", "types", "props", "main", "config", "utils",
+                   "constants", "helpers", "common", "shared", "component", "module",
+                   "service", "client", "server", "provider", "context", "state",
+                   "data", "error", "value", "result", "options", "params", "styles"}
+
+# Files consuming a shared surface are counted per symbol, listing up to:
+USAGE_MAX_CONSUMER_PATHS = 15
+USAGE_MAX_SURFACES = 50
+USAGE_MAX_FILE_BYTES = 400_000
+
 
 # ---------------------------------------------------------------------------
 # Scanner
@@ -322,6 +338,12 @@ class ProjectScanner:
                 "coverage_config": False,
                 "ci_runs_tests": False,
             },
+            "usage_map": {               # shared surfaces → consumer census
+                "shared_roots": [],      # folders treated as shared code
+                "surfaces": [],          # [{symbol, defined_in, consumers_count,
+                                         #   consumers (sample), census_cmd}]
+                "count": 0,
+            },
         }
         self._symbol_counter: Counter[str] = Counter()
         # candidate files collected during the walk, processed by the detectors
@@ -330,6 +352,7 @@ class ProjectScanner:
         self._schema_files: list[Path] = []
         self._openapi_files: list[Path] = []
         self._test_dirs: set[str] = set()
+        self._source_files: list[tuple[Path, str]] = []  # (abs path, rel str) for usage_map
 
     # ---- main entry ----
     def scan(self) -> dict:
@@ -344,6 +367,7 @@ class ProjectScanner:
         self._detect_api_surface()
         self._detect_data_models()
         self._detect_test_strategy()
+        self._detect_usage_map()
         return self.result
 
     # ---- walker ----
@@ -422,6 +446,10 @@ class ProjectScanner:
                 # collect symbols for glossary (only at reasonable depth)
                 if depth <= 3 and ext in CODE_EXTS:
                     self._collect_symbols(fpath)
+
+                # collect source files for the usage-map census
+                if ext in CODE_EXTS and size <= USAGE_MAX_FILE_BYTES:
+                    self._source_files.append((fpath, str(fpath.relative_to(self.root))))
 
                 # collect candidate files for the auto-derived sections
                 self._classify_file(fpath, rel, fname, ext)
@@ -913,6 +941,99 @@ class ProjectScanner:
 # CLI
 # ---------------------------------------------------------------------------
 
+    # ---- usage map: shared surfaces → consumer census ----
+    def _detect_usage_map(self):
+        """Find symbols exported from shared folders and census who consumes them.
+
+        This is what makes impact analysis cheap downstream: "this component is
+        rendered by 10 more pages" becomes a lookup, not a re-derivation.
+        """
+        um = self.result["usage_map"]
+
+        candidates = []
+        for f in self.result["folders"]:
+            path = f["path"]
+            if path == "." or f["file_count"] == 0:
+                continue
+            if Path(path).name.lower() in SHARED_DIR_HINTS:
+                candidates.append(path)
+        # keep the shallowest roots; a shared dir nested in another adds nothing
+        roots: list[str] = []
+        for path in sorted(set(candidates), key=lambda p: (p.count("/"), p)):
+            if not any(path == r or path.startswith(r + "/") for r in roots):
+                roots.append(path)
+        um["shared_roots"] = roots
+        if not roots or not self._source_files:
+            return
+
+        def under_shared(rel: str) -> bool:
+            return any(rel == r or rel.startswith(r + "/") for r in roots)
+
+        export_patterns = [
+            re.compile(r"export\s+(?:default\s+)?(?:abstract\s+)?(?:async\s+)?"
+                       r"(?:function|class|const|interface|type|enum)\s+([A-Za-z_][A-Za-z0-9_]*)"),
+            re.compile(r"selector:\s*['\"]([a-z][a-z0-9-]{3,})['\"]"),
+            re.compile(r"^(?:export\s+)?(?:abstract\s+)?class\s+([A-Z][A-Za-z0-9_]{3,})", re.M),
+        ]
+        named_exports = re.compile(r"export\s*\{([^}]+)\}")
+
+        defined: dict[str, str] = {}  # symbol → defining rel path (first seen)
+
+        def add_symbol(name: str, rel: str):
+            name = name.strip()
+            if (len(name) < 4 or name.lower() in USAGE_STOPWORDS
+                    or name in defined or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name)):
+                return
+            defined[name] = rel
+
+        for fpath, rel in self._source_files:
+            if not under_shared(rel):
+                continue
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for rx in export_patterns:
+                for m in rx.finditer(text):
+                    add_symbol(m.group(1), rel)
+            for m in named_exports.finditer(text):
+                for part in m.group(1).split(","):
+                    add_symbol(part.strip().split(" as ")[-1], rel)
+
+        if not defined:
+            return
+
+        symbols = sorted(defined)
+        consumers: dict[str, list[str]] = {s: [] for s in symbols}
+        counts: Counter[str] = Counter()
+        for fpath, rel in self._source_files:
+            if under_shared(rel):
+                continue
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for sym in symbols:
+                if sym in text:
+                    counts[sym] += 1
+                    if len(consumers[sym]) < USAGE_MAX_CONSUMER_PATHS:
+                        consumers[sym].append(rel)
+
+        surfaces = []
+        for sym, n in counts.most_common(USAGE_MAX_SURFACES):
+            surfaces.append({
+                "symbol": sym,
+                "defined_in": defined[sym],
+                "consumers_count": n,
+                "consumers": consumers[sym],
+                "census_cmd": (f"grep -rl '{sym}' . --exclude-dir=node_modules "
+                               "--exclude-dir=.git --exclude-dir=coverage --exclude-dir=reports "
+                               "--exclude-dir=dist --exclude-dir=.next | wc -l"),
+            })
+        um["surfaces"] = surfaces
+        um["count"] = len(surfaces)
+
+
 def main():
     # Requires Python 3 (stdlib only). The f-strings and type hints in this file
     # would already fail in Python 2, but we give a clear message just in case.
@@ -927,6 +1048,12 @@ def main():
     parser.add_argument("--max-depth", type=int, default=4,
                         help="Maximum tree depth (default: 4)")
     parser.add_argument("--pretty", action="store_true", help="Output with indentation")
+    parser.add_argument("--update", default=None, metavar="PATHS",
+                        help="Comma-separated project-relative paths that changed "
+                             "(e.g. after a closed wave). Adds an 'update' block to the "
+                             "JSON naming the affected folders and usage-map surfaces, "
+                             "so the context skill refreshes ONLY those files "
+                             "(delta refresh) instead of regenerating everything.")
     args = parser.parse_args()
 
     root = Path(args.path).expanduser().resolve()
@@ -950,6 +1077,26 @@ def main():
         sys.stderr.write(f"Error scanning the project: {exc}\n")
         return 1
 
+    if args.update:
+        changed = [p.strip().strip("/") for p in args.update.split(",") if p.strip()]
+
+        def touches(folder_path: str) -> bool:
+            return any(folder_path == p or folder_path.startswith(p + "/")
+                       or p.startswith(folder_path + "/") for p in changed)
+
+        affected_folders = sorted({f["path"] for f in result["folders"]
+                                   if f["path"] != "." and touches(f["path"])})
+        affected_surfaces = sorted({
+            s["symbol"] for s in result["usage_map"]["surfaces"]
+            if any(s["defined_in"] == p or s["defined_in"].startswith(p + "/") for p in changed)
+            or any(c == p or c.startswith(p + "/") for p in changed for c in s["consumers"])
+        })
+        result["update"] = {
+            "paths": changed,
+            "affected_folders": affected_folders,
+            "affected_surfaces": affected_surfaces,
+        }
+
     out = json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False, default=str)
 
     if args.output == "-":
@@ -971,6 +1118,11 @@ def main():
         print(f"  - Env vars: {len(result['config_env']['vars'])}", file=sys.stderr)
         print(f"  - Test files: {result['testing']['test_file_count']} "
               f"(frameworks: {result['testing']['frameworks']})", file=sys.stderr)
+        print(f"  - Shared surfaces (usage map): {result['usage_map']['count']} "
+              f"(roots: {result['usage_map']['shared_roots']})", file=sys.stderr)
+        if "update" in result:
+            print(f"  - Delta update: {len(result['update']['affected_folders'])} folders, "
+                  f"{len(result['update']['affected_surfaces'])} surfaces affected", file=sys.stderr)
 
     return 0
 

@@ -3,19 +3,30 @@ Template: one instantiated wave prompt (goes inside execute.md §7, in a ```text
 Rules when instantiating:
 - Every {{placeholder}} filled with REAL data from the analysis: exact task IDs, exact
   commands that exist in that repo, exact paths. Never invent.
-- The five sections are mandatory. WORKFLOW is ALWAYS present — even if the executing
-  session has no ultracode enabled, the prompt itself instructs the fan-out.
+- The six core sections are mandatory, in this order; `# VISUAL CHECK` is a mandatory
+  7th section between LOOP and WORKFLOW on UI waves — omit it otherwise. SCOPE embeds
+  the Step 3 investigation (the executing session must never re-derive file lists).
+  WORKFLOW is ALWAYS present — even if the executing session has no ultracode enabled,
+  the prompt itself instructs the fan-out.
+- SCOPE budget: ~15 lines per task (hard cap 25 for legitimately multi-file tasks),
+  ≤60 per wave. Overflow (long symbol notes, full consumer lists) stays in the task's
+  Scope manifest card in detailed-plan.md; the prompt keeps files + census. Compress
+  with brace-globs (`bold/{A,B,C}.tsx`) before dropping content.
 - Write for Fable at high effort: dense, precise, zero ambiguity, no filler. Must
   still be executable by any model.
-- Generate in the user's language; keep the five section names in English.
+- Generate in the user's language; keep ALL section names in English (incl. VISUAL CHECK).
 -->
-Start a clean session. Load the skill `{{project_context_skill}}`, read
+Start a clean session in EXECUTION mode (auto-accept edits — e.g. `claude
+--permission-mode acceptEdits`). Do NOT enter plan mode: the plan IS this prompt
+(# SCOPE below); re-planning would duplicate the investigation this prompt already
+carries. The only re-planning trigger is a diverging census (see # SCOPE).
+Load the skill `{{project_context_skill}}`, read
 `{{docs_dir}}/execute.md` (this protocol). {{Wave-specific preamble: extra skills to
 load, repos to open, state assumptions — e.g. "W2 must be merged" — and what to do if
 an assumption fails.}}
 
 # GOAL — Wave {{Wx}}: {{task_titles}}
-Work EXACTLY the tasks {{IDs}} (specs: `{{docs_dir}}/plan-detallado.md` §{{section}} —
+Work EXACTLY the tasks {{IDs}} (specs: `{{docs_dir}}/detailed-plan.md` §{{section}} —
 read them in full; they are the specification). {{Mandatory internal order if any,
 e.g. "T-W2-1 closes before T-W2-3 starts (shared schema)."}}
 DoD-auto (the loop's EXIT criterion; everything by command):
@@ -31,6 +42,24 @@ completed when its slice of the DoD-auto is verified. All work on the wave's sin
 branch (`{{branch_name}}`), checkpoint commit (Conventional, footer `Refs: <ID>`) at
 each internal task close.
 
+# SCOPE (manifest)
+The investigation already ran — do NOT re-derive these lists with exploratory
+Glob/Grep. Run each Census FIRST; if it diverges beyond tolerance (or a named file is
+missing), STOP: re-scope against `{{docs_dir}}/detailed-plan.md` §{{section}}, update
+that manifest, and report the drift in the logbook at close.
+## {{ID}}
+- Modify: `{{path}}` — {{1-line why: what changes there}} {{· one line per file}}
+- Create: `{{path}}` — {{what it is}}
+- Read first: `{{exemplar_path}}` — {{the pattern it demonstrates}}
+- Impact: `{{shared_surface}}` ← {{N}} consumers ({{consumer paths or "list:
+  detailed-plan §{{section}}"}}). Keep its contract for ALL of them or their
+  adaptation is explicitly part of this task; DoD-auto must cover the consumers
+  (build/tests of the affected apps), not just the edited files.
+- Census: `{{command}}` → expected {{N}} (as of {{analysis_date}}) · tolerance
+  {{exact | ±1 for small counts (<10); ±X% only for large censuses}}
+- {{Symbol notes if they fit the budget — exact members to delete/preserve/rename —
+  else "symbol detail: detailed-plan.md §{{section}}"}}
+
 # LOOP
 implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 attempts on the
 SAME failure without converging → stop and report (don't degrade tests, don't mark
@@ -43,7 +72,7 @@ wrong-language text, or overflow/overlap. Before marking a UI task completed, re
 Chrome and review the screenshot YOURSELF:
 - Render against a local server (full env) or, if it can't boot, the deployed URL.
 - Screenshot with a headless-Chrome helper (Playwright/Puppeteer + the system browser, e.g.
-  `node {{repo}}/scripts/shot.cjs <url> <out.png> [lang] [width]`). Capture desktop (≥1280) AND mobile (375);
+  `node {{repo}}/scripts/shot.{{cjs|mjs — match the repo's module system}} <url> <out.png> [lang] [width]`). Capture desktop (≥1280) AND mobile (375);
   both languages if the app is i18n. {{If the project has no screenshot helper, the FIRST UI task creates one.}}
 - Read the PNG and verify: width/responsive (not "compacted"), i18n correct, no overlaps, design-system
   fonts/colors. Only then mark the UI task completed.
@@ -59,16 +88,25 @@ Chrome and review the screenshot YOURSELF:
 {{If ⚠gate: "Before closing: MANDATORY adversarial verification — launch a sub-agent
 that did NOT implement, give it only the diff + the DoD + the attack checklist for
 {{Wx}} in execute.md §6. Every finding is fixed and re-verified before close."}}
-{{If NO-gate: "Wave is NO-gate (§5): no adversarial verification required."}}
+{{If advisory (NO-gate but the task spec or risk profile asks for an independent
+review): "Wave is NO-gate, with ADVISORY review — launch a sub-agent that did NOT
+implement, give it the diff + the DoD + the advisory checklist in execute.md §6.
+Findings are fixed before close but do not block delivery policy."}}
+{{If NO-gate plain: "Wave is NO-gate (§5): no adversarial verification required."}}
 
 # GUARDRAILS & CLOSE
 Touch nothing outside the scope of {{IDs}} ({{explicit allowed paths}}). No secrets in
 code/commits/logs. {{Wave-specific hard limits: "do NOT upgrade dependency X", "do NOT
-touch folder Y (Wave 3's scope)", inviolable decisions from plan-maestro §8 that this
+touch folder Y (Wave 3's scope)", inviolable decisions from master-plan §8 that this
 wave could violate.}} When the DoD-auto is green: {{delivery per execute.md §3 —
-open MR / commit without push}}, append the logbook entry in `{{docs_dir}}/task.md`
-(TODAY's date — the day of execution, never hardcoded — + wave {{Wx}} + branch/MR +
-notes + wall clock), **flip this wave's Status to ✅ in `{{docs_dir}}/task.md`'s wave map AND in its
-`execute.md §7` prompt header** (or ⛔ if blocked on a DoD-human), and list the pending DoD-human marking
-those tasks blocked until {{owner}} confirms:
+open MR / commit without push}}, then run the FULL doc-sync at close (`execute.md`
+§2b — "append the logbook" means ALL of it): logbook entry in `{{docs_dir}}/task.md`
+(TODAY's date — never hardcoded — + branch/MR + tasks closed + **files touched +
+manifest drift** + notes + wall clock), status flip in task.md's wave map AND this
+prompt's `execute.md §7` header (✅ / ⛔ if blocked on a DoD-human), mark {{IDs}} ✅ in
+`detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
+refresh the Scope manifests of LATER waves whose surfaces this wave changed (and
+regenerate their §7 prompts), and delta-refresh the project context skill for the
+files touched. Then
+list the pending DoD-human marking those tasks blocked until {{owner}} confirms:
 - {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}

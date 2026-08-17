@@ -1,6 +1,6 @@
 <!--
-Template: plans.html — single-file visual version of propuesta-ejecutiva +
-plan-maestro + plan-detallado + plan-timeframe. The executive proposal is tab 1,
+Template: plans.html — single-file visual version of executive-proposal +
+master-plan + detailed-plan + timeframe-plan. The executive proposal is tab 1,
 active by default: it's what stakeholders see first.
 How to instantiate:
 - Replace {{placeholders}} and render the content of the FOUR markdown docs into the
@@ -8,14 +8,14 @@ How to instantiate:
   <table>, task entries → .task cards, ⚠ gates → <span class="badge gate">⚠ gate</span>,
   status → .badge.ok / .badge.pending / .badge.blocked, the proposal's approval
   checklist → a .task-style card with checkboxes.
-- Timeline tab (doc-timeframe): render plan-timeframe.md as a pure-CSS Gantt + the
+- Timeline tab (doc-timeframe): render timeframe-plan.md as a pure-CSS Gantt + the
   week-by-week table. Populating the Gantt from the markdown (§1 schedule table):
   · On .gantt set --gw = total weeks (columns) and --gr = rows (waves + 1 buffer row).
   · One .g-h header cell per week at style="grid-column:{{w+1}}" (week w → column w+1;
-    column 1 is the label column). Label them W1/W2… or "Sem 1"… per language.
+    column 1 is the label column). Label them "Wk 1"/"Wk 2"… (or "Sem 1"… in Spanish) — never bare "W1", which is the wave-id namespace.
   · Per wave (row i, top to bottom): a .g-lab at style="grid-row:{{i+1}}" (row 1 is
     the header) + a .g-bar at style="grid-row:{{i+1}};grid-column:{{start_week+1}}/{{end_week+2}}"
-    with a stream color class s1…s5 (same stream as plan-maestro's parallel streams;
+    with a stream color class s1…s5 (same stream as master-plan's parallel streams;
     legend must match) and title="Wx · n sessions".
   · Buffer: last row, a .g-bar.buf (hatched) spanning the buffer weeks.
   · Today marker: one .g-today div at style="grid-column:{{current_week+1}}"
@@ -24,6 +24,9 @@ How to instantiate:
     with title="{{milestone}}" (class .human for DoD-human milestones).
   · Below the Gantt: .g-legend (one .g-key per stream + buffer + milestone + today),
     then §2 critical path, §3 milestones table, §4 week-by-week <table>, §5 lists.
+- Tab wiring: each nav button's data-doc value and its article's id="doc-<value>" must
+  match EXACTLY — the nav is a string join ('doc-'+data-doc) and a mismatch silently
+  leaves that tab blank. Canonical values: proposal / master / detailed / timeframe.
 - Rebuild each doc's TOC <nav> from its h2 ids.
 - Keep it self-contained: no external assets except the font CDN (falls back to
   system-ui offline). Generate text in the user's language.
@@ -124,9 +127,9 @@ article[hidden]{display:none}
 </header>
 
 <div class="topbar">
-  <button class="doc-nav-link active" data-doc="propuesta">Executive proposal</button>
-  <button class="doc-nav-link" data-doc="maestro">Master plan</button>
-  <button class="doc-nav-link" data-doc="detallado">Detailed plan</button>
+  <button class="doc-nav-link active" data-doc="proposal">Executive proposal</button>
+  <button class="doc-nav-link" data-doc="master">Master plan</button>
+  <button class="doc-nav-link" data-doc="detailed">Detailed plan</button>
   <button class="doc-nav-link" data-doc="timeframe">Timeline</button>
   <button class="btn" id="theme">◐</button>
 </div>
@@ -135,10 +138,10 @@ article[hidden]{display:none}
   <nav class="toc" id="toc"><!-- rebuilt by script from the visible article --></nav>
   <main class="content">
 
-    <article id="doc-propuesta">
+    <article id="doc-proposal">
       <section class="sec" id="p-idea">
         <h2>The idea in one sentence</h2>
-        {{rendered content of propuesta-ejecutiva.md — one .sec per ## section:
+        {{rendered content of executive-proposal.md — one .sec per ## section:
         idea · how it will be used · what we gain · scope · simplified architecture ·
         the plan in N steps · when (table) · who · investment & risk · what we ask to
         approve (checklist card)}}
@@ -146,16 +149,16 @@ article[hidden]{display:none}
       <!-- {{...remaining proposal sections...}} -->
     </article>
 
-    <article id="doc-maestro" hidden>
+    <article id="doc-master" hidden>
       <section class="sec" id="m-decision">
         <h2>1. Core decision</h2>
-        {{rendered content of plan-maestro.md — one .sec per ## section, same ids in
+        {{rendered content of master-plan.md — one .sec per ## section, same ids in
         the TOC. Use tables for §2/§3/§5/§6/§7 and an ordered list for §8.}}
       </section>
-      <!-- {{...remaining plan-maestro sections...}} -->
+      <!-- {{...remaining master-plan sections...}} -->
     </article>
 
-    <article id="doc-detallado" hidden>
+    <article id="doc-detailed" hidden>
       <section class="sec" id="d-w1">
         <h2>Wave W1 — {{wave_title}} <span class="badge gate">⚠ gate</span></h2>
         <div class="task">
@@ -173,10 +176,10 @@ article[hidden]{display:none}
     <article id="doc-timeframe" hidden>
       <section class="sec" id="t-gantt">
         <h2>Schedule</h2>
-        <p>{{one line from plan-timeframe.md §0: start → estimated close (with
+        <p>{{one line from timeframe-plan.md §0: start → estimated close (with
         buffer) · sessions/week · buffer %}}</p>
         <div class="gantt" style="--gw:{{total_weeks}};--gr:{{n_waves_plus_buffer_row}}">
-          <div class="g-h" style="grid-column:2">W1</div>
+          <div class="g-h" style="grid-column:2">Wk 1</div>
           <!-- {{...one .g-h per week: grid-column 3, 4, …}} -->
           <div class="g-lab" style="grid-row:2">W1 — {{wave_title}}</div>
           <div class="g-bar s1" style="grid-row:2;grid-column:2/4" title="W1 · {{n}} sessions"></div>
@@ -197,11 +200,11 @@ article[hidden]{display:none}
       <section class="sec" id="t-critical">
         <h2>Critical path &amp; milestones</h2>
         {{rendered §2 (critical path + slack) and §3 (milestones + DoD-human
-        calendar) of plan-timeframe.md — milestones as a <table>}}
+        calendar) of timeframe-plan.md — milestones as a <table>}}
       </section>
       <section class="sec" id="t-weeks">
         <h2>Week by week</h2>
-        {{§4 of plan-timeframe.md as a <table>, then §5 assumptions & calendar
+        {{§4 of timeframe-plan.md as a <table>, then §5 assumptions & calendar
         risks as lists}}
       </section>
     </article>

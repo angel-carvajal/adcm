@@ -1,5 +1,5 @@
 <!--
-Template: plan-timeframe.md — the WHEN: the calendar schedule of the plan.
+Template: timeframe-plan.md — the WHEN: the calendar schedule of the plan.
 Built from the wave inventory (Step 3) + the user's time-frame answers (Step 4):
 target date or available weeks, sessions/week dedication, fixed external milestones.
 Rules when instantiating:
@@ -10,12 +10,15 @@ Rules when instantiating:
 - If the math does not fit a fixed target date, keep the honest date here and record
   the conflict in §5 — never compress estimates to fit.
 - No hardcoded "today": dates are computed at generation time from the user's answers.
-Generate in the user's language; keep the document name plan-timeframe.md.
+- RELATIVE mode: with "no fixed date", label columns/rows "Week 1..N from start"
+  instead of calendar dates (milestones become "end of Week N"); convert to real
+  dates only when a start date is known. Don't force prose into date cells.
+Generate in the user's language; keep the document name timeframe-plan.md.
 -->
 # {{project_name}} — Timeframe plan: {{initiative_title}}
 
 > Calendar source of truth for {{initiative_short}}. Wave contents live in
-> `plan-detallado.md`; strategy in `plan-maestro.md`; live state in `task.md`; the
+> `detailed-plan.md`; strategy in `master-plan.md`; live state in `task.md`; the
 > per-wave prompts in `execute.md` §7. If waves are re-scoped, regenerate this
 > schedule — dates here are estimates, the wave map in `task.md` is the truth of
 > what actually closed.

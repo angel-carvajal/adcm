@@ -1,13 +1,13 @@
 <!--
-Template: plan-detallado.md — the WHAT: the executable task catalog.
+Template: detailed-plan.md — the WHAT: the executable task catalog.
 One entry per task, grouped by wave. Every DoD line must be objectively checkable;
 prefer command → expected result. Task IDs: T-<WAVE>-<n> (e.g. T-W1-3).
-Generate in the user's language; keep the document name plan-detallado.md.
+Generate in the user's language; keep the document name detailed-plan.md.
 -->
 # {{project_name}} — Detailed plan: {{initiative_title}}
 
 > Executable backlog of {{initiative_short}}. Strategy and rationale live in
-> `plan-maestro.md`; the calendar schedule in `plan-timeframe.md`; wave state in
+> `master-plan.md`; the calendar schedule in `timeframe-plan.md`; wave state in
 > `task.md`; the per-wave prompts in `execute.md` §7.
 
 ## 0. Conventions
@@ -21,6 +21,11 @@ Generate in the user's language; keep the document name plan-detallado.md.
   scripts/seeders, and split deep JSX into subcomponents instead of `<div>` + nested
   className ternaries; flatten nested ternaries. Exclude deeply-nested HTML (emails with
   table + MSO conditionals) from the auto-formatter if it worsens them (`.prettierignore`).
+- **Scope manifests**: every task card carries a `Scope manifest` — the structured
+  output of the analysis (files + why + impact + census). It is the POSITIVE scope:
+  wave prompts inline it as `# SCOPE` so executing sessions never re-derive it. It is
+  refreshed at every wave close (execute.md §2b) with what was ACTUALLY touched, so
+  later waves inherit fresh state.
 - **Base DoD** (applies to EVERY task, on top of its own DoD):
   - [ ] {{repo_quality_command — e.g. lint/typecheck/tests of that repo}} → exit 0
   - [ ] No files touched outside the task's scope
@@ -38,6 +43,19 @@ Generate in the user's language; keep the document name plan-detallado.md.
 - **Technical description:** {{2-5 sentences of real technical depth: exact files/
   modules/surfaces touched, counts found in the analysis ("34 call sites of X"),
   key implementation decisions, order within the task.}}
+- **Scope manifest** (investigation output — executing sessions must NOT re-derive it):
+  - **Modify:** `{{path}}` — {{1-line why}} {{· one line per file}}
+  - **Create:** `{{path}}` — {{what it is}}
+  - **Read first:** `{{exemplar_path}}` — {{the pattern it demonstrates}}
+  - **Impact:** `{{shared_surface}}` ← {{N}} consumers: {{paths}}. {{Contract kept
+    for all of them, or their adaptation is explicitly in this task's scope; the DoD
+    must cover the consumers (build/tests of affected apps).}}
+  - **Census:** `{{command}}` → expected {{N}} (as of {{analysis_date}}) · tolerance
+    {{exact | ±1 for small counts (<10); ±X% only for large censuses}}. Divergence
+    beyond tolerance at execution ⇒ STOP, re-scope against this card, update this
+    manifest, log the drift in task.md.
+  - **Symbol notes:** {{exact members to delete/preserve/rename, file:line — when the
+    analysis already has them; this is the overflow home when the prompt budget is hit}}
 - **DoD:**
   - [ ] {{command}} → {{expected_result}}
   - [ ] {{observable_assertion}}
@@ -52,8 +70,9 @@ Generate in the user's language; keep the document name plan-detallado.md.
 ## Wave W2 — {{wave_title}} {{add ⚠GATE to the heading if this wave has a gate}}
 
 {{For large homogeneous waves (e.g. migrating N similar components), a table is
-allowed instead of one entry per task:}}
+allowed instead of one entry per task — but each row still points at a per-task
+Scope manifest card below the table (tables can't hold manifests):}}
 
-| ID | Title | Repo | Owner | Specific DoD | Depends on |
-|---|---|---|---|---|---|
-| T-W2-1 | {{title}} | {{repo}} | {{owner}} | {{dod_summary}} | {{deps}} |
+| ID | Title | Repo | Owner | Specific DoD | Manifest | Depends on |
+|---|---|---|---|---|---|---|
+| T-W2-1 | {{title}} | {{repo}} | {{owner}} | {{dod_summary}} | §{{card_anchor}} | {{deps}} |
