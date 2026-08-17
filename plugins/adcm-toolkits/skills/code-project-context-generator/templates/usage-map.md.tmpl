@@ -1,0 +1,43 @@
+<!-- auto-generated: scan {{SCAN_DATE}} — do not edit; refresh by re-running code-project-context-generator -->
+# {{PROJECT_NAME}} — Usage Map (shared surfaces → consumers)
+
+**Why this file exists:** before modifying anything listed here, you KNOW who breaks.
+A component edited for one page may be rendered by 10 more — the fix must keep the
+contract for all of them or explicitly include adapting them. This makes that impact
+analysis a lookup instead of a re-derivation.
+
+**Shared roots:** {{SHARED_ROOTS}}
+
+## Surfaces by consumer count
+
+| Symbol | Defined in | Consumers | Sample consumers |
+|---|---|---:|---|
+| `{{SYMBOL}}` | `{{DEFINED_IN}}` | {{N}} | {{CONSUMER_SAMPLE}} |
+
+> Full consumer lists longer than the sample: re-census with the command below.
+
+## Re-census (freshness guard)
+
+Counts go stale as the code evolves. Before relying on a row, re-verify cheaply:
+
+```bash
+# per symbol (run from the project root):
+grep -rl '<Symbol>' . --exclude-dir=node_modules --exclude-dir=.git \
+  --exclude-dir=coverage --exclude-dir=reports --exclude-dir=dist --exclude-dir=.next | wc -l
+# (prefer `rg -l '<Symbol>' | wc -l` when ripgrep is available — it respects .gitignore,
+#  so local test/build artifacts never inflate the count)
+```
+
+If the count diverges from this file, the map is stale: re-run the generator
+(full, or delta: `scan_project.py <root> --update <changed-paths>`) before trusting it.
+
+## Rules
+
+1. **Modify a listed surface ⇒ check its consumers first.** Keep the contract
+   (signature, props, behavior, emitted events) or bring every consumer's adaptation
+   into the task's scope — and make the DoD cover the consumers (build/tests of the
+   affected apps), not just the edited file.
+2. New shared surfaces born during a wave belong in this map — the wave-close
+   doc-sync refreshes it via the delta scan.
+
+<!-- end auto-generated -->

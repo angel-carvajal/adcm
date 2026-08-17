@@ -21,16 +21,25 @@ disjoint file ownership, and risk gates (⚠) require **adversarial verification
 an agent that did not write the code. Batch migrations follow the same protocol:
 dependency-ordered waves, each with its own well-defined prompt.
 
+**Wave prompts are self-contained.** The analysis is paid ONCE, at plan time: each
+prompt's `# SCOPE (manifest)` embeds the files to modify (with why), the impact
+census of shared surfaces (a component edited for one page but consumed by 10 more
+lists all 10 — the solution keeps their contract or adapts them in scope), and a
+cheap census command the executing session runs FIRST as a freshness guard. Clean
+sessions execute in auto mode without re-analyzing the project; at every wave close a
+doc-sync ritual refreshes later waves' manifests AND delta-refreshes the project
+context skill, so the plan and the code map never go stale.
+
 ## What it generates
 
 | File | Role |
 |---|---|
-| `propuesta-ejecutiva.md` | PITCH — first part of the family: what is sought, what we gain, the plan in N steps, when/who, investment & risk, and what we ask to approve (for stakeholders, jargon-free) |
-| `plan-maestro.md` | WHY — core decision, target architecture, wave order, timeline with exit gates, risks, affected repos, inviolable decisions |
-| `plan-detallado.md` | WHAT — every task with ID, repo(s), owner, technical description, DoD checkboxes, dependencies |
-| `plan-timeframe.md` | WHEN — start/target/buffer summary, per-wave schedule (sessions + calendar days, dependencies, parallelism, estimated week), critical path, calendarized milestones + DoD-human, week-by-week table, calendar assumptions & risks |
+| `executive-proposal.md` | PITCH — first part of the family: what is sought, what we gain, the plan in N steps, when/who, investment & risk, and what we ask to approve (for stakeholders, jargon-free) |
+| `master-plan.md` | WHY — core decision, target architecture, wave order, timeline with exit gates, risks, affected repos, inviolable decisions |
+| `detailed-plan.md` | WHAT — every task with ID, repo(s), owner, technical description, **Scope manifest** (files to modify/create with why, read-first exemplars, impact census of consumers, freshness check, symbol notes), DoD checkboxes, dependencies |
+| `timeframe-plan.md` | WHEN — start/target/buffer summary, per-wave schedule (sessions + calendar days, dependencies, parallelism, estimated week), critical path, calendarized milestones + DoD-human, week-by-week table, calendar assumptions & risks |
 | `task.md` | STATE — wave map, weekly burn, execution logbook |
-| `execute.md` | HOW — protocol (principles, merge policy, checkpoint/resume, attack checklists) + one copy-paste prompt per wave (GOAL · TASKS · LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) |
+| `execute.md` | HOW — protocol (principles, doc-sync at close, merge policy, checkpoint/resume, attack checklists) + one copy-paste prompt per wave (GOAL · TASKS · SCOPE manifest · LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) |
 | `plans.html` (optional) | A single-file visual version for presenting — 4 tabs: executive proposal (first), master plan, detailed plan, timeline (pure-CSS Gantt by wave + week-by-week table) (doc-nav, TOC, light/dark) |
 
 ## Install

@@ -65,6 +65,9 @@ Use AskUserQuestion to capture what the scanner cannot infer:
 - Is it frontend, backend, fullstack, mobile, CLI, library, infra?
 - Does it have a deploy/live environment? (URLs, staging, prod)
 - Is there relevant external documentation? (Notion, Confluence, remote README)
+- Does the project keep an **execution brain** (an `ai-brain/` or similar with per-task
+  specs)? If yes, capture its path — the generated skill routes planned work to
+  `<ai-brain>/tasks/<ID>.md` first, and this map covers unplanned work.
 
 If the user already provided some of this info when invoking the skill, don't ask again — extract it from context.
 
@@ -110,8 +113,10 @@ The scanner produces a JSON with:
 - `data_models` — entities/ORM (`{orm, entities, migrations_count, schema_files}`) — Eloquent/Prisma/TypeORM/Sequelize/Django/SQLAlchemy/Mongoose
 - `config_env` — env var **names only** from `.env.example`/`.env.sample` (`{files, vars:[{name,comment,sensitive}]}`) — never values
 - `testing` — test strategy (`{frameworks, test_dirs, test_file_count, coverage_config, ci_runs_tests}`)
+- `usage_map` — shared surfaces → consumer census (`{shared_roots, surfaces:[{symbol, defined_in, consumers_count, consumers, census_cmd}]}`) — exports defined under shared/lib/packages/components-style folders, with who consumes them across the rest of the project. This is what makes impact analysis ("this component is rendered by 10 more pages") a lookup instead of a re-derivation.
+- `update` — only with `--update <paths>`: `{paths, affected_folders, affected_surfaces}` for delta refreshes (STEP 4.5).
 
-These four feed the **auto** sections (`api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`). The scanner does not produce the **semantic** sections — those are authored in STEP 3.5.
+These feed the **auto** sections (`api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `usage-map.md`). The scanner does not produce the **semantic** sections — those are authored in STEP 3.5.
 
 ### STEP 3: Review with the user and fill the gaps
 
@@ -159,6 +164,7 @@ code-project-context-[project-name]/
 ├── testing.md                  # Frameworks, test dirs, coverage, CI (auto)
 ├── conventions.md              # Detected code patterns (auto)
 ├── glossary.md                 # Domain terms (auto)
+├── usage-map.md                # Shared surfaces → consumer census + re-census commands (auto)
 ├── business-flows.md           # Critical end-to-end journeys (human)
 ├── security.md                 # Auth, sensitive data, gaps, human-first zones (human)
 ├── tech-debt.md                # Known quirks & tech debt, file:line (human)
@@ -185,7 +191,17 @@ Use the templates in `templates/` (relative to the skill root) as a base. The te
 
 If a `code-project-context-[project-name]/` already exists (the user is re-running on an evolved project), do **not** regenerate from scratch. Refresh incrementally:
 
-1. **Regenerate the `auto` files** wholesale from the fresh scan: `stack.md`, `architecture.md`, `entry-points.md`, `api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `conventions.md`, `glossary.md`, `folders/*.md`, and the wrapped block of `SKILL.md`. (These start with the `<!-- auto-generated -->` marker — safe to overwrite.)
+**Delta refresh (preferred after a closed wave):** when the caller knows WHICH paths
+changed (e.g. the wave-close doc-sync has the logbook's files-touched list), run
+`scan_project.py <root> --update <comma-separated-paths>` and regenerate ONLY what its
+`update` block names: the affected `folders/*.md`, the `usage-map.md` rows in
+`affected_surfaces`, and the `last_scanned` stamps of those files. Everything else —
+including all `human` files — stays untouched. This is what keeps the map fresh at
+every wave close without paying a full refresh.
+
+**Full refresh** (no known path list):
+
+1. **Regenerate the `auto` files** wholesale from the fresh scan: `stack.md`, `architecture.md`, `entry-points.md`, `api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `conventions.md`, `glossary.md`, `usage-map.md`, `folders/*.md`, and the wrapped block of `SKILL.md`. (These start with the `<!-- auto-generated -->` marker — safe to overwrite.)
 2. **Preserve the `human` files** untouched: `business-flows.md`, `security.md`, `tech-debt.md`, and the identity/danger-zone prose of `SKILL.md` (anything outside the markers).
 3. **Update `last_scanned`** in the `SKILL.md` frontmatter and the wrapper comments.
 4. **Flag drift:** if the scan changed materially (new modules, stack change, endpoints added/removed), prepend a one-line note to the affected human files: `> ⚠ possible drift since last scan — review.` Do not edit their content.
@@ -213,7 +229,7 @@ The canonical skeleton is `templates/SKILL.md.tmpl` (render its `{{placeholders}
 
 1. Frontmatter: `name`, a generous `description` (triggers), plus `status`, `stack`, `default_branch`, `last_scanned`.
 2. Identity (1–2 lines): what it does, type, owner, status — **human, outside the wrapper**.
-3. **Context files table** — the index of every complementary doc, each tagged `auto` or `human`, with a suggested L1–L4 reading order.
+3. **Context files table** — the index of every complementary doc, each tagged `auto` or `human`, with a **"Start here when…" entry hint per row**, the suggested L1–L4 reading order, and a **routing-by-task-type table** (endpoint work → api-surface+conventions+testing; shared-surface work → usage-map FIRST; auth → security+tech-debt; …). If the project has an execution brain, a "Planned work" pointer routes task IDs to `<ai-brain>/tasks/<ID>.md` before this map.
 4. The wrapped **auto block**: stack one-liner, high-level tree, entry-points summary, an "at a glance" line (API/data/config/tests), conventions + glossary shortlists.
 5. **Related Skills** (optional) — links to sibling/`client-context-*` skills; human, outside the wrapper. Omit if none.
 6. **Rules For Claude** — lazy loading, verify-before-touch, respect conventions/human-first zones, auto-vs-human files, refresh-when-stale.
@@ -231,4 +247,5 @@ Never inline per-folder or per-section detail into the SKILL.md — that defeats
 - **Useful short descriptions:** each folder/entity gets 1 line answering "what lives here and why would I care?". Nothing generic like "source code folder".
 - **Generous triggers:** the resulting skill's `description` must include the project name, aliases, base paths, key module names — anything the user might mention.
 - **Stack-agnostic:** supports Node/TS, PHP, Python, Go, Rust, Ruby and any mix; degrade gracefully when a detector finds nothing.
-- **Living, not fossilized:** re-runnable as the project evolves — refresh mode (STEP 4.5) updates `auto` files and `last_scanned` while preserving `human` ones.
+- **Living, not fossilized:** re-runnable as the project evolves — refresh mode (STEP 4.5) updates `auto` files and `last_scanned` while preserving `human` ones; the `--update` delta mode makes per-wave freshness cheap enough to be routine.
+- **Impact is a lookup, not a re-derivation:** `usage-map.md` exists so that touching a shared surface starts with "who consumes this?" answered from the map (then re-censused cheaply), never re-derived with exploratory greps.
