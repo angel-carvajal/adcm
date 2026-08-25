@@ -1,6 +1,6 @@
 # adcm-toolkits
 
-Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context), a code-project context generator that builds a lazy-loading, refreshable knowledge base of a codebase (architecture, API surface, data models, config, security, conventions), a business context generator that interviews the owner and researches the business website to produce an installable, lazy-loading business-context skill (identity, offering, market, brand voice, sales, operations, objectives, plus a confidential internal file), and an execution-prompt architect that turns goals + deep code analysis into a six-document execution plan (executive proposal, master plan, detailed plan, timeframe plan with critical path and week-by-week schedule, task tracker, execution protocol) with copy-paste prompts per wave and an optional single-file HTML with a CSS Gantt timeline. Use for structured multi-perspective decisions, to document a codebase or a business, or to plan and prompt large tasks and migrations.  ·  v0.4.0
+Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context), a code-project context generator that builds a lazy-loading, refreshable knowledge base of a codebase (architecture, API surface, data models, config, security, conventions), a business context generator that interviews the owner and researches the business website to produce an installable, lazy-loading business-context skill (identity, offering, market, brand voice, sales, operations, objectives, plus a confidential internal file), and an execution-prompt architect that turns goals + deep code analysis into a six-document execution plan (executive proposal, master plan, detailed plan, timeframe plan with critical path and week-by-week schedule, task tracker, execution protocol) with copy-paste prompts per wave and an optional single-file HTML with a CSS Gantt timeline. Use for structured multi-perspective decisions, to document a codebase or a business, or to plan and prompt large tasks and migrations.  ·  v0.6.0
 
 ## Skills
 
@@ -24,6 +24,18 @@ Public ADCM toolkits: the Council multi-advisor deliberation framework (generic,
 ```
 
 Skills are namespaced as `/adcm-toolkits:<skill>`; description-based auto-invocation also works.
+
+## Project container convention
+
+The three generators share one filesystem convention (canonical spec:
+`skills/execution-prompt-architect/references/project-structure.md`): each project
+lives in a **container that is never a git repo** — `<container>/{ai-brain, ai, app}` —
+where `ai-brain/` (the execution brain) is its own git repo at container level,
+`ai/<slug>-{ai|ia}-{admin|common}/` holds the plugin marketplaces (one git repo each),
+and the code lives in `app/` (or sibling repos / a grouping folder in multi-repo
+holdings) with a gitignored `ai-brain` symlink so relative doc paths resolve in build
+sessions. The container layout is documented in `ai-brain/README.md`, never in loose
+root files.
 
 ## Access
 

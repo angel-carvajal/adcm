@@ -130,8 +130,12 @@ Iterate until approved.
 Read `references/delivery-guide.md` and offer both routes:
 
 - **Option A — the user's private plugin marketplace** (recommended when they have
-  one): place the folder in their private plugin's `skills/` directory and walk
-  them through the version bump + commit. Never push their repo for them.
+  one): by the standard container convention the home is
+  `<container>/ai/<slug>-{ai|ia}-admin/plugins/<x>-admin/skills/` (see
+  `../execution-prompt-architect/references/project-structure.md`; scaffold the
+  marketplace there — own git repo — if the container exists without one). Place the
+  folder in that plugin's `skills/` directory and walk them through the version bump
+  + commit. Never push their repo for them.
 - **Option B — standalone `.skill` zip** for manual installation or claude.ai.
 
 ---

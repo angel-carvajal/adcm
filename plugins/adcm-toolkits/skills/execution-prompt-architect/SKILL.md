@@ -83,8 +83,16 @@ Ask the user what they want to achieve. Tell them explicitly:
 
 Accept one or many tasks, across one or many repos. Ask follow-ups only for what the
 code cannot answer (who's on the team, hard constraints, what is out of scope —
-deadlines and dedication are asked later in Step 4, don't ask twice). Also ask where
-to write the documents (default: `ai-brain/` at the project root).
+deadlines and dedication are asked later in Step 4, don't ask twice).
+
+**Where the documents go — read `references/project-structure.md` first.** Default:
+`ai-brain/` **at the CONTAINER level** — the project container `{ai-brain, ai, app}` is
+never a git repo; `ai-brain/` is its own repo, sibling of `ai/` (marketplaces) and the
+code repo(s). If the cwd is a code repo, `ai-brain/` goes one level UP and the code
+repo gets a gitignored symlink `ai-brain -> ../ai-brain` so relative paths resolve in
+build sessions. NEVER place `ai-brain/` inside the code repo's git; NEVER `git init`
+the container; the container layout is documented in `ai-brain/README.md` (generate it
+too). Confirm with the user only when their existing layout visibly differs.
 
 ### Step 3 — Code analysis (fan-out)
 
@@ -139,7 +147,10 @@ propose scope cuts or more sessions — never silently compress estimates to fit
 
 ### Step 5 — Generate the six documents
 
-Write to the chosen output directory, using the templates in `templates/`
+Write to the chosen output directory — this is the `{{docs_dir}}` the templates
+consume: the path of the `ai-brain/` folder AS SEEN FROM THE CODE REPO where execution
+sessions run (with the standard symlink it is literally `ai-brain`; prompts also name
+the absolute code-repo path to start the session in). Use the templates in `templates/`
 (read each template right before generating its document):
 
 | Document | Template | Role |

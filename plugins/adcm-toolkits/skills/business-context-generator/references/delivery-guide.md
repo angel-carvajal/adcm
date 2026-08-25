@@ -10,8 +10,15 @@ Many users keep per-business Claude Code plugin marketplaces (private git repos 
 a `.claude-plugin/marketplace.json` and `plugins/<plugin>/skills/`). If this user
 does:
 
-1. **Ask where it goes.** Have the user point you at the target plugin directory in
-   their marketplace repo — e.g.
+1. **Resolve the location by convention first, ask only as fallback.** The standard
+   container layout (see
+   `../../execution-prompt-architect/references/project-structure.md`) puts each
+   business's marketplaces under `<container>/ai/` — business context belongs in
+   `<container>/ai/<slug>-{ai|ia}-admin/plugins/<slug>-admin/skills/`. If that
+   marketplace exists, that's the home; if the container exists but the marketplace
+   doesn't, offer to scaffold it there (own git repo — the container itself is never
+   a git repo). Only when no container/convention is visible, ask the user to point
+   you at the target plugin directory — e.g.
    `<marketplace-repo>/plugins/<plugin-name>/skills/`. If the business already has
    sibling skills (quote generators, councils, etc.), the same plugin is usually
    the right home.
@@ -29,9 +36,10 @@ does:
 4. Remind them: teammates get the skill via their marketplace's normal
    install/update flow.
 
-Example: for a fictional "Acme Coffee Roasters" the folder
-`business-init-acme-coffee/` would land in
-`<their-marketplace-repo>/plugins/acme-admin/skills/business-init-acme-coffee/`.
+Example: for a fictional "Acme Coffee Roasters" with container `~/acme-coffee/`, the
+folder `business-init-acme-coffee/` would land in
+`~/acme-coffee/ai/acme-coffee-ai-admin/plugins/acme-admin/skills/business-init-acme-coffee/`
+(marketplace repo `acme-coffee-ai-admin`, its own git, inside the non-git container).
 
 ## Option B — Standalone `.skill` zip
 
