@@ -103,14 +103,20 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    wave changed, refresh its file lists and census expected counts.
 4. **`execute.md` §7** — regenerate the prompt of any later wave whose manifest
    changed in (3): its `# SCOPE` must match detailed-plan.
-5. **Project context skill — DELTA refresh**: with the logbook's files-touched list,
+5. **Delivery message — viewable web links, no filler**: the close message to
+   {{owner}} leads with clickable URL(s) to SEE the rendered result (site, page,
+   report, artifact). If no preview server is running, start one (with HTTP Range
+   support — without it, video is dead on iOS) and hand the LAN-IP URL so it opens
+   from a phone; `127.0.0.1` does not count. Repo paths and commit hashes go after,
+   one line each — reference, not the visual delivery.
+6. **Project context skill — DELTA refresh**: with the logbook's files-touched list,
    update only the affected references of `{{project_context_skill}}` (usage-map
    consumer counts, folder inventories, entry hints if new surfaces were born) and
    bump their `last_scanned`. Use the generator's incremental mode
    (`scan_project.py --update <paths>`) when available. Every closed wave leaves the
    brain AND the code map fresh — freshness never depends on manual re-scans.
-6. {{master-plan.md execution-state block / plans.html, if the project keeps them}}
-7. {{If this plan family coexists with an INCUMBENT protocol (the project already
+7. {{master-plan.md execution-state block / plans.html, if the project keeps them}}
+8. {{If this plan family coexists with an INCUMBENT protocol (the project already
    keeps its own live TASKS/EXECUTION docs): state explicitly which docs THIS family
    owns and which belong to the incumbent — never write to the incumbent's docs from
    these prompts; report the pending incumbent update to {{owner}} instead.}}
