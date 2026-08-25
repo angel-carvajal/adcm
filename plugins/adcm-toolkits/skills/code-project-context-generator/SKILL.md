@@ -48,6 +48,14 @@ The skill needs the absolute path of the project. Strategy:
 
 Verify that the path exists and that it has typical project indicators (`.git/`, `package.json`, `composer.json`, `pyproject.toml`, `requirements.txt`, `Cargo.toml`, `go.mod`, etc.). If there are none, confirm with the user that it really is a code project before continuing.
 
+**Code repo vs container.** The standard layout (see
+`../execution-prompt-architect/references/project-structure.md`) is a CONTAINER that is
+not a git repo — `<container>/{ai-brain, ai, app}` — with the code in `app/` (or under
+a grouping folder like `projects/`). The scan target is always the **code repo**, but
+detect the container: if the parent (or grandparent) holds sibling `ai-brain/` and/or
+`ai/` folders, record the container path — the generated skill must describe the whole
+container in its architecture map and route planned work to the sibling `ai-brain/`.
+
 ### STEP 1: Collect minimal metadata
 
 Use AskUserQuestion to capture what the scanner cannot infer:
@@ -65,9 +73,12 @@ Use AskUserQuestion to capture what the scanner cannot infer:
 - Is it frontend, backend, fullstack, mobile, CLI, library, infra?
 - Does it have a deploy/live environment? (URLs, staging, prod)
 - Is there relevant external documentation? (Notion, Confluence, remote README)
-- Does the project keep an **execution brain** (an `ai-brain/` or similar with per-task
-  specs)? If yes, capture its path — the generated skill routes planned work to
-  `<ai-brain>/tasks/<ID>.md` first, and this map covers unplanned work.
+- Does the project keep an **execution brain**? By convention it lives at
+  `<container>/ai-brain/` (own git repo, sibling of the code repo, reachable from the
+  code repo through a gitignored `ai-brain` symlink) — confirm rather than ask openly;
+  accept a different path if the project predates the convention. The generated skill
+  routes planned work to `<ai-brain>/tasks/<ID>.md` (or its task cards) first, and
+  this map covers unplanned work.
 
 If the user already provided some of this info when invoking the skill, don't ask again — extract it from context.
 
@@ -208,6 +219,20 @@ every wave close without paying a full refresh.
 5. Tell the user what was refreshed vs preserved.
 
 ### STEP 5: Package and install
+
+Offer both routes (mirror of business-context-generator's delivery):
+
+**Option A — the project's private plugin marketplace (recommended, the convention).**
+By the standard container layout (see
+`../execution-prompt-architect/references/project-structure.md`), the skill lands in
+`<container>/ai/<slug>-{ai|ia}-{common|engineering}/plugins/<plugin>/skills/code-project-context-[project-name]/`
+— the engineering/operational marketplace of the project (create it there if missing:
+`.claude-plugin/marketplace.json` + `plugins/<plugin>/.claude-plugin/plugin.json`, own
+git repo). Then bump the plugin's `version` (minor for a new skill, patch for a
+refresh), update the marketplace README table, commit in THAT repo — and never push
+for the user. Registration lives in the profile's Claude settings, not the container.
+
+**Option B — standalone `.skill` zip** (no marketplace, or claude.ai):
 
 1. Save everything under `<output-dir>/code-project-context-[project-name]/`, where `<output-dir>` is
    the output directory used by the environment (e.g. the session's outputs directory or a
