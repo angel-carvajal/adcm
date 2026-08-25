@@ -86,13 +86,16 @@ code cannot answer (who's on the team, hard constraints, what is out of scope �
 deadlines and dedication are asked later in Step 4, don't ask twice).
 
 **Where the documents go — read `references/project-structure.md` first.** Default:
-`ai-brain/` **at the CONTAINER level** — the project container `{ai-brain, ai, app}` is
-never a git repo; `ai-brain/` is its own repo, sibling of `ai/` (marketplaces) and the
-code repo(s). If the cwd is a code repo, `ai-brain/` goes one level UP and the code
-repo gets a gitignored symlink `ai-brain -> ../ai-brain` so relative paths resolve in
-build sessions. NEVER place `ai-brain/` inside the code repo's git; NEVER `git init`
-the container; the container layout is documented in `ai-brain/README.md` (generate it
-too). Confirm with the user only when their existing layout visibly differs.
+`ai-brain/` **at the CONTAINER level** — the project container
+`{ai-brain, ai, projects}` is never a git repo; `ai-brain/` is its own repo and holds
+ALL documentation (execution docs AND the product's spec/plan/decisions/backlog under
+`ai-brain/docs/`); the code lives under `projects/` (plain grouping folder, one git
+repo PER project) and each project gets a gitignored symlink
+`ai-brain -> ../../ai-brain` so relative paths resolve in build sessions. NEVER place
+`ai-brain/` or product docs inside a code repo's git; NEVER `git init` the container
+or the `projects/` folder; the container layout is documented in `ai-brain/README.md`
+(generate it too). Confirm with the user only when their existing layout visibly
+differs.
 
 ### Step 3 — Code analysis (fan-out)
 

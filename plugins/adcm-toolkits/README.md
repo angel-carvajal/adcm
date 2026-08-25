@@ -29,13 +29,15 @@ Skills are namespaced as `/adcm-toolkits:<skill>`; description-based auto-invoca
 
 The three generators share one filesystem convention (canonical spec:
 `skills/execution-prompt-architect/references/project-structure.md`): each project
-lives in a **container that is never a git repo** — `<container>/{ai-brain, ai, app}` —
-where `ai-brain/` (the execution brain) is its own git repo at container level,
+lives in a **container that is never a git repo** —
+`<container>/{ai-brain, ai, projects}` — where `ai-brain/` is its own git repo at
+container level and holds ALL documentation (execution brain + the product's
+spec/plan/decisions/backlog under `ai-brain/docs/`),
 `ai/<slug>-{ai|ia}-{admin|common}/` holds the plugin marketplaces (one git repo each),
-and the code lives in `app/` (or sibling repos / a grouping folder in multi-repo
-holdings) with a gitignored `ai-brain` symlink so relative doc paths resolve in build
-sessions. The container layout is documented in `ai-brain/README.md`, never in loose
-root files.
+and the code lives under `projects/` — a plain grouping folder with **one git repo per
+engineering project**, each carrying a gitignored `ai-brain` symlink so relative doc
+paths resolve in build sessions. The container layout is documented in
+`ai-brain/README.md`, never in loose root files.
 
 ## Access
 

@@ -9,17 +9,22 @@ this is the default, applied without asking.
 
 ```
 ~/<project>/                 ← CONTAINER — NOT a git repo, NO loose files at this level
-├── ai-brain/                ← own git repo — the execution brain (the six documents)
-│   └── README.md            ← documents THIS whole container layout (it is versioned here)
+├── ai-brain/                ← own git repo — ALL documentation lives here:
+│   ├── README.md            ←   documents THIS whole container layout (versioned here)
+│   ├── docs/                ←   product docs (spec, plan, ADRs/decisions, backlog, …)
+│   └── …                    ←   the six execution documents + visuals (plans/prompts html)
 ├── ai/                      ← plain folder (no git of its own)
 │   ├── <slug>-{ai|ia}-admin/    ← own git repo — private plugin marketplace (business context, council)
 │   └── <slug>-{ai|ia}-common/   ← own git repo — operational/engineering plugins (optional)
-└── app/                     ← own git repo — the code (single-repo projects)
+└── projects/                ← plain grouping folder (no git of its own)
+    ├── <project-a>/         ← own git repo — one engineering project
+    └── <project-b>/         ← own git repo — another engineering project
 ```
 
-Multi-repo holdings replace `app/` with either several sibling repos or a plain
-grouping folder (`projects/`, `p-engineering/`, `engineering/`) holding one git repo
-per app. Everything else stays identical.
+Some containers use a different grouping name (`p-engineering/`, `engineering/`) or —
+in single-app businesses — a directly-named repo at container level (e.g. `web/`).
+`projects/` is the default for new containers. **Git lives PER project, never at the
+grouping-folder or container level.**
 
 ## Rules
 
@@ -27,30 +32,38 @@ per app. Everything else stays identical.
    would be unversioned; the layout documentation lives in `ai-brain/README.md`, and
    the project's `code-project-context-*` skill (lazy-loading) is what routes sessions
    through the structure.
-2. **Every major subfolder is its own git repo** (local-only at first; remotes live in
+2. **ALL documentation lives in `ai-brain/`** — execution documents, product
+   spec/plan/decisions/backlog, visuals, logbook. Code repos carry only code plus
+   their operational `CLAUDE.md`/`README.md`; those reference the docs via
+   `ai-brain/…` relative paths.
+3. **Every major subfolder is its own git repo** (local-only at first; remotes live in
    a per-project GitLab/GitHub group when they exist, marketplaces under an `ai/` or
    `ia/` subgroup).
-3. **`ai-brain/` lives at CONTAINER level, never inside the code repo.** The code repo
-   references it through a **gitignored symlink**: `ln -s ../ai-brain ai-brain` from
-   the code repo root (adjust depth if the code repo is nested, e.g. `../../ai-brain`).
-   This keeps relative paths (`ai-brain/execute.md`, `ai-brain/detailed-plan.md`)
-   resolving locally in build sessions, while the brain versions independently.
-4. **Execution sessions start in the code repo** (`app/` or the specific app repo),
-   not in the container. Wave prompts must name that path explicitly.
-5. **Marketplaces live under `<container>/ai/`**, one repo per marketplace, each with
+4. **Each engineering project gets a gitignored symlink to the brain**:
+   `ln -s ../../ai-brain ai-brain` from the project root (depth matches nesting). This
+   keeps relative paths (`ai-brain/execute.md`, `ai-brain/docs/SPEC.md`) resolving
+   locally in build sessions, while the brain versions independently. Doc changes made
+   through the symlink are committed in the **ai-brain repo**, never in the code repo.
+5. **Execution sessions start in the specific project repo**
+   (`<container>/projects/<project>/`), not in the container. Wave prompts must name
+   that path explicitly.
+6. **Marketplaces live under `<container>/ai/`**, one repo per marketplace, each with
    `.claude-plugin/marketplace.json` + `plugins/<plugin>/skills/<skill>/`. Naming:
    `<slug>-{ai|ia}-admin` for business context/directivos, `<slug>-{ai|ia}-common` for
    operational plugins. Marketplace registration lives in the profile's Claude
    settings (`extraKnownMarketplaces`/`enabledPlugins`), never in the container.
-6. **`ai-brain/README.md` is mandatory** and carries: the container table
+7. **`ai-brain/README.md` is mandatory** and carries: the container table
    (`| Carpeta | Qué es | Git |`), the doc map, the symlink setup line, a status line
-   pointing at `task.md`, and disambiguation against sibling projects/businesses.
-7. **The bitácora commits in `ai-brain/`**, not in code MRs: closing a wave touches
-   two repos (code + brain) and, when facts changed, a third (the marketplace, with a
-   plugin version bump).
+   pointing at the task tracker, and disambiguation against sibling
+   projects/businesses.
+8. **The logbook commits in `ai-brain/`**, not in code MRs: closing a wave touches two
+   repos (code + brain) and, when facts changed, a third (the marketplace, with a
+   plugin version bump). A new engineering project = a new folder in `projects/` with
+   its own git and its own symlink.
 
 ## Reference implementations (on Angel's machine)
 
 `~/alpely` (the most mature: `ai-brain/` + `ai/` + `projects/alpely` + documented
-symlink), `~/ancefoodtrailers`, `~/adcm` (uses `brain/`), `~/adcmcorps`,
-`~/forja-trailers`, `~/adcm-ledger` (single-repo variant with `app/`).
+symlink), `~/ancefoodtrailers` (grouping folder `p-engineering/`, one git per
+project), `~/adcm` (single-app variant: `brain/` + `web/`), `~/adcmcorps`,
+`~/forja-trailers`, `~/adcm-ledger` (`ai-brain/` + `ai/` + `projects/ledger`).
