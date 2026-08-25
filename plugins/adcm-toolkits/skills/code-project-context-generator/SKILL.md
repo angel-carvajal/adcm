@@ -50,11 +50,12 @@ Verify that the path exists and that it has typical project indicators (`.git/`,
 
 **Code repo vs container.** The standard layout (see
 `../execution-prompt-architect/references/project-structure.md`) is a CONTAINER that is
-not a git repo — `<container>/{ai-brain, ai, app}` — with the code in `app/` (or under
-a grouping folder like `projects/`). The scan target is always the **code repo**, but
-detect the container: if the parent (or grandparent) holds sibling `ai-brain/` and/or
-`ai/` folders, record the container path — the generated skill must describe the whole
-container in its architecture map and route planned work to the sibling `ai-brain/`.
+not a git repo — `<container>/{ai-brain, ai, projects}` — with the code under
+`projects/` (plain grouping folder, one git repo per engineering project) and ALL
+documentation in `ai-brain/`. The scan target is always one **project repo**, but
+detect the container: if an ancestor holds sibling `ai-brain/` and/or `ai/` folders,
+record the container path — the generated skill must describe the whole container in
+its architecture map and route planned work and docs to the sibling `ai-brain/`.
 
 ### STEP 1: Collect minimal metadata
 
