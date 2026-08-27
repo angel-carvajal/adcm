@@ -4,7 +4,7 @@ Code Project Scanner — Analyzes a code project and produces a structured JSON
 with stack, folder tree, entry points, conventions, and domain terms.
 
 The output is designed to feed the generation of a
-`code-project-context:[project-name]` skill with lazy-loading.
+`code-project-context-[project-name]` skill with lazy-loading.
 
 Usage:
     python3 scan_project.py <project_path> [--output report.json] [--max-depth 4]
