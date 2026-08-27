@@ -14,6 +14,14 @@ Generate in the user's language; keep the document name detailed-plan.md.
 
 - **Task ID**: `T-<WAVE>-<n>`. **Status**: ☐ pending · 🔄 in progress · ⛔ blocked · ✅ done.
 - **Repo aliases**: {{alias}} = {{full_repo_path_or_url}}
+- **Cross-repo ownership — by COUPLING, never by consumer**: every artifact a task
+  creates lives in the repo whose surface it is coupled to, not in the repo that
+  consumes it. Schema-coupled SQL (fixtures, demo seeds, psql scripts) lives with the
+  schema/migrations repo even when its only consumer is the UI — whoever migrates the
+  schema must see it, or it rots silently in another repo. A script that imports code
+  from an app (e.g. a parity check importing the app's own lib) lives in that app's
+  repo, pointing at the other repo's fixture in its header. (Lesson learned: a
+  schema fixture born in the frontend repo had to be moved post-review.)
 - **Code legibility (no indentation hell)**: keep code flat and readable, not just
   correct — the diff of every task must read top-to-bottom. Max ~3-4 nesting levels;
   use early returns / guard clauses instead of nested `if/else`; extract named helpers

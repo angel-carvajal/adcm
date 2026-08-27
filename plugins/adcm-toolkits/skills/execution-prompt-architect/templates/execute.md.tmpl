@@ -120,6 +120,13 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    keeps its own live TASKS/EXECUTION docs): state explicitly which docs THIS family
    owns and which belong to the incumbent — never write to the incumbent's docs from
    these prompts; report the pending incumbent update to {{owner}} instead.}}
+9. **COMMIT AND PUSH the docs repo — the doc-sync does not exist until pushed.**
+   `{{docs_dir}}` is its own NESTED git repo inside the container; the harness /
+   environment header reports the working directory as "not a git repo" — that is the
+   CONTAINER, don't believe it: verify with `git -C {{docs_dir}} status`. Close with
+   `git -C {{docs_dir}} add -A && git commit -m "docs({{wave}}): …" && git push`. An
+   unpushed logbook is invisible to the next session and to {{owner}} from another
+   machine (lesson learned: a whole wave's docs once sat uncommitted for days).
 
 ⚠gate nuance: at session exit the wave is "verified, pending {{owner}}", not ✅;
 re-run this doc-sync when {{owner}} pushes/merges.

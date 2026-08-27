@@ -107,7 +107,10 @@ prompt's `execute.md §7` header (✅ / ⛔ if blocked on a DoD-human), mark {{I
 `detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
 refresh the Scope manifests of LATER waves whose surfaces this wave changed (and
 regenerate their §7 prompts), and delta-refresh the project context skill for the
-files touched.
+files touched. The doc-sync ENDS with `git -C {{docs_dir}} add -A && git commit -m
+"docs({{wave}}): …" && git push` — `{{docs_dir}}` is its own NESTED git repo (the
+harness reports the container as "not a git repo": don't believe it); an unpushed
+logbook does not exist for the next session.
 Close the delivery message with VIEWABLE WEB LINKS, no filler: if the deliverable
 renders (site, page, report, artifact), the FIRST item is a clickable URL to SEE it —
 start the preview server yourself if none is running (one that supports HTTP Range,
