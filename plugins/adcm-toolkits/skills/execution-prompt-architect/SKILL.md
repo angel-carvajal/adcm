@@ -95,7 +95,10 @@ repo PER project) and each project gets a gitignored symlink
 `ai-brain/` or product docs inside a code repo's git; NEVER `git init` the container
 or the `projects/` folder; the container layout is documented in `ai-brain/README.md`
 (generate it too). Confirm with the user only when their existing layout visibly
-differs.
+differs. ⚠ Because `ai-brain/` is NESTED, the harness/environment header reports the
+container cwd as "not a git repo" — that is the container, not `ai-brain/`: sessions
+must verify with `git -C ai-brain status` and every doc-sync ends with commit+push
+(execute.md template §2b step 9).
 
 ### Step 3 — Code analysis (fan-out)
 

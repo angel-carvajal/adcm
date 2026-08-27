@@ -67,7 +67,14 @@ ordering, what each wave unblocks. One short paragraph per wave.}}
 
 ## 8. Inviolable decisions
 
-Rules NO session or wave may contradict (each wave prompt's guardrails inherit them):
+Rules NO session or wave may contradict (each wave prompt's guardrails inherit them).
+Two are STANDING (include them always, before the project-specific ones):
+
+- **Cross-repo ownership by COUPLING, never by consumer** (detailed-plan §0): an
+  artifact lives in the repo whose surface it is coupled to — schema-coupled SQL with
+  the schema, app-importing scripts with the app.
+- **Docs repo commit+push at every close** (execute.md §2b step 9): the docs dir is
+  its own nested git repo; an unpushed logbook does not exist.
 
 1. {{inviolable_rule — e.g. security boundaries, secrets policy, commit conventions,
    directories that must not be touched}}
