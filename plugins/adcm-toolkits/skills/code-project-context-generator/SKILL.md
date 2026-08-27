@@ -2,7 +2,7 @@
 name: code-project-context-generator
 description: >
   Scans a code project, builds a structured map of its architecture, and generates
-  an installable skill of the form `code-project-context:[project-name]` with lazy-loading
+  an installable skill of the form `code-project-context-[project-name]` with lazy-loading
   (the resulting SKILL.md loads only the index, and per-folder details are read on-demand).
   Triggers when the user asks to 'create project context', 'new code project',
   'scan repo', 'map architecture', 'code project context', 'analyze project',
@@ -16,7 +16,7 @@ compatibility: >
 
 # Code Project Context Generator
 
-This skill guides the process of analyzing a code project and generating an installable context skill of the form `code-project-context:[project-name]`. The resulting skill is designed with **lazy-loading**: its SKILL.md loads only the high-level map (tree + short descriptions per folder + stack + entry points), and the details of each folder are read on-demand with Read when the working session requires them. This keeps context lightweight while still allowing deep dives where needed.
+This skill guides the process of analyzing a code project and generating an installable context skill of the form `code-project-context-[project-name]`. The resulting skill is designed with **lazy-loading**: its SKILL.md loads only the high-level map (tree + short descriptions per folder + stack + entry points), and the details of each folder are read on-demand with Read when the working session requires them. This keeps context lightweight while still allowing deep dives where needed.
 
 ---
 
@@ -226,8 +226,8 @@ Offer both routes (mirror of business-context-generator's delivery):
 **Option A — the project's private plugin marketplace (recommended, the convention).**
 By the standard container layout (see
 `../execution-prompt-architect/references/project-structure.md`), the skill lands in
-`<container>/ai/<slug>-{ai|ia}-{common|engineering}/plugins/<plugin>/skills/code-project-context-[project-name]/`
-— the engineering/operational marketplace of the project (create it there if missing:
+`<container>/ai/<slug>-{ai|ia}-common/plugins/<plugin>/skills/code-project-context-[project-name]/`
+— the operational/engineering marketplace of the project (create it there if missing:
 `.claude-plugin/marketplace.json` + `plugins/<plugin>/.claude-plugin/plugin.json`, own
 git repo). Then bump the plugin's `version` (minor for a new skill, patch for a
 refresh), update the marketplace README table, commit in THAT repo — and never push

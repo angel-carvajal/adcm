@@ -1,6 +1,6 @@
 # Templates — code-project-context-generator
 
-These templates are the base for generating the `code-project-context:[project-name]` skill. When the generator flow reaches Step 4, Claude takes each template, fills the `{{...}}` placeholders with scan data + the user's answers, and writes them to the skill's output.
+These templates are the base for generating the `code-project-context-[project-name]` skill. When the generator flow reaches Step 4, Claude takes each template, fills the `{{...}}` placeholders with scan data + the user's answers, and writes them to the skill's output.
 
 ## Inventory
 

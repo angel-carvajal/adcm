@@ -1,6 +1,6 @@
 # code-project-context-generator
 
-Scans a code project, builds a structured map of its architecture, and generates an installable, **lazy-loading** context skill of the form `code-project-context:[project-name]` — so Claude can understand and remember a codebase across working sessions without loading everything at once.
+Scans a code project, builds a structured map of its architecture, and generates an installable, **lazy-loading** context skill of the form `code-project-context-[project-name]` — so Claude can understand and remember a codebase across working sessions without loading everything at once.
 
 ## Install
 
@@ -21,7 +21,7 @@ This skill ships in the **`adcm-toolkits`** plugin of the public **`adcm`** mark
 
 ## What the generated context contains
 
-The generated `code-project-context:[name]` skill is a lazy-loaded knowledge base. Each section file is either:
+The generated `code-project-context-[name]` skill is a lazy-loaded knowledge base. Each section file is either:
 
 - **`auto`** — scan-derived and rewritten on every run (wrapped in `<!-- auto-generated -->`): `stack`, `architecture`, `entry-points`, `api-surface`, `data-models`, `config-env` (env var **names only**, no values), `testing`, `conventions`, `glossary`, `usage-map` (shared surfaces → consumer census, so "this component is rendered by 10 more pages" is a lookup, not a re-derivation), `folders/*`.
 - **`human`** — authored by Claude reading the code, and **preserved** across re-scans: `business-flows`, `security` (incl. auth & human-first zones), `tech-debt`.

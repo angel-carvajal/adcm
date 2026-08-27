@@ -49,11 +49,11 @@ grouping-folder or container level.**
    that path explicitly.
 6. **Marketplaces live under `<container>/ai/`**, one repo per marketplace, each with
    `.claude-plugin/marketplace.json` + `plugins/<plugin>/skills/<skill>/`. Naming:
-   `<slug>-{ai|ia}-admin` for business context/directivos, `<slug>-{ai|ia}-common` for
+   `<slug>-{ai|ia}-admin` for business context/leadership, `<slug>-{ai|ia}-common` for
    operational plugins. Marketplace registration lives in the profile's Claude
    settings (`extraKnownMarketplaces`/`enabledPlugins`), never in the container.
 7. **`ai-brain/README.md` is mandatory** and carries: the container table
-   (`| Carpeta | Qué es | Git |`), the doc map, the symlink setup line, a status line
+   (`| Folder | What it is | Git |`), the doc map, the symlink setup line, a status line
    pointing at the task tracker, and disambiguation against sibling
    projects/businesses.
 8. **The logbook commits in `ai-brain/`**, not in code MRs: closing a wave touches two
