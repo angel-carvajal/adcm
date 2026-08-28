@@ -118,6 +118,13 @@ with HTTP Range support or mobile video dies; served PDF; report); (b) ALWAYS th
 project's canonical artifacts from `{{docs_dir}}/artifacts.json` — republished to
 their SAME URL first if their HTML changed (Artifact tool with `url`, read the live
 version before publishing; a flipped badge without a republish is a stale link);
-(c) repo paths and commit hashes, one line each — reference, not delivery. Then
+(c) repo paths and commit hashes, one line each — reference, not delivery.
+FORMAT: every link is a plain Markdown bullet `- [emoji Title](url)` — never inside
+a code fence, backticks, or 4-space indentation ({{owner}} taps these on a phone;
+code-formatted links are dead text). The raw URL inside the Markdown link keeps
+Claude Code's quick-access footer badges working too. MEDIA AT THE END: send
+screenshots/photos/videos (SendUserFile) at the very end of the close — narrative
+first, then the files, then a SHORT final message that is just the links block, so
+{{owner}} sees media + links on a phone without scrolling back up. Then
 list the pending DoD-human marking those tasks blocked until {{owner}} confirms:
 - {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}
