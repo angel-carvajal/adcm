@@ -31,7 +31,9 @@ doc-sync ritual refreshes later waves' manifests AND delta-refreshes the project
 context skill, so the plan and the code map never go stale — and the close message
 ends with a links block: the wave's viewable result plus the project's canonical
 artifacts (registry `artifacts.json`, republished to the same URL whenever their HTML
-changes; a Stop hook, `templates/artifact-guard.py`, enforces both), never bare repo paths.
+changes; a Stop hook, `templates/artifact-guard.py`, enforces both), never bare repo
+paths — links as tappable Markdown bullets (never code-formatted), with media proof
+sent at the very end so the owner sees files + links on a phone without scrolling.
 
 ## What it generates
 

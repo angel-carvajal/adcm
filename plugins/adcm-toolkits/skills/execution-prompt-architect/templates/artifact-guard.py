@@ -232,7 +232,9 @@ def check(hook_input):
 
 
 def fmt_link(a):
-    return f"{a.get('favicon', '🔗')} {a.get('title') or a['file']}: {a['url']}"
+    # Link Markdown clickeable (el owner lo abre desde el cel); la URL cruda queda
+    # dentro del link, así los footer badges de Claude Code también lo detectan.
+    return f"[{a.get('favicon', '🔗')} {a.get('title') or a['file']}]({a['url']})"
 
 
 def safe_rel(path):
@@ -262,9 +264,14 @@ def main():
             lines.append("  Antes de publicar, lee la versión viva (Artifact action=read con esa url) — el publish exige haberla visto.")
         if links_missing:
             for mod, required, missing in links_missing:
-                lines.append(f"Falta el BLOQUE DE LINKS al final del mensaje (módulo {safe_rel(mod)}). Pégalo tal cual, al final:")
+                lines.append(
+                    f"Falta el BLOQUE DE LINKS al final del mensaje (módulo {safe_rel(mod)}). "
+                    "Pégalo tal cual, al final, como lista Markdown plana — NUNCA dentro de un "
+                    "bloque de código, backticks ni sangría de 4 espacios (en el cel eso se ve "
+                    "como código muerto, no clickeable):"
+                )
                 for a in required:
-                    lines.append(f"  - {fmt_link(a)}")
+                    lines.append(f"- {fmt_link(a)}")
         lines.append("Corrige lo anterior (republica y/o agrega el bloque de links) y vuelve a cerrar.")
         reason = "\n".join(lines)
 

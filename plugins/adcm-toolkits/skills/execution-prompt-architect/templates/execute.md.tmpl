@@ -111,8 +111,18 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    report); (b) ALWAYS the project's canonical artifacts from
    `{{docs_dir}}/artifacts.json` (plans, prompts, mockups…) — even when this wave
    rendered nothing new; (c) repo paths and commit hashes, one line each —
-   reference, not delivery. The `artifact-guard` Stop hook blocks the close when the
-   block is missing.
+   reference, not delivery.
+   **Format — links must be TAPPABLE on a phone**: each link is a plain Markdown
+   bullet `- [emoji Title](url)` — NEVER inside a code fence, inline backticks, or
+   4-space indentation ({{owner}} reads closes on a phone, where code-formatted
+   links render as dead text). The raw URL living inside the Markdown link also
+   keeps Claude Code's quick-access footer badges (below the mode indicator)
+   working — both surfaces, one format.
+   **Media at the END**: screenshots/photos/videos of the result (SendUserFile) are
+   presented at the very end of the close — long narrative first, then the files,
+   then a SHORT final message that is just the links block (+ pending DoD-human).
+   On a phone {{owner}} must see the media and links without scrolling back up.
+   The `artifact-guard` Stop hook blocks the close when the block is missing.
 6. **Project context skill — DELTA refresh**: with the logbook's files-touched list,
    update only the affected references of `{{project_context_skill}}` (usage-map
    consumer counts, folder inventories, entry hints if new surfaces were born) and
