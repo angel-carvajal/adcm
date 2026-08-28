@@ -236,14 +236,18 @@ the Step 1 project name as `{{project_name}}`.
 `prompts.html`, mockups — gets published as a claude.ai Artifact).** Record every
 published file in `{{docs_dir}}/artifacts.json` (`{"close_markers": ["task.md",
 "execute.md", "detailed-plan.md"], "artifacts": [{"file": "<path relative to docs
-dir>", "url": "<canonical artifact URL>", "title": …, "favicon": …}]}`): it is the
+dir>", "url": "<canonical artifact URL>", "title": …, "favicon": …, "in_close_block":
+true}]}`; `in_close_block` is optional — set it `false` to keep an artifact out of the
+mandatory links block): it is the
 single source of truth for the URLs — sessions republish to the SAME URL when the
 HTML changes and every close message ends with these links (execute.md §2b steps 5
 and 7). Then install the deterministic guard: copy `templates/artifact-guard.py` to
 the owner's Claude profile (e.g. `~/.claude/hooks/artifact-guard.py`) and register
 it as a `Stop` hook in the profile's `settings.json` (`{"hooks": {"Stop": [{"matcher":
 "", "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/artifact-guard.py",
-"timeout": 20}]}]}}`). The hook walks up from cwd to find the registry, blocks the
+"timeout": 20}]}]}}`). The hook walks up from cwd looking for `ai-brain/artifacts.json`
+or `ai/ai-brain/artifacts.json` — the registry only enforces when the docs dir carries
+one of those names; any other layout leaves the hook as a silent no-op. It blocks the
 close while a registered artifact changed on disk without a later republish, and
 blocks it when the final message lacks the module's links after a doc-sync. No
 registry ⇒ the hook is a no-op, so it is safe profile-wide. A manual step that must
