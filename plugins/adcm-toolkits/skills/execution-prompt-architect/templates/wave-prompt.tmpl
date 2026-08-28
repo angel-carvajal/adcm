@@ -111,11 +111,13 @@ files touched. The doc-sync ENDS with `git -C {{docs_dir}} add -A && git commit 
 "docs({{wave}}): …" && git push` — `{{docs_dir}}` is its own NESTED git repo (the
 harness reports the container as "not a git repo": don't believe it); an unpushed
 logbook does not exist for the next session.
-Close the delivery message with VIEWABLE WEB LINKS, no filler: if the deliverable
-renders (site, page, report, artifact), the FIRST item is a clickable URL to SEE it —
-start the preview server yourself if none is running (one that supports HTTP Range,
-or mobile video dies), and use the LAN IP (not 127.0.0.1) so {{owner}} can open it
-from a phone. Repo paths and commit hashes go after, one line each; they are
-reference, not the visual delivery. Then
+END the delivery message with a LINKS BLOCK, no filler — in this order: (a) the
+wave's viewable result if it renders (site/page via the LAN IP, not 127.0.0.1, so
+{{owner}} can open it from a phone — start the preview server yourself if none runs,
+with HTTP Range support or mobile video dies; served PDF; report); (b) ALWAYS the
+project's canonical artifacts from `{{docs_dir}}/artifacts.json` — republished to
+their SAME URL first if their HTML changed (Artifact tool with `url`, read the live
+version before publishing; a flipped badge without a republish is a stale link);
+(c) repo paths and commit hashes, one line each — reference, not delivery. Then
 list the pending DoD-human marking those tasks blocked until {{owner}} confirms:
 - {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}
