@@ -22,7 +22,7 @@ Formato de artifacts.json (paths relativos a su carpeta):
 
 Instalación (user settings, event Stop):
   {"hooks": {"Stop": [{"matcher": "", "hooks": [{"type": "command",
-     "command": "python3 ~/.claude-personal/hooks/artifact-guard.py", "timeout": 20}]}]}}
+     "command": "python3 ~/.claude/hooks/artifact-guard.py", "timeout": 20}]}]}}
 
 Fuente canónica: plugin adcm-toolkits → skills/execution-prompt-architect/templates/artifact-guard.py
 """
