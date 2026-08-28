@@ -167,7 +167,7 @@ the absolute code-repo path to start the session in). Use the templates in `temp
 | `detailed-plan.md` | `templates/detailed-plan.md.tmpl` | WHAT: conventions + base DoD, then every task — ID `T-<WAVE>-<n>`, title, repo(s), owner, technical description, **Scope manifest (the Step 3 investigation, structured: Modify/Create with why, Read-first, Impact census, Census freshness check, Symbol notes)**, DoD checkboxes, depends-on/blocks |
 | `timeframe-plan.md` | `templates/timeframe-plan.md.tmpl` | WHEN: schedule summary (start/target/dedication/buffer/estimated close), per-wave schedule table (sessions, calendar days, depends on, parallel with, estimated week), critical path, calendarized milestones + DoD-human, week-by-week table, calendar assumptions & risks — built from Step 3's estimates + Step 4's answers |
 | `task.md` | `templates/task.md.tmpl` | STATE: wave map table (wave, tasks, gate ⚠, skills to load, base branch, depends on) + weekly burn + logbook |
-| `execute.md` | `templates/execute.md.tmpl` | HOW: §1 principles · §2 canonical prompt template · §2b doc-sync at close (logbook + status flips + later-wave manifest refresh + viewable-links delivery message + delta refresh of the project context skill) · §3 merge/delivery policy · §4 checkpoint/resume · §5 wave map · §6 attack checklists per gate · §7 instantiated copy-paste prompts per wave |
+| `execute.md` | `templates/execute.md.tmpl` | HOW: §1 principles · §2 canonical prompt template · §2b doc-sync at close (logbook + status flips + later-wave manifest refresh + artifact republish to the same URL + links-block delivery message + delta refresh of the project context skill) · §3 merge/delivery policy · §4 checkpoint/resume · §5 wave map · §6 attack checklists per gate · §7 instantiated copy-paste prompts per wave |
 
 Cross-link them: executive-proposal → master-plan → detailed-plan →
 timeframe-plan → task.md → execute.md. Every fact in
@@ -232,6 +232,23 @@ stream colors, today marker, milestone diamonds, legend) with the week-by-week
 table below. Fill the content placeholders from the four markdown documents, using
 the Step 1 project name as `{{project_name}}`.
 
+**Published artifacts registry + guard (whenever any generated HTML — `plans.html`,
+`prompts.html`, mockups — gets published as a claude.ai Artifact).** Record every
+published file in `{{docs_dir}}/artifacts.json` (`{"close_markers": ["task.md",
+"execute.md", "detailed-plan.md"], "artifacts": [{"file": "<path relative to docs
+dir>", "url": "<canonical artifact URL>", "title": …, "favicon": …}]}`): it is the
+single source of truth for the URLs — sessions republish to the SAME URL when the
+HTML changes and every close message ends with these links (execute.md §2b steps 5
+and 7). Then install the deterministic guard: copy `templates/artifact-guard.py` to
+the owner's Claude profile (e.g. `~/.claude/hooks/artifact-guard.py`) and register
+it as a `Stop` hook in the profile's `settings.json` (`{"hooks": {"Stop": [{"matcher":
+"", "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/artifact-guard.py",
+"timeout": 20}]}]}}`). The hook walks up from cwd to find the registry, blocks the
+close while a registered artifact changed on disk without a later republish, and
+blocks it when the final message lacks the module's links after a doc-sync. No
+registry ⇒ the hook is a no-op, so it is safe profile-wide. A manual step that must
+happen every session is not a note — it is a hook.
+
 ## Hard rules
 
 - **Every wave prompt is self-contained — governance non-negotiable.** The executing
@@ -257,3 +274,4 @@ the Step 1 project name as `{{project_name}}`.
   returns/guard clauses, extract named helpers, flatten ternaries, deep HTML out of the
   formatter). The adversarial verification on ⚠gate waves may flag indentation hell as a
   maintainability finding.
+- **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; it is republished to that SAME URL whenever it changes, and every close message ends with the links block (§2b steps 5/7). Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered.

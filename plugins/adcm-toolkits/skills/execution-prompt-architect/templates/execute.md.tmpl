@@ -103,19 +103,31 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    wave changed, refresh its file lists and census expected counts.
 4. **`execute.md` §7** — regenerate the prompt of any later wave whose manifest
    changed in (3): its `# SCOPE` must match detailed-plan.
-5. **Delivery message — viewable web links, no filler**: the close message to
-   {{owner}} leads with clickable URL(s) to SEE the rendered result (site, page,
-   report, artifact). If no preview server is running, start one (with HTTP Range
-   support — without it, video is dead on iOS) and hand the LAN-IP URL so it opens
-   from a phone; `127.0.0.1` does not count. Repo paths and commit hashes go after,
-   one line each — reference, not the visual delivery.
+5. **Delivery message — ENDS with a links block, no filler**: the last paragraph of
+   the close message to {{owner}} is a compact links block, in this order: (a) the
+   wave's viewable result when it renders (site/page via the LAN-IP URL so it opens
+   from a phone — `127.0.0.1` does not count; start the preview server yourself if
+   none runs, with HTTP Range support or video is dead on iOS; a served PDF; a
+   report); (b) ALWAYS the project's canonical artifacts from
+   `{{docs_dir}}/artifacts.json` (plans, prompts, mockups…) — even when this wave
+   rendered nothing new; (c) repo paths and commit hashes, one line each —
+   reference, not delivery. The `artifact-guard` Stop hook blocks the close when the
+   block is missing.
 6. **Project context skill — DELTA refresh**: with the logbook's files-touched list,
    update only the affected references of `{{project_context_skill}}` (usage-map
    consumer counts, folder inventories, entry hints if new surfaces were born) and
    bump their `last_scanned`. Use the generator's incremental mode
    (`scan_project.py --update <paths>`) when available. Every closed wave leaves the
    brain AND the code map fresh — freshness never depends on manual re-scans.
-7. {{master-plan.md execution-state block / plans.html, if the project keeps them}}
+7. **{{master-plan.md execution-state block / plans.html / prompts.html}} — regenerate
+   AND REPUBLISH**: flip the row/badge in the file, then, in the SAME session,
+   republish every HTML registered in `{{docs_dir}}/artifacts.json` that changed on
+   disk to its SAME URL (Artifact tool with `url`; read the live version first — the
+   publish requires it). A badge flipped on disk without a republish leaves the
+   shared link stale (lesson learned: a wave closed with the published plan still
+   showing "pending"). New artifact ⇒ new row in `artifacts.json` in the same
+   session. The `artifact-guard` Stop hook blocks the close while a registered
+   artifact is stale.
 8. {{If this plan family coexists with an INCUMBENT protocol (the project already
    keeps its own live TASKS/EXECUTION docs): state explicitly which docs THIS family
    owns and which belong to the incumbent — never write to the incumbent's docs from

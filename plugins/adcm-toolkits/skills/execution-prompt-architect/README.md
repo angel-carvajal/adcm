@@ -29,7 +29,9 @@ cheap census command the executing session runs FIRST as a freshness guard. Clea
 sessions execute in auto mode without re-analyzing the project; at every wave close a
 doc-sync ritual refreshes later waves' manifests AND delta-refreshes the project
 context skill, so the plan and the code map never go stale — and the close message
-leads with viewable web links to the rendered result, not repo paths.
+ends with a links block: the wave's viewable result plus the project's canonical
+artifacts (registry `artifacts.json`, republished to the same URL whenever their HTML
+changes; a Stop hook, `templates/artifact-guard.py`, enforces both), never bare repo paths.
 
 ## What it generates
 
