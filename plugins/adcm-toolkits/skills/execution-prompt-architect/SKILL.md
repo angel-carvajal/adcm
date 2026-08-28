@@ -246,8 +246,9 @@ the owner's Claude profile (e.g. `~/.claude/hooks/artifact-guard.py`) and regist
 it as a `Stop` hook in the profile's `settings.json` (`{"hooks": {"Stop": [{"matcher":
 "", "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/artifact-guard.py",
 "timeout": 20}]}]}}`). The hook walks up from cwd looking for `ai-brain/artifacts.json`
-or `ai/ai-brain/artifacts.json` — the registry only enforces when the docs dir carries
-one of those names; any other layout leaves the hook as a silent no-op. It blocks the
+or `ai/ai-brain/artifacts.json` (never above the user's home dir) — the registry only
+enforces when the docs dir carries one of those names; any other layout leaves the
+hook as a silent no-op. It blocks the
 close while a registered artifact changed on disk without a later republish, and
 blocks it when the final message lacks the module's links after a doc-sync. No
 registry ⇒ the hook is a no-op, so it is safe profile-wide. A manual step that must
