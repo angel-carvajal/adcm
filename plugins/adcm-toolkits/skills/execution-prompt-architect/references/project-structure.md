@@ -9,11 +9,13 @@ this is the default, applied without asking.
 
 ```
 ~/<project>/                 ← CONTAINER — NOT a git repo, NO loose files at this level
-├── ai-brain/                ← own git repo — ALL documentation lives here:
-│   ├── README.md            ←   documents THIS whole container layout (versioned here)
-│   ├── docs/                ←   product docs (spec, plan, ADRs/decisions, backlog, …)
-│   └── …                    ←   the six execution documents + visuals (plans/prompts html)
-├── ai/                      ← plain folder (no git of its own)
+├── ai/                      ← EVERYTHING AI lives here (plain folder, no git of its own)
+│   ├── ai-brain/            ← own git repo — ALL documentation lives here:
+│   │   ├── README.md        ←   documents THIS whole container layout (versioned here)
+│   │   ├── docs/            ←   product docs (spec, plan, ADRs/decisions, backlog, …)
+│   │   ├── modules/<mod>/   ←   lazy per-module doc (its own six-doc family) when the
+│   │   │                        container hosts several modules/initiatives
+│   │   └── …                ←   the six execution documents + visuals (plans/prompts html)
 │   ├── <slug>-{ai|ia}-admin/    ← own git repo — private plugin marketplace (business context, council)
 │   └── <slug>-{ai|ia}-common/   ← own git repo — operational/engineering plugins (optional)
 └── projects/                ← plain grouping folder (no git of its own)
@@ -32,15 +34,17 @@ grouping-folder or container level.**
    would be unversioned; the layout documentation lives in `ai-brain/README.md`, and
    the project's `code-project-context-*` skill (lazy-loading) is what routes sessions
    through the structure.
-2. **ALL documentation lives in `ai-brain/`** — execution documents, product
+2. **ALL documentation lives in `ai/ai-brain/`** — execution documents, product
    spec/plan/decisions/backlog, visuals, logbook. Code repos carry only code plus
    their operational `CLAUDE.md`/`README.md`; those reference the docs via
    `ai-brain/…` relative paths.
-3. **Every major subfolder is its own git repo** (local-only at first; remotes live in
+3. **Every major repo folder is its own git repo** (`ai/` and `projects/` themselves are plain grouping folders) (local-only at first; remotes live in
    a per-project GitLab/GitHub group when they exist, marketplaces under an `ai/` or
    `ia/` subgroup).
 4. **Each engineering project gets a gitignored symlink to the brain**:
-   `ln -s ../../ai-brain ai-brain` from the project root (depth matches nesting). This
+   `ln -s ../../ai/ai-brain ai-brain` from the project root — or, when the project is a
+   MODULE with lazy doc, `ln -s ../../ai/ai-brain/modules/<mod> ai-brain` (depth
+   matches nesting). This
    keeps relative paths (`ai-brain/execute.md`, `ai-brain/docs/SPEC.md`) resolving
    locally in build sessions, while the brain versions independently. Doc changes made
    through the symlink are committed in the **ai-brain repo**, never in the code repo.

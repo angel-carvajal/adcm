@@ -86,16 +86,17 @@ code cannot answer (who's on the team, hard constraints, what is out of scope �
 deadlines and dedication are asked later in Step 4, don't ask twice).
 
 **Where the documents go — read `references/project-structure.md` first.** Default:
-`ai-brain/` **at the CONTAINER level** — the project container
-`{ai-brain, ai, projects}` is never a git repo; `ai-brain/` is its own repo and holds
-ALL documentation (execution docs AND the product's spec/plan/decisions/backlog under
-`ai-brain/docs/`); the code lives under `projects/` (plain grouping folder, one git
-repo PER project) and each project gets a gitignored symlink
-`ai-brain -> ../../ai-brain` so relative paths resolve in build sessions. NEVER place
-`ai-brain/` or product docs inside a code repo's git; NEVER `git init` the container
-or the `projects/` folder; the container layout is documented in `ai-brain/README.md`
-(generate it too). Confirm with the user only when their existing layout visibly
-differs. ⚠ Because `ai-brain/` is NESTED, the harness/environment header reports the
+**`ai/ai-brain/` at the CONTAINER level** — the container `{ai, projects}` is never a
+git repo; EVERYTHING AI lives under `ai/` (`ai/ai-brain` own repo with ALL
+documentation — execution docs, the product's spec/plan/decisions/backlog under
+`docs/`, and per-module lazy doc under `modules/<mod>/` — plus the plugin
+marketplaces); the code lives under `projects/` (plain grouping folder, one git repo
+PER project) and each project gets a gitignored symlink `ai-brain ->
+../../ai/ai-brain` (or `.../modules/<mod>` for a module) so relative paths resolve in
+build sessions. NEVER place `ai-brain/` or product docs inside a code repo's git;
+NEVER `git init` the container or the grouping folders; the container layout is
+documented in `ai/ai-brain/README.md` (generate it too). Confirm with the user only
+when their existing layout visibly differs. ⚠ Because `ai-brain/` is NESTED, the harness/environment header reports the
 container cwd as "not a git repo" — that is the container, not `ai-brain/`: sessions
 must verify with `git -C ai-brain status` and every doc-sync ends with commit+push
 (execute.md template §2b step 9).
