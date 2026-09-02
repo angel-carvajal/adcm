@@ -6,7 +6,8 @@ Garantiza dos cosas cada vez que un turno intenta cerrar:
   1. FRESCURA — todo HTML registrado en un `artifacts.json` que cambió en disco durante
      la sesión fue republicado a su MISMA URL (tool Artifact con `url`) DESPUÉS del
      último cambio. Si no, bloquea el cierre y dice exactamente qué publicar.
-  2. LINKS AL CIERRE — si el turno publicó un artifact, cambió un HTML registrado o tocó
+  2. LINKS AL CIERRE (v3: también FORMATO y POSICIÓN — links Markdown, uno por línea,
+     como ÚLTIMAS líneas del mensaje; nada después del último link) — si el turno publicó un artifact, cambió un HTML registrado o tocó
      un doc de cierre (`close_markers`: task.md / execute.md / detailed-plan.md) del
      módulo, el texto del asistente en el turno debe incluir las URLs canónicas de ese
      módulo (la convención las pone en el bloque final). Si faltan, bloquea el cierre y
@@ -31,6 +32,7 @@ Fuente canónica: plugin adcm-toolkits → skills/execution-prompt-architect/tem
 """
 import json
 import os
+import re
 import sys
 import time
 
@@ -227,7 +229,11 @@ def check(hook_input):
             required = [a for a in arts if a.get("in_close_block", True)]
             missing = [a for a in required if a["url"] not in turn_text]
             if missing:
-                links_missing.append((mod, required, missing))
+                links_missing.append((mod, required, missing, []))
+                continue
+            probs = links_format_problems(turn_text, required)
+            if probs:
+                links_missing.append((mod, required, [], probs))
     return stale, links_missing
 
 
@@ -235,6 +241,41 @@ def fmt_link(a):
     # Link Markdown clickeable (el owner lo abre desde el cel); la URL cruda queda
     # dentro del link, así los footer badges de Claude Code también lo detectan.
     return f"[{a.get('favicon', '🔗')} {a.get('title') or a['file']}]({a['url']})"
+
+
+LINK_LINE = re.compile(r"^\s*(?:[-*•]\s*)?\[[^\]]+\]\(\S+\)\s*$")
+
+
+def links_format_problems(turn_text, required):
+    """Formato del bloque final (Angel, 28-ago-2026): los links son las ÚLTIMAS líneas del
+    mensaje, uno por línea como link Markdown `- [emoji Título](url)`; nada después del
+    último link; nunca varias URLs en una línea. Se evalúa la COLA del texto (el bloque =
+    corrida de líneas-link que termina en la última línea con una URL requerida), así una
+    mención en prosa más arriba no cuenta ni estorba. Devuelve lista de problemas."""
+    urls = [a["url"] for a in required if a.get("url")]
+    lines = [l.rstrip() for l in turn_text.rstrip().split("\n")]
+    hits = [i for i, l in enumerate(lines) if any(u in l for u in urls)]
+    if not hits:
+        return []
+    last = hits[-1]
+    probs = []
+    after = [l.strip() for l in lines[last + 1:] if l.strip()]
+    if after:
+        probs.append("hay texto DESPUÉS del último link (nada va después): " + " | ".join(a[:60] for a in after[:2]))
+    j = last
+    while j - 1 >= 0 and (LINK_LINE.match(lines[j - 1]) or not lines[j - 1].strip()):
+        j -= 1
+    block = lines[j:last + 1]
+    for l in block:
+        if l.strip() and not LINK_LINE.match(l):
+            probs.append("línea del bloque que no es un link Markdown `- [Título](url)`: " + l.strip()[:80])
+        if sum(l.count(u) for u in urls) > 1:
+            probs.append("varios links en la misma línea (uno por línea): " + l.strip()[:80])
+    block_text = "\n".join(block)
+    for a in required:
+        if a["url"] not in block_text:
+            probs.append(f"{fmt_link(a)} no está en el bloque final (aparece más arriba, en prosa)")
+    return probs
 
 
 def safe_rel(path):
@@ -263,7 +304,15 @@ def main():
                 lines.append(f"  • {a['file']} → Artifact(file_path=\"{abs_file}\", url=\"{a['url']}\")")
             lines.append("  Antes de publicar, lee la versión viva (Artifact action=read con esa url) — el publish exige haberla visto.")
         if links_missing:
-            for mod, required, missing in links_missing:
+            for mod, required, missing, probs in links_missing:
+                if probs:
+                    lines.append(f"El BLOQUE DE LINKS existe pero NO cumple formato/posición (módulo {safe_rel(mod)}):")
+                    for pr in probs:
+                        lines.append(f"  • {pr}")
+                    lines.append("Regla: las ÚLTIMAS líneas del mensaje son la lista de links, uno por línea, tocables en el cel; rutas/hashes ARRIBA. Reescribe el cierre así:")
+                    for a in required:
+                        lines.append(f"- {fmt_link(a)}")
+                    continue
                 lines.append(
                     f"Falta el BLOQUE DE LINKS al final del mensaje (módulo {safe_rel(mod)}). "
                     "Pégalo tal cual, al final, como lista Markdown plana — NUNCA dentro de un "
