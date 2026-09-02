@@ -112,8 +112,11 @@ files touched. The doc-sync ENDS with `git -C {{docs_dir}} add -A && git commit 
 harness reports the container as "not a git repo": don't believe it); an unpushed
 logbook does not exist for the next session.
 END the delivery message with a LINKS BLOCK, no filler — in this order: (a) the
-wave's viewable result if it renders (site/page via the LAN IP, not 127.0.0.1, so
-{{owner}} can open it from a phone — start the preview server yourself if none runs,
+wave's viewable result if it renders, ALWAYS AS TWO LINES: `localhost` FIRST
+({{owner}} validates from iTerm on the Mac) and the LAN IP after it (so it also opens
+from a phone). Never one without the other — the LAN IP changes with the network and
+arrives dead, `localhost` does not. Read the IP at close time, bind to `0.0.0.0` and
+`curl` both before handing them over; start the preview server yourself if none runs,
 with HTTP Range support or mobile video dies; served PDF; report); (b) ALWAYS the
 project's canonical artifacts from `{{docs_dir}}/artifacts.json` — republished to
 their SAME URL first if their HTML changed (Artifact tool with `url`, read the live

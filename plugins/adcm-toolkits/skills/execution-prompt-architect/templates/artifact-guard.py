@@ -7,7 +7,9 @@ Garantiza dos cosas cada vez que un turno intenta cerrar:
      la sesión fue republicado a su MISMA URL (tool Artifact con `url`) DESPUÉS del
      último cambio. Si no, bloquea el cierre y dice exactamente qué publicar.
   2. LINKS AL CIERRE (v3: también FORMATO y POSICIÓN — links Markdown, uno por línea,
-     como ÚLTIMAS líneas del mensaje; nada después del último link) — si el turno publicó un artifact, cambió un HTML registrado o tocó
+     como ÚLTIMAS líneas del mensaje; nada después del último link · v4: si el cierre
+     entrega una URL con IP de LAN, la MISMA app tiene que venir también como
+     `localhost`, porque desde iTerm en la Mac esa es la que el owner usa para validar) — si el turno publicó un artifact, cambió un HTML registrado o tocó
      un doc de cierre (`close_markers`: task.md / execute.md / detailed-plan.md) del
      módulo, el texto del asistente en el turno debe incluir las URLs canónicas de ese
      módulo (la convención las pone en el bloque final). Si faltan, bloquea el cierre y
@@ -232,6 +234,7 @@ def check(hook_input):
                 links_missing.append((mod, required, missing, []))
                 continue
             probs = links_format_problems(turn_text, required)
+            probs += local_link_problems(turn_text)
             if probs:
                 links_missing.append((mod, required, [], probs))
     return stale, links_missing
@@ -276,6 +279,35 @@ def links_format_problems(turn_text, required):
         if a["url"] not in block_text:
             probs.append(f"{fmt_link(a)} no está en el bloque final (aparece más arriba, en prosa)")
     return probs
+
+
+# Rangos privados de la RFC 1918: lo que sale de `ipconfig getifaddr en0` en casa.
+LAN_URL = re.compile(
+    r"https?://(?:"
+    r"10(?:\.\d{1,3}){3}"
+    r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}"
+    r"|192\.168(?:\.\d{1,3}){2}"
+    r")(?::(?P<port>\d{1,5}))?"
+)
+LOCAL_URL = re.compile(r"https?://(?:localhost|127\.0\.0\.1)(?::(?P<port>\d{1,5}))?")
+
+
+def local_link_problems(turn_text):
+    """Regla de Angel (1-sep-2026): un link con IP de LAN sirve para abrirlo desde el cel,
+    pero él valida desde iTerm en la Mac — ahí la que funciona es `localhost`. Nunca una
+    sin la otra. Además la IP de LAN caduca (cambia de red y el link llega muerto), así
+    que `localhost` es la que siempre sigue viva. Se exige por PUERTO: si entregas
+    192.168.x.y:3000, tiene que estar también localhost:3000."""
+    lan = {m.group("port") or "80" for m in LAN_URL.finditer(turn_text)}
+    if not lan:
+        return []
+    local = {m.group("port") or "80" for m in LOCAL_URL.finditer(turn_text)}
+    return [
+        "el puerto {p} se entregó SOLO con IP de LAN: falta su gemelo "
+        "`http://localhost:{p}/` en el mismo bloque (Angel valida desde iTerm en la Mac; "
+        "la IP de LAN además caduca al cambiar de red)".format(p=p)
+        for p in sorted(lan - local)
+    ]
 
 
 def safe_rel(path):
