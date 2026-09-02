@@ -105,10 +105,14 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    changed in (3): its `# SCOPE` must match detailed-plan.
 5. **Delivery message — ENDS with a links block, no filler**: the last paragraph of
    the close message to {{owner}} is a compact links block, in this order: (a) the
-   wave's viewable result when it renders (site/page via the LAN-IP URL so it opens
-   from a phone — `127.0.0.1` does not count; start the preview server yourself if
-   none runs, with HTTP Range support or video is dead on iOS; a served PDF; a
-   report); (b) ALWAYS the project's canonical artifacts from
+   wave's viewable result when it renders, ALWAYS AS TWO LINES: the `localhost` URL
+   FIRST ({{owner}} validates from iTerm on the Mac) and the LAN-IP URL after it (so
+   it also opens from a phone). Never one without the other, and never the LAN IP
+   alone: it changes with the network, so a link handed over yesterday arrives dead
+   while `localhost` keeps working. Read the IP at close time (`ipconfig getifaddr
+   en0`), bind the server to `0.0.0.0`, and `curl` BOTH URLs before handing them
+   over. Start the preview server yourself if none runs, with HTTP Range support or
+   video is dead on iOS; same for a served PDF or report; (b) ALWAYS the project's canonical artifacts from
    `{{docs_dir}}/artifacts.json` (plans, prompts, mockups…) — even when this wave
    rendered nothing new; (c) repo paths and commit hashes, one line each —
    reference, not delivery.
