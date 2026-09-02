@@ -34,6 +34,10 @@ execute.md.
 5. **Inviolable decisions** (no session may contradict them — from
    `master-plan.md` §8): {{list_them_inline}}.
 6. **No hardcoded dates**: the logbook uses the date of the day of execution.
+7. **Agent budget: 5 per wave session** (implementers + adversarial verifier +
+   advisory reviewer), in every effort level — ultracode changes the orchestration
+   (one Workflow + adversarial cross-check), never the count. Exceeding it is a
+   protocol violation; the logbook records `agents used: n/5`.
 
 ## 2. Canonical wave-prompt template
 
@@ -78,8 +82,11 @@ helper (Playwright/Puppeteer + the system browser); capture desktop (≥1280) AN
 if i18n. Verify width/responsive (not "compacted"), i18n, no overlaps, design-system fonts/colors.
 
 # WORKFLOW (fan-out)
-<wave-specific parallelization: sub-agents with EXCLUSIVE ownership of disjoint
-files/folders; on ⚠gates: adversarial verification with the attack checklist from §6>
+AGENT BUDGET: max 5 sub-agents in this session TOTAL (verifier included); in
+ultracode, ONE Workflow with ≤5 agent() calls, no loops or panels.
+<wave-specific parallelization: ≤4 (⚠gate) / ≤5 sub-agents with EXCLUSIVE ownership
+of disjoint files/folders; on ⚠gates: adversarial verification by ONE sub-agent with
+the attack checklist from §6>
 
 # GUARDRAILS & CLOSE
 Touch nothing outside the tasks' scope. No secrets in code/commits. When the DoD-auto
@@ -95,7 +102,7 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
 
 1. **`task.md`** — logbook entry with the extended schema (date of execution ·
    branch/MR · tasks closed · **files touched** · **manifest drift** · notes · wall
-   clock) AND the wave-map status flip.
+   clock · **agents used n/5**) AND the wave-map status flip.
 2. **`execute.md` §7** — this wave's prompt header flip (`☐` → `✅ DONE (date)` /
    `🔄` / `⛔`).
 3. **`detailed-plan.md`** — mark the tasks done; update their Scope manifests with

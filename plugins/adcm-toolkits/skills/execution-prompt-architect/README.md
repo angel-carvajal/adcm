@@ -5,11 +5,12 @@ execution brain of a project: executive proposal, master plan, detailed task pla
 timeframe plan (calendar schedule), task tracker, and an execution protocol with
 ready-to-run, copy-paste prompts per wave.
 
-> ⚠ **High token consumption — but the result is the best possible plan.** This skill
-> deliberately spends tokens: it fans out analysis sub-agents across your repos,
-> derives a dependency-ordered wave plan, and writes six cross-linked documents plus
-> one fully instantiated prompt per wave. If you want the best output, give it the
-> budget.
+> ⚠ **Deep but bounded.** This skill spends tokens on depth — a bucketed analysis
+> fan-out across your repos, a dependency-ordered wave plan, six cross-linked
+> documents plus one fully instantiated prompt per wave — but never on agent count:
+> **at most 5 sub-agents per analysis phase and per wave session, ultracode
+> included.** Every generated wave prompt carries that budget as a hard limit and
+> the logbook records the agents actually used.
 
 ## The principle
 
@@ -79,10 +80,11 @@ analysis is faster, cheaper and far more precise.
 - **Running this skill / the analysis**: any model works. Recommended efforts —
   fable: high · opus: ultracode · sonnet: max · haiku: max.
 - **Executing the generated wave prompts**: they are tuned for **Fable at high
-  effort** (ultracode highly recommended for the absolute best result, but high
-  consumption), **Opus 4.8 in ultracode**, or **Sonnet at max effort**. Every prompt
+  effort**, **Opus 4.8 in ultracode**, or **Sonnet at max effort**. Every prompt
   includes a `WORKFLOW (fan-out)` section, so parallelism happens even without
-  ultracode enabled.
+  ultracode enabled. Ultracode changes the orchestration (one Workflow + an
+  adversarial cross-check), not the count: the 5-agent budget applies in every
+  effort level.
 
 ## Requirements
 

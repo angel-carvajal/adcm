@@ -23,8 +23,9 @@ description: >
 compatibility: >
   Works with any Claude model. In Claude Code the code analysis fans out to
   sub-agents using the model/effort the user picks; in environments without
-  sub-agents it degrades to sequential analysis. Generated prompts are tuned for
-  Fable at high effort but run on any model.
+  sub-agents it degrades to sequential analysis. Sub-agent fan-out is capped at 5
+  per phase in every effort level, ultracode included. Generated prompts are tuned
+  for Fable at high effort but run on any model.
 ---
 
 # Execution Prompt Architect
@@ -64,8 +65,10 @@ Ask the user (one AskUserQuestion call, three questions):
    - haiku → **max** recommended
 
    The user is free to pick any level. `ultracode` means: orchestrate the analysis
-   with the Workflow tool (multi-agent fan-out + adversarial cross-checks); other
-   levels map to sub-agent thoroughness.
+   with ONE Workflow script of at most 5 `agent()` calls (structured outputs + one
+   adversarial cross-check); other levels map to sub-agent thoroughness. **No effort
+   level raises the 5-agent cap** (see "Agent budget" in Hard rules) — ultracode
+   changes HOW the analysis is orchestrated, never how many agents it spends.
 
 Then check whether a `code-project-context-*` skill for this project is installed:
 
@@ -104,11 +107,18 @@ must verify with `git -C ai-brain status` and every doc-sync ends with commit+pu
 ### Step 3 — Code analysis (fan-out)
 
 Analyze the project with the model/effort from Step 1. Always fan out when the
-environment allows it — even outside ultracode:
+environment allows it — even outside ultracode — but **within the agent budget: at
+most 5 sub-agent invocations for the WHOLE of Step 3** (not per round). The fan-out
+is bucketed, never one-agent-per-item:
 
-- One sub-agent per repo/area: architecture, entry points, conventions, test/CI
-  commands that exist TODAY (these become DoD-auto commands later).
-- One sub-agent per user task, returning a **structured Scope manifest**, not prose:
+- **1 architecture agent** (covers ALL repos — with several repos it receives the
+  full list): architecture, entry points, conventions, test/CI commands that exist
+  TODAY (these become DoD-auto commands later). Skip it when a
+  `code-project-context-*` skill is loaded — the map already exists and the slot is
+  freed.
+- **Up to 3 manifest agents**: group the user's tasks by repo/area into at most 3
+  buckets; each agent returns a **structured Scope manifest** for EVERY task in its
+  bucket, not prose:
   - `Modify:` each file with a 1-line why · `Create:` each new file
   - `Read first:` exemplar files (the pattern to copy)
   - `Impact:` for every shared surface touched, the consumer census — who calls it,
@@ -121,8 +131,30 @@ environment allows it — even outside ultracode:
     `.next`, …) or prefer `rg -l` (respects .gitignore) so local artifacts never
     inflate the count.
   - `Symbol notes:` exact members to delete/preserve/rename when the analysis has them.
-- One risk pass: what can break, what needs an adversarial gate (security, money,
-  data isolation, irreversible migrations).
+- **1 risk agent**: what can break, what needs an adversarial gate (security, money,
+  data isolation, irreversible migrations). In ultracode this is the adversarial
+  cross-check: it receives the consolidated inventory and tries to refute it.
+
+Single round, no amplifiers: loop-until-dry, judge panels, N-refuter panels and
+"completeness critic" agents are **banned** here — each one multiplies the count. If
+a bucket comes back incomplete, the MAIN session fills the gap itself with
+Read/Grep, never with another agent. Consolidation is always done by the main
+session, never delegated. If the project genuinely does not fit (e.g. more than 6
+repos), STOP and ask (AskUserQuestion) whether the user authorizes a larger budget
+for THIS run, showing the planned count — never exceed it silently.
+
+Ultracode reference shape (the whole Step 3 is ONE workflow, ≤5 `agent()` calls):
+
+```js
+// analysis buckets: [architecture?] + ≤3 manifest buckets — 4 agents max
+const buckets = await parallel(BUCKETS.map(b => () =>
+  agent(b.prompt, {label: b.key, phase: 'Analyze', schema: b.schema})))
+const inventory = consolidate(buckets.filter(Boolean))   // plain code, no agent
+// 5th agent: the risk / adversarial pass over the consolidated inventory
+const risk = await agent(riskPrompt(inventory), {phase: 'Risk', schema: RISK})
+log(`agents used: ${BUCKETS.length + 1}/5`)
+return { inventory, risk }
+```
 
 Consolidate into an internal inventory: candidate tasks, each with repo(s),
 technical detail, **its Scope manifest**, verifiable DoD candidates, dependencies,
@@ -189,8 +221,11 @@ Non-negotiable rules:
 3. **WORKFLOW is always present**, even if the executing session has no ultracode:
    spell out exactly what to parallelize with sub-agents/Workflow (disjoint file
    ownership per sub-agent) and, on ⚠gate waves, the mandatory **adversarial
-   verification**: an agent that did NOT implement attacks the diff using that wave's
-   attack checklist from §6.
+   verification**: ONE agent that did NOT implement attacks the diff using that
+   wave's attack checklist from §6. WORKFLOW always opens with the **AGENT BUDGET**
+   line: max 5 sub-agents in the executing session, verifier included — `{{N}}`
+   implementers ≤4 on ⚠gate waves (1 slot reserved for the verifier), ≤5 otherwise.
+   Never emit a WORKFLOW whose agents add up to more than 5.
 4. Loop discipline: implement → verify (run the DoD-auto) → fix → repeat. Max 5
    rounds; 3 attempts on the SAME failure → stop and report. Never degrade tests to
    pass; never mark done what is not done.
@@ -262,9 +297,16 @@ happen every session is not a note — it is a hook.
   executing session has to re-derive file lists with exploratory Glob/Grep, the
   prompt was generated wrong. The census check is the freshness guard: manifests may
   go stale, so prompts verify cheaply FIRST and re-scope only on divergence.
-- High consumption by design: deep fan-out analysis + six documents + one prompt per
-  wave. Do not silently cut corners; if the user wants cheap, they pick a lighter
-  model/effort in Step 1.
+- **Deep by design, bounded by budget — the agent budget is 5.** At most 5
+  sub-agents per analysis phase (Step 3) and at most 5 per executing wave session
+  (implementers + adversarial verifier + advisory reviewer), in EVERY effort level:
+  ultracode changes the orchestration (Workflow + adversarial cross-check), never the
+  count. Exceeding it is a protocol violation; it may only be raised by the user's
+  explicit authorization for that single run, and the logbook records `agents used:
+  n/5`. Depth comes from six documents + one self-contained prompt per wave, not
+  from agent count. Do not silently cut corners either; if the user wants cheap,
+  they pick a lighter model/effort in Step 1 — the cap is a cost lever, not a
+  quality lever.
 - No invented verification: every DoD-auto line must use commands/scripts that exist
   in the repo (or that a task in the plan explicitly creates first).
 - No secrets ever — in documents, prompts, or examples; variable names only.
