@@ -29,15 +29,21 @@ execute.md.
    the task is marked `blocked` with the human checklist rendered at close. It only
    becomes `completed` when {{owner}} confirms.
 4. **Implementers never self-approve at gates.** On ⚠gate waves the loop does NOT
-   close without **adversarial verification**: a sub-agent that did NOT see the
+   close without **adversarial verification**: an `opus`/`sonnet` sub-agent (per the
+   counter in §1.7 — never the executor's own tier) that did NOT see the
    implementation, given only the diff + the DoD + that wave's attack checklist (§6).
 5. **Inviolable decisions** (no session may contradict them — from
    `master-plan.md` §8): {{list_them_inline}}.
 6. **No hardcoded dates**: the logbook uses the date of the day of execution.
-7. **Agent budget: 5 per wave session** (implementers + adversarial verifier +
-   advisory reviewer), in every effort level — ultracode changes the orchestration
-   (one Workflow + adversarial cross-check), never the count. Exceeding it is a
-   protocol violation; the logbook records `agents used: n/5`.
+7. **Agent budget 20 with fixed roles.** The main session (Fable) implements
+   everything itself and never spawns its own tier; sub-agents investigate, audit
+   deliverables, review regression and verify — never implement. Delegated agents
+   1–10 run on `opus`, 11–20 on `sonnet` (one counter per session, `model` always
+   explicit; `SendMessage` to a live agent costs 0). The executor audits what
+   sub-agents deliver (solution · files · considerations), iterates with the same
+   agent ≤5 rounds, then implements. Ultracode changes the orchestration (one
+   Workflow + adversarial cross-check), never roles or count. Exceeding 20 is a
+   protocol violation; the logbook records `agents used: n/20 (opus a · sonnet b)`.
 
 ## 2. Canonical wave-prompt template
 
@@ -82,11 +88,15 @@ helper (Playwright/Puppeteer + the system browser); capture desktop (≥1280) AN
 if i18n. Verify width/responsive (not "compacted"), i18n, no overlaps, design-system fonts/colors.
 
 # WORKFLOW (fan-out)
-AGENT BUDGET: max 5 sub-agents in this session TOTAL (verifier included); in
-ultracode, ONE Workflow with ≤5 agent() calls, no loops or panels.
-<wave-specific parallelization: ≤4 (⚠gate) / ≤5 sub-agents with EXCLUSIVE ownership
-of disjoint files/folders; on ⚠gates: adversarial verification by ONE sub-agent with
-the attack checklist from §6>
+AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL; YOU implement
+everything — sub-agents investigate, audit deliverables, review regression and
+verify, never write code; 1-10 `opus`, 11-20 `sonnet`, model always explicit;
+SendMessage follow-ups cost 0, ≤5 audit rounds, then implement. In ultracode: ONE
+Workflow with ≤20 agent() calls, each with a model, no unbounded loops or panels.
+<wave-specific delegation: investigators per scope returning solution · files ·
+considerations (not code); regression reviewers over the diff; on ⚠gates:
+adversarial verification by ONE opus/sonnet sub-agent with the attack checklist
+from §6>
 
 # GUARDRAILS & CLOSE
 Touch nothing outside the tasks' scope. No secrets in code/commits. When the DoD-auto
@@ -102,7 +112,7 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
 
 1. **`task.md`** — logbook entry with the extended schema (date of execution ·
    branch/MR · tasks closed · **files touched** · **manifest drift** · notes · wall
-   clock · **agents used n/5**) AND the wave-map status flip.
+   clock · **agents used n/20 (opus a · sonnet b)**) AND the wave-map status flip.
 2. **`execute.md` §7** — this wave's prompt header flip (`☐` → `✅ DONE (date)` /
    `🔄` / `⛔`).
 3. **`detailed-plan.md`** — mark the tasks done; update their Scope manifests with
