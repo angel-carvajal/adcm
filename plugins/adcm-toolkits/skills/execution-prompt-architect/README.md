@@ -5,12 +5,15 @@ execution brain of a project: executive proposal, master plan, detailed task pla
 timeframe plan (calendar schedule), task tracker, and an execution protocol with
 ready-to-run, copy-paste prompts per wave.
 
-> ⚠ **Deep but bounded.** This skill spends tokens on depth — a bucketed analysis
-> fan-out across your repos, a dependency-ordered wave plan, six cross-linked
-> documents plus one fully instantiated prompt per wave — but never on agent count:
-> **at most 5 sub-agents per analysis phase and per wave session, ultracode
-> included.** Every generated wave prompt carries that budget as a hard limit and
-> the logbook records the agents actually used.
+> ⚠ **Deep but bounded, with fixed roles.** This skill spends tokens on depth — a
+> bucketed analysis fan-out across your repos, a dependency-ordered wave plan, six
+> cross-linked documents plus one fully instantiated prompt per wave — under a
+> tiered protocol: **the main session (Fable) implements everything itself and
+> never audits its own work with its own tier; Opus sub-agents carry investigation,
+> audits and regression review; Sonnet relieves Opus after the 10th agent; budget
+> 20 sub-agents per analysis phase and per wave session, ultracode included.**
+> Every generated wave prompt carries that budget and those roles as a hard limit,
+> and the logbook records the agents actually used per model.
 
 ## The principle
 
@@ -77,13 +80,16 @@ analysis is faster, cheaper and far more precise.
 
 ## Recommended models
 
-- **Running this skill / the analysis**: any model works. Recommended efforts —
-  fable: high · opus: ultracode · sonnet: max · haiku: max.
-- **Executing the generated wave prompts**: they are tuned for **Fable at high
-  effort**, **Opus 4.8 in ultracode**, or **Sonnet at max effort**. Every prompt
-  includes a `WORKFLOW (fan-out)` section, so parallelism happens even without
-  ultracode enabled. Ultracode changes the orchestration (one Workflow + an
-  adversarial cross-check), not the count: the 5-agent budget applies in every
+- **Running this skill / the analysis**: the main session is the executor —
+  **Fable** recommended (max effort; ultracode for complex multi-repo work), Opus or
+  Sonnet accepted. Sub-agent models are fixed by the protocol: `opus` for delegated
+  agents 1–10, `sonnet` for 11–20 (one tier down if the main session is not Fable).
+- **Executing the generated wave prompts**: they are tuned for **Fable at max
+  effort** but run on any model. Every prompt includes a `WORKFLOW (fan-out)`
+  section that spells out what to delegate (investigation, deliverable audits,
+  regression review, adversarial verification) — the executor implements everything
+  itself. Ultracode changes the orchestration (one Workflow + an adversarial
+  cross-check), not the roles or the count: the 20-agent budget applies in every
   effort level.
 
 ## Requirements

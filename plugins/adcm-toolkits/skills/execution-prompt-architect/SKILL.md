@@ -23,8 +23,10 @@ description: >
 compatibility: >
   Works with any Claude model. In Claude Code the code analysis fans out to
   sub-agents using the model/effort the user picks; in environments without
-  sub-agents it degrades to sequential analysis. Sub-agent fan-out is capped at 5
-  per phase in every effort level, ultracode included. Generated prompts are tuned
+  sub-agents it degrades to sequential analysis. Sub-agent fan-out is budgeted at
+  20 per phase with fixed roles by model tier: the main session (Fable) executes,
+  Opus sub-agents carry investigation/audit/regression, Sonnet relieves Opus after
+  the 10th — in every effort level, ultracode included. Generated prompts are tuned
   for Fable at high effort but run on any model.
 ---
 
@@ -46,29 +48,61 @@ section names `GOAL / TASKS / SCOPE / LOOP / VISUAL CHECK / WORKFLOW / GUARDRAIL
 CLOSE` in English — they are protocol keywords, and the generated document FILENAMES
 are always the English ones above).
 
+## Agent roles (the tiered protocol)
+
+Every phase of this skill — and every wave prompt it generates — runs on the same
+three roles. They are fixed by protocol, not chosen per run:
+
+| Role | Model | Does | Never does |
+|---|---|---|---|
+| **Executor** | the main session (Fable; ultracode or max by complexity) | Implements EVERY change itself, serially. Audits the *deliverables* sub-agents return (solution, files, considerations) against the project context. Consolidates. Runs the DoD-auto itself. | Spawns sub-agents of its own tier. Audits its own diff with a Fable sub-agent. Fans out its own solution. Reviews the code Opus analyzed line by line — it audits the deliverable, not the code. |
+| **Heavy-load** | `opus` sub-agents — delegated agents 1–10 of the session | Everything the executor asks that is heavy: investigation, Scope manifests, fan-out analysis, audits, regression review over the diff, adversarial verification, attack checklists. | Writes or edits code. Decides scope. |
+| **Relief** | `sonnet` sub-agents — delegated agents 11–20 | Exactly the heavy-load role, once 10 Opus agents were spent in this session. | Same as heavy-load. |
+
+**Deliverable audit loop (executor ↔ heavy-load).** A sub-agent returns
+`solution · files to touch (with why) · considerations · open questions` — never
+code. The executor audits THAT deliverable with the context it holds: does it cover
+every consumer of the shared surfaces? is a file missing? does it contradict an
+inviolable decision? Concrete doubts go back to the SAME agent (`SendMessage` to the
+agent already running — a new agent would spend budget), at most 5 rounds, until
+consensus. Then the executor implements. If a round yields nothing new, stop
+iterating and implement with what is verified.
+
+**Accounting.** One counter per wave session and per analysis phase, starting at
+zero. Every delegated agent (`Agent` tool or Workflow `agent()`) adds 1 whatever
+its model; `SendMessage` to a live agent adds 0. Agents 1–10 pass `model: 'opus'`,
+agents 11–20 pass `model: 'sonnet'` — always explicit. **Budget: 20.** Reaching it
+means STOP and ask (AskUserQuestion) whether the user authorizes more for THIS run;
+never exceed it silently. When the main session is not Fable the roles hold one tier
+down (main opus → sub-agents sonnet → relief haiku). In environments without
+sub-agents everything degrades to the executor working sequentially.
+
 ## Execution flow
 
-### Step 1 — Setup: project name, analysis model and effort
+### Step 1 — Setup: project name, main model and effort
 
 Ask the user (one AskUserQuestion call, three questions):
 
 1. **Project name** — the name to use in ALL generated documents (titles, headers)
    and as `{{project_name}}` in the optional HTML. Never infer it silently from the
    folder/repo: ask explicitly, offering the inferred name as the suggested option.
-2. **Model for the project analysis** — which model the analysis sub-agents will use:
-   `haiku`, `sonnet`, `opus`, `fable`.
+2. **Main session model** — the executor's model: `fable` (recommended), `opus`,
+   `sonnet`. Sub-agent models are NOT chosen here: the tiered protocol fixes them
+   (Opus for delegated agents 1–10, Sonnet for 11–20; one tier down if the main
+   session is not Fable — see "Agent roles").
 3. **Effort for the analysis** — ALWAYS list every level: `low`, `medium`, `high`,
    `max`, `ultracode`. Mark the recommended one for the model they picked:
-   - fable → **high** recommended (ultracode if they want the absolute maximum)
+   - fable → **max** recommended (ultracode for complex, multi-repo work)
    - opus → **ultracode** recommended
    - sonnet → **max** recommended
-   - haiku → **max** recommended
 
    The user is free to pick any level. `ultracode` means: orchestrate the analysis
-   with ONE Workflow script of at most 5 `agent()` calls (structured outputs + one
-   adversarial cross-check); other levels map to sub-agent thoroughness. **No effort
-   level raises the 5-agent cap** (see "Agent budget" in Hard rules) — ultracode
-   changes HOW the analysis is orchestrated, never how many agents it spends.
+   with ONE Workflow script of at most 20 `agent()` calls, every call with an
+   explicit `model` (`opus` for calls 1–10, `sonnet` for 11–20), structured outputs
+   and one adversarial cross-check; other levels map to sub-agent thoroughness.
+   **No effort level changes the roles or the 20-agent budget** — ultracode changes
+   HOW the analysis is orchestrated, never who implements or how many agents it
+   spends.
 
 Then check whether a `code-project-context-*` skill for this project is installed:
 
@@ -106,19 +140,21 @@ must verify with `git -C ai-brain status` and every doc-sync ends with commit+pu
 
 ### Step 3 — Code analysis (fan-out)
 
-Analyze the project with the model/effort from Step 1. Always fan out when the
-environment allows it — even outside ultracode — but **within the agent budget: at
-most 5 sub-agent invocations for the WHOLE of Step 3** (not per round). The fan-out
-is bucketed, never one-agent-per-item:
+Analyze the project with the effort from Step 1, under the tiered protocol ("Agent
+roles"): the main session consolidates and decides; sub-agents investigate. Always
+fan out when the environment allows it — even outside ultracode — but **within the
+agent budget: at most 20 delegated agents for the WHOLE of Step 3** (counter starts
+at zero; agents 1–10 `opus`, 11–20 `sonnet`). The fan-out is bucketed, never
+one-agent-per-item. Indicative split (adapt, never exceed):
 
-- **1 architecture agent** (covers ALL repos — with several repos it receives the
-  full list): architecture, entry points, conventions, test/CI commands that exist
-  TODAY (these become DoD-auto commands later). Skip it when a
+- **1 architecture agent** (`opus`; covers ALL repos — with several repos it
+  receives the full list): architecture, entry points, conventions, test/CI
+  commands that exist TODAY (these become DoD-auto commands later). Skip it when a
   `code-project-context-*` skill is loaded — the map already exists and the slot is
   freed.
-- **Up to 3 manifest agents**: group the user's tasks by repo/area into at most 3
-  buckets; each agent returns a **structured Scope manifest** for EVERY task in its
-  bucket, not prose:
+- **Up to 6 manifest agents** (`opus`): group the user's tasks by repo/area into at
+  most 6 buckets; each agent returns a **structured Scope manifest** for EVERY task
+  in its bucket, not prose:
   - `Modify:` each file with a 1-line why · `Create:` each new file
   - `Read first:` exemplar files (the pattern to copy)
   - `Impact:` for every shared surface touched, the consumer census — who calls it,
@@ -131,28 +167,44 @@ is bucketed, never one-agent-per-item:
     `.next`, …) or prefer `rg -l` (respects .gitignore) so local artifacts never
     inflate the count.
   - `Symbol notes:` exact members to delete/preserve/rename when the analysis has them.
-- **1 risk agent**: what can break, what needs an adversarial gate (security, money,
-  data isolation, irreversible migrations). In ultracode this is the adversarial
-  cross-check: it receives the consolidated inventory and tries to refute it.
+- **1 risk agent** (`opus`): what can break, what needs an adversarial gate
+  (security, money, data isolation, irreversible migrations). In ultracode this is
+  the adversarial cross-check: it receives the consolidated inventory and tries to
+  refute it.
+- **The rest of the budget** goes to the deliverable audit loop (follow-ups to the
+  SAME agents via `SendMessage` cost nothing; a fresh verifier costs 1) and, when
+  it fits, a small refuter panel over the consolidated inventory — `opus` while the
+  counter is ≤10, `sonnet` after.
 
-Single round, no amplifiers: loop-until-dry, judge panels, N-refuter panels and
-"completeness critic" agents are **banned** here — each one multiplies the count. If
-a bucket comes back incomplete, the MAIN session fills the gap itself with
-Read/Grep, never with another agent. Consolidation is always done by the main
-session, never delegated. If the project genuinely does not fit (e.g. more than 6
-repos), STOP and ask (AskUserQuestion) whether the user authorizes a larger budget
-for THIS run, showing the planned count — never exceed it silently.
+No unbounded amplifiers: loop-until-dry, judge panels and "completeness critic"
+agents with no cap of their own are **banned** here — each one multiplies the count
+past the budget. Refuter panels are allowed only when they fit in the 20 and every
+call names its `model`. If a bucket comes back incomplete, ask THAT agent again
+(`SendMessage`) or let the MAIN session fill the gap itself with Read/Grep before
+spending a new agent. Consolidation is always done by the main session, never
+delegated. If the project genuinely does not fit (e.g. more than 20 repos/areas),
+STOP and ask (AskUserQuestion) whether the user authorizes a larger budget for THIS
+run, showing the planned count — never exceed it silently.
 
-Ultracode reference shape (the whole Step 3 is ONE workflow, ≤5 `agent()` calls):
+Ultracode reference shape (the whole Step 3 is ONE workflow, ≤20 `agent()` calls,
+every call with an explicit `model`):
 
 ```js
-// analysis buckets: [architecture?] + ≤3 manifest buckets — 4 agents max
+const BUDGET = 20
+let used = 0
+const modelFor = () => (used++ < 10 ? 'opus' : 'sonnet')   // 1-10 opus, 11-20 sonnet
+const spend = (prompt, opts) => {
+  if (used >= BUDGET) throw new Error('agent budget exhausted — ask the user')
+  return agent(prompt, {...opts, model: modelFor()})
+}
+// analysis buckets: [architecture?] + ≤6 manifest buckets — main session consolidates
 const buckets = await parallel(BUCKETS.map(b => () =>
-  agent(b.prompt, {label: b.key, phase: 'Analyze', schema: b.schema})))
+  spend(b.prompt, {label: b.key, phase: 'Analyze', schema: b.schema})))
 const inventory = consolidate(buckets.filter(Boolean))   // plain code, no agent
-// 5th agent: the risk / adversarial pass over the consolidated inventory
-const risk = await agent(riskPrompt(inventory), {phase: 'Risk', schema: RISK})
-log(`agents used: ${BUCKETS.length + 1}/5`)
+// risk / adversarial pass over the consolidated inventory
+const risk = await spend(riskPrompt(inventory), {phase: 'Risk', schema: RISK})
+const opus = Math.min(used, 10), sonnet = Math.max(0, used - 10)
+log(`agents used: ${used}/${BUDGET} (opus ${opus} · sonnet ${sonnet})`)
 return { inventory, risk }
 ```
 
@@ -219,13 +271,16 @@ Non-negotiable rules:
    the user can take: dashboards, DNS, purchases, approvals) is listed separately and
    leaves the task `blocked`, never `completed`.
 3. **WORKFLOW is always present**, even if the executing session has no ultracode:
-   spell out exactly what to parallelize with sub-agents/Workflow (disjoint file
-   ownership per sub-agent) and, on ⚠gate waves, the mandatory **adversarial
-   verification**: ONE agent that did NOT implement attacks the diff using that
-   wave's attack checklist from §6. WORKFLOW always opens with the **AGENT BUDGET**
-   line: max 5 sub-agents in the executing session, verifier included — `{{N}}`
-   implementers ≤4 on ⚠gate waves (1 slot reserved for the verifier), ≤5 otherwise.
-   Never emit a WORKFLOW whose agents add up to more than 5.
+   spell out exactly what to DELEGATE to sub-agents/Workflow (investigation per
+   scope, deliverable audit rounds, regression review) and, on ⚠gate waves, the
+   mandatory **adversarial verification**: ONE `opus` sub-agent (`sonnet` once the
+   counter passed 10) that did NOT implement attacks the diff using that wave's
+   attack checklist from §6. WORKFLOW always opens with the **AGENT BUDGET & ROLES**
+   line: max 20 sub-agents in the executing session; the main session implements
+   everything itself — sub-agents (Opus 1–10, Sonnet 11–20) investigate, audit and
+   verify, never implement. Never emit a WORKFLOW that assigns implementation to a
+   sub-agent, that audits the executor's diff with the executor's own tier, or whose
+   agents add up to more than 20.
 4. Loop discipline: implement → verify (run the DoD-auto) → fix → repeat. Max 5
    rounds; 3 attempts on the SAME failure → stop and report. Never degrade tests to
    pass; never mark done what is not done.
@@ -297,16 +352,20 @@ happen every session is not a note — it is a hook.
   executing session has to re-derive file lists with exploratory Glob/Grep, the
   prompt was generated wrong. The census check is the freshness guard: manifests may
   go stale, so prompts verify cheaply FIRST and re-scope only on divergence.
-- **Deep by design, bounded by budget — the agent budget is 5.** At most 5
-  sub-agents per analysis phase (Step 3) and at most 5 per executing wave session
-  (implementers + adversarial verifier + advisory reviewer), in EVERY effort level:
-  ultracode changes the orchestration (Workflow + adversarial cross-check), never the
-  count. Exceeding it is a protocol violation; it may only be raised by the user's
-  explicit authorization for that single run, and the logbook records `agents used:
-  n/5`. Depth comes from six documents + one self-contained prompt per wave, not
-  from agent count. Do not silently cut corners either; if the user wants cheap,
-  they pick a lighter model/effort in Step 1 — the cap is a cost lever, not a
-  quality lever.
+- **Deep by design, bounded by budget and roles — the agent budget is 20.** At
+  most 20 delegated agents per analysis phase (Step 3) and per executing wave
+  session, under the tiered protocol ("Agent roles"): the main session executes
+  and never spawns its own tier; sub-agents investigate, audit, review regression
+  and verify but never implement; `opus` for delegated agents 1–10, `sonnet` from
+  the 11th; every call names its model. This holds in EVERY effort level —
+  ultracode changes the orchestration (one Workflow + adversarial cross-check),
+  never the roles or the count. Exceeding 20 is a protocol violation; it may only
+  be raised by the user's explicit authorization for that single run, and the
+  logbook records `agents used: n/20 (opus a · sonnet b)`. Depth comes from six
+  documents + one self-contained prompt per wave + cheap tiers doing the exhaustive
+  reviews, not from spending the executor's tokens on them. Do not silently cut
+  corners either; if the user wants cheap, they pick a lighter effort in Step 1 —
+  the budget is a cost lever, not a quality lever.
 - No invented verification: every DoD-auto line must use commands/scripts that exist
   in the repo (or that a task in the plan explicitly creates first).
 - No secrets ever — in documents, prompts, or examples; variable names only.
