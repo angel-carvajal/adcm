@@ -28,22 +28,35 @@ execute.md.
    purchases, approvals) live in the **DoD-human**: when the DoD-auto is exhausted
    the task is marked `blocked` with the human checklist rendered at close. It only
    becomes `completed` when {{owner}} confirms.
-4. **Implementers never self-approve at gates.** On ⚠gate waves the loop does NOT
-   close without **adversarial verification**: an `opus`/`sonnet` sub-agent (per the
-   counter in §1.7 — never the executor's own tier) that did NOT see the
+4. **Implementers never self-approve at gates.** On ⚠gate waves the executor is an
+   `opus` sub-agent and the loop does NOT close without **adversarial
+   verification** by ANOTHER `opus` sub-agent (the reserved one — never the
+   executor itself, never the orchestrator's tier) that did NOT see the
    implementation, given only the diff + the DoD + that wave's attack checklist (§6).
 5. **Inviolable decisions** (no session may contradict them — from
    `master-plan.md` §8): {{list_them_inline}}.
 6. **No hardcoded dates**: the logbook uses the date of the day of execution.
-7. **Agent budget 20 with fixed roles.** The main session (Fable) implements
-   everything itself and never spawns its own tier; sub-agents investigate, audit
-   deliverables, review regression and verify — never implement. Delegated agents
-   1–10 run on `opus`, 11–20 on `sonnet` (one counter per session, `model` always
-   explicit; `SendMessage` to a live agent costs 0). The executor audits what
-   sub-agents deliver (solution · files · considerations), iterates with the same
-   agent ≤5 rounds, then implements. Ultracode changes the orchestration (one
-   Workflow + adversarial cross-check), never roles or count. Exceeding 20 is a
-   protocol violation; the logbook records `agents used: n/20 (opus a · sonnet b)`.
+7. **Agent budget 20 with fixed roles.** The main session (Fable) ORCHESTRATES:
+   it decides design and scope, audits the deliverables `opus` investigators return
+   (solution · files · considerations · open questions), writes one executor brief
+   per task, runs every DoD-slice and the full DoD-auto itself, and integrates —
+   it never implements first and never spawns its own tier. `opus` sub-agents
+   investigate, review regression and verify (quota 10 per session, 1 reserved for
+   the ⚠gate verifier; audits pass to `sonnet` once spent) and are the executors
+   on ⚠gate waves. `sonnet` sub-agents implement NO-gate tasks from briefs, ≤4 in
+   parallel with disjoint files in their own worktrees, and never self-approve.
+   **Escalation ladder** Sonnet → Opus → orchestrator: the 2nd failure of the SAME
+   DoD line moves the task one tier up as a new agent carrying the attempt log.
+   One counter per session, `model` always explicit, `SendMessage` to a live agent
+   costs 0. Ultracode changes the orchestration (Workflow per phase + adversarial
+   cross-check), never roles or count. Exceeding 20 is a protocol violation; the
+   logbook records `agents used: n/20 (opus a · sonnet b)` and every escalation.
+8. **Executor brief.** What the orchestrator hands to an executor, ≤40 lines:
+   `TASK · FILES (from the Scope manifest) · DELIVERABLE (Opus's audited deliverable
+   with the orchestrator's decisions) · DESIGN DECISIONS · DOD-SLICE (command →
+   expected) · STOP IF (stop and report instead of improvising) · FORBIDDEN ·
+   RETURN (diff summary per file · commands + output · open questions)`. Every §7
+   prompt carries one pre-filled block per task. A poor brief produces poor code.
 
 ## 2. Canonical wave-prompt template
 
@@ -76,9 +89,11 @@ beyond tolerance ⇒ STOP and re-scope against detailed-plan. Budget ~15 lines/t
 (hard cap 25 for multi-file tasks), ≤60/wave — overflow stays in the card.>
 
 # LOOP
-implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 attempts on the
-same failure without converging → stop and report (don't degrade tests, don't mark
-done what isn't done).
+brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → repeat. Max 5
+rounds; the executor's 2nd failure of the same DoD line escalates the task one tier
+up (sonnet → opus → you) with the attempt log; 3 attempts on the same failure at
+session level → stop and report (don't degrade tests, don't mark done what isn't
+done).
 
 # VISUAL CHECK (MANDATORY if the wave touches UI: .pug/.html/.scss/.css/components)
 grep + build only prove the code is THERE, not that it LOOKS right (they never catch real width,
@@ -88,15 +103,20 @@ helper (Playwright/Puppeteer + the system browser); capture desktop (≥1280) AN
 if i18n. Verify width/responsive (not "compacted"), i18n, no overlaps, design-system fonts/colors.
 
 # WORKFLOW (fan-out)
-AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL; YOU implement
-everything — sub-agents investigate, audit deliverables, review regression and
-verify, never write code; 1-10 `opus`, 11-20 `sonnet`, model always explicit;
-SendMessage follow-ups cost 0, ≤5 audit rounds, then implement. In ultracode: ONE
-Workflow with ≤20 agent() calls, each with a model, no unbounded loops or panels.
-<wave-specific delegation: investigators per scope returning solution · files ·
-considerations (not code); regression reviewers over the diff; on ⚠gates:
-adversarial verification by ONE opus/sonnet sub-agent with the attack checklist
-from §6>
+AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL; YOU orchestrate —
+audit deliverables, write executor briefs, run every DoD-slice and the full
+DoD-auto yourself, integrate; you never implement first. `opus` investigates,
+reviews regression and verifies (quota 10, 1 reserved for the ⚠gate verifier) and
+implements ⚠gate waves; `sonnet` implements NO-gate tasks from briefs (≤4 parallel,
+disjoint files, own worktrees), never self-approves. Ladder sonnet → opus → you.
+Model always explicit; SendMessage follow-ups cost 0. In ultracode: Workflow per
+phase, ≤20 agent() calls in total, isolation: 'worktree' on parallel executors.
+<the per-task cycle with real IDs: investigate → audit deliverable → brief →
+execute → verify/escalate → regression review → integrate; on ⚠gates: opus executor
++ adversarial verification by ANOTHER opus with the attack checklist from §6>
+## Executor brief — <ID>
+<TASK · FILES (from SCOPE) · DELIVERABLE · DESIGN DECISIONS · DOD-SLICE · STOP IF ·
+FORBIDDEN · RETURN — one block per task, ≤40 lines, see §1.8>
 
 # GUARDRAILS & CLOSE
 Touch nothing outside the tasks' scope. No secrets in code/commits. When the DoD-auto
@@ -112,7 +132,8 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
 
 1. **`task.md`** — logbook entry with the extended schema (date of execution ·
    branch/MR · tasks closed · **files touched** · **manifest drift** · notes · wall
-   clock · **agents used n/20 (opus a · sonnet b)**) AND the wave-map status flip.
+   clock · **agents used n/20 (opus a · sonnet b)** · **escalations**) AND the
+   wave-map status flip.
 2. **`execute.md` §7** — this wave's prompt header flip (`☐` → `✅ DONE (date)` /
    `🔄` / `⛔`).
 3. **`detailed-plan.md`** — mark the tasks done; update their Scope manifests with
@@ -185,8 +206,10 @@ re-run this doc-sync when {{owner}} pushes/merges.
 
 If a session dies mid-wave: partial state lives in (a) the wave branch's checkpoint
 commits and (b) a `[PARTIAL]` logbook entry with: internal tasks closed, exact step in
-progress, and the next command to run. The resuming session reads the `[PARTIAL]`
-entry, checks out the branch and continues the loop — it does NOT restart.
+progress, which executor tier held each open task and on which rung of the ladder
+(attempt log), unmerged worktrees, and the next command to run. The resuming session
+reads the `[PARTIAL]` entry, checks out the branch and continues the loop from that
+rung — it does NOT restart, and it does NOT re-brief tasks whose worktree is intact.
 
 ## 5. Wave map (identity; fine ORDER is set by task.md)
 

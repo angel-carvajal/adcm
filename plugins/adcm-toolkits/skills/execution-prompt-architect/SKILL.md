@@ -24,10 +24,12 @@ compatibility: >
   Works with any Claude model. In Claude Code the code analysis fans out to
   sub-agents using the model/effort the user picks; in environments without
   sub-agents it degrades to sequential analysis. Sub-agent fan-out is budgeted at
-  20 per phase with fixed roles by model tier: the main session (Fable) executes,
-  Opus sub-agents carry investigation/audit/regression, Sonnet relieves Opus after
-  the 10th — in every effort level, ultracode included. Generated prompts are tuned
-  for Fable at high effort but run on any model.
+  20 per phase with fixed roles by model tier: the main session (Fable)
+  orchestrates and runs the DoD, Opus sub-agents investigate and audit (and
+  implement ⚠gate waves), Sonnet sub-agents implement from executor briefs, with an
+  escalation ladder Sonnet → Opus → Fable — in every effort level, ultracode
+  included. Generated prompts are tuned for Fable at high effort but run on any
+  model.
 ---
 
 # Execution Prompt Architect
@@ -55,27 +57,62 @@ three roles. They are fixed by protocol, not chosen per run:
 
 | Role | Model | Does | Never does |
 |---|---|---|---|
-| **Executor** | the main session (Fable; ultracode or max by complexity) | Implements EVERY change itself, serially. Audits the *deliverables* sub-agents return (solution, files, considerations) against the project context. Consolidates. Runs the DoD-auto itself. | Spawns sub-agents of its own tier. Audits its own diff with a Fable sub-agent. Fans out its own solution. Reviews the code Opus analyzed line by line — it audits the deliverable, not the code. |
-| **Heavy-load** | `opus` sub-agents — delegated agents 1–10 of the session | Everything the executor asks that is heavy: investigation, Scope manifests, fan-out analysis, audits, regression review over the diff, adversarial verification, attack checklists. | Writes or edits code. Decides scope. |
-| **Relief** | `sonnet` sub-agents — delegated agents 11–20 | Exactly the heavy-load role, once 10 Opus agents were spent in this session. | Same as heavy-load. |
+| **Orchestrator** | the main session (Fable; ultracode or max by complexity) | Decides design and scope. Audits the *deliverables* Opus returns (solution, files, considerations) against the project context. Writes the **executor brief** per task. Runs the DoD-auto itself. Integrates parallel executors. Last rung of the escalation ladder; tiny fixes (≤~20 lines) when a brief would cost more than the change. | Implement first. Spawn sub-agents of its own tier. Review code line by line — it audits deliverables and runs commands. |
+| **Investigator / Auditor** | `opus` sub-agents (quota 10 per session, 1 reserved for the ⚠gate verifier) | Investigation, Scope manifests, deliverables (solution · files to touch with why · considerations · open questions), regression review over the executor's diff, adversarial verification at gates, attack checklists. **Executor on ⚠gate waves** and 2nd rung of the ladder. | Implement on NO-gate waves except by escalation. Decide scope. |
+| **Executor** | `sonnet` sub-agents | Implements NO-gate tasks from an executor brief — up to 4 in parallel with disjoint files, each in its own worktree. Returns a diff summary per file + the DoD-slice commands it ran WITH their output + open questions / STOPs — never a bare "done". Relieves Opus on audits once the Opus quota is spent. | Decide scope. Touch files outside its brief. Improvise on a doubt (it stops and reports). Self-approve. |
 
-**Deliverable audit loop (executor ↔ heavy-load).** A sub-agent returns
-`solution · files to touch (with why) · considerations · open questions` — never
-code. The executor audits THAT deliverable with the context it holds: does it cover
-every consumer of the shared surfaces? is a file missing? does it contradict an
-inviolable decision? Concrete doubts go back to the SAME agent (`SendMessage` to the
-agent already running — a new agent would spend budget), at most 5 rounds, until
-consensus. Then the executor implements. If a round yields nothing new, stop
-iterating and implement with what is verified.
+**Per-task cycle (NO-gate waves).**
+1. Opus investigates → deliverable (`solution · files to touch with why ·
+   considerations · open questions` — never code). The orchestrator audits THAT
+   deliverable with the context it holds: does it cover every consumer of the
+   shared surfaces? is a file missing? does it contradict an inviolable decision?
+   Concrete doubts go back to the SAME agent (`SendMessage` — a new agent would
+   spend budget), at most 5 rounds, until consensus.
+2. The orchestrator writes the **executor brief** (below) and launches Sonnet —
+   `isolation: 'worktree'` / a separate worktree when several run in parallel.
+3. Sonnet implements and returns: diff summary per file, DoD-slice commands run
+   with their output, doubts/STOPs.
+4. The orchestrator runs the DoD-slice ITSELF. A failure goes back to the SAME
+   Sonnet (`SendMessage`). The second failure of the SAME DoD line → **escalate**
+   (ladder below).
+5. Opus reviews regression over the integrated diff (named flows + checklist);
+   findings go back to the executor currently holding the task.
+6. The orchestrator integrates, runs the FULL DoD-auto of the wave, closes.
+
+**⚠gate waves**: same cycle, but the executor in step 2 is `opus` and the final
+adversarial verification is ANOTHER `opus` (the reserved one) that did not see the
+implementation. Ladder: Opus → orchestrator.
+
+**Escalation ladder — Sonnet → Opus → orchestrator, 2 failures per rung.** When an
+executor fails the SAME DoD line twice, the task moves one tier up as a NEW agent
+carrying the attempt log (what was tried, what failed, the exact output). Opus
+failing twice → the orchestrator implements it itself. The session-level rule
+stands on top: 3 attempts on the same failure without converging → stop and
+report. Every escalation is recorded in the logbook.
+
+**Executor brief (what the orchestrator hands to an executor — ≤40 lines).**
+`TASK` (ID + title) · `FILES` (Modify/Create with why, Read-first exemplars — from
+the Scope manifest) · `DELIVERABLE` (Opus's audited deliverable, with the
+orchestrator's decisions applied) · `DESIGN DECISIONS` (what is settled and not
+negotiable) · `DOD-SLICE` (`command → expected result`, run before returning) ·
+`STOP IF` (conditions to stop and report instead of improvising: an expected file
+is missing, a consumer contract would change, a test would have to be degraded,
+the census diverges) · `FORBIDDEN` (paths outside the brief, dependency changes) ·
+`RETURN` (diff summary per file · commands + output · open questions). A poor
+brief produces poor code: the brief carries the investigation, the executor never
+re-derives it.
 
 **Accounting.** One counter per wave session and per analysis phase, starting at
 zero. Every delegated agent (`Agent` tool or Workflow `agent()`) adds 1 whatever
-its model; `SendMessage` to a live agent adds 0. Agents 1–10 pass `model: 'opus'`,
-agents 11–20 pass `model: 'sonnet'` — always explicit. **Budget: 20.** Reaching it
-means STOP and ask (AskUserQuestion) whether the user authorizes more for THIS run;
-never exceed it silently. When the main session is not Fable the roles hold one tier
-down (main opus → sub-agents sonnet → relief haiku). In environments without
-sub-agents everything degrades to the executor working sequentially.
+its model; `SendMessage` to a live agent adds 0. `model` is ALWAYS explicit.
+**Budget: 20.** **Opus quota: 10 per session**, 1 of them reserved for the ⚠gate
+verifier; once spent, audits and regression reviews pass to `sonnet` (the gate
+verifier never does). Sonnet executors do not consume Opus quota but do consume
+budget. Reaching 20 means STOP and ask (AskUserQuestion) whether the user authorizes
+more for THIS run; never exceed it silently. When the main session is not Fable the
+roles hold one tier down (main opus → auditors sonnet → executors haiku). In
+environments without sub-agents everything degrades to the orchestrator working
+sequentially.
 
 ## Execution flow
 
@@ -86,23 +123,24 @@ Ask the user (one AskUserQuestion call, three questions):
 1. **Project name** — the name to use in ALL generated documents (titles, headers)
    and as `{{project_name}}` in the optional HTML. Never infer it silently from the
    folder/repo: ask explicitly, offering the inferred name as the suggested option.
-2. **Main session model** — the executor's model: `fable` (recommended), `opus`,
-   `sonnet`. Sub-agent models are NOT chosen here: the tiered protocol fixes them
-   (Opus for delegated agents 1–10, Sonnet for 11–20; one tier down if the main
-   session is not Fable — see "Agent roles").
+2. **Main session model** — the orchestrator's model: `fable` (recommended),
+   `opus`, `sonnet`. Sub-agent models are NOT chosen here: the tiered protocol fixes
+   them (`opus` investigates/audits and runs ⚠gate waves, `sonnet` implements; one
+   tier down if the main session is not Fable — see "Agent roles").
 3. **Effort for the analysis** — ALWAYS list every level: `low`, `medium`, `high`,
    `max`, `ultracode`. Mark the recommended one for the model they picked:
    - fable → **max** recommended (ultracode for complex, multi-repo work)
    - opus → **ultracode** recommended
    - sonnet → **max** recommended
 
-   The user is free to pick any level. `ultracode` means: orchestrate the analysis
-   with ONE Workflow script of at most 20 `agent()` calls, every call with an
-   explicit `model` (`opus` for calls 1–10, `sonnet` for 11–20), structured outputs
-   and one adversarial cross-check; other levels map to sub-agent thoroughness.
-   **No effort level changes the roles or the 20-agent budget** — ultracode changes
-   HOW the analysis is orchestrated, never who implements or how many agents it
-   spends.
+   The user is free to pick any level. `ultracode` means: orchestrate with Workflow
+   scripts — one per phase (investigate → implement → review), the orchestrator
+   auditing in between — with at most 20 `agent()` calls in total, every call with
+   an explicit `model` by role and `isolation: 'worktree'` on parallel executors,
+   structured outputs and one adversarial cross-check; other levels map to
+   sub-agent thoroughness. **No effort level changes the roles or the 20-agent
+   budget** — ultracode changes HOW the work is orchestrated, never who implements
+   or how many agents it spends.
 
 Then check whether a `code-project-context-*` skill for this project is installed:
 
@@ -174,7 +212,7 @@ one-agent-per-item. Indicative split (adapt, never exceed):
 - **The rest of the budget** goes to the deliverable audit loop (follow-ups to the
   SAME agents via `SendMessage` cost nothing; a fresh verifier costs 1) and, when
   it fits, a small refuter panel over the consolidated inventory — `opus` while the
-  counter is ≤10, `sonnet` after.
+  Opus quota (10) lasts, `sonnet` after. Nobody implements in Step 3.
 
 No unbounded amplifiers: loop-until-dry, judge panels and "completeness critic"
 agents with no cap of their own are **banned** here — each one multiplies the count
@@ -190,22 +228,29 @@ Ultracode reference shape (the whole Step 3 is ONE workflow, ≤20 `agent()` cal
 every call with an explicit `model`):
 
 ```js
-const BUDGET = 20
-let used = 0
-const modelFor = () => (used++ < 10 ? 'opus' : 'sonnet')   // 1-10 opus, 11-20 sonnet
-const spend = (prompt, opts) => {
-  if (used >= BUDGET) throw new Error('agent budget exhausted — ask the user')
-  return agent(prompt, {...opts, model: modelFor()})
+// The same guard is reused by the wave workflows (implement / review phases).
+const BUDGET = 20, OPUS_QUOTA = 10
+let used = 0, opus = 0, sonnet = 0
+const modelFor = role => {                       // role: 'audit' | 'execute' | 'gate'
+  if (role === 'execute') return 'sonnet'        // NO-gate executors are always sonnet
+  if (role === 'gate') return 'opus'             // ⚠gate executor / verifier: reserved opus
+  return opus < OPUS_QUOTA - 1 ? 'opus' : 'sonnet'   // audits: opus until the quota, then sonnet
 }
-// analysis buckets: [architecture?] + ≤6 manifest buckets — main session consolidates
+const spend = (role, prompt, opts) => {
+  if (used >= BUDGET) throw new Error('agent budget exhausted — ask the user')
+  const model = modelFor(role); used++; model === 'opus' ? opus++ : sonnet++
+  return agent(prompt, {...opts, model})
+}
+// Step 3 — analysis buckets: [architecture?] + ≤6 manifest buckets; main session consolidates
 const buckets = await parallel(BUCKETS.map(b => () =>
-  spend(b.prompt, {label: b.key, phase: 'Analyze', schema: b.schema})))
+  spend('audit', b.prompt, {label: b.key, phase: 'Analyze', schema: b.schema})))
 const inventory = consolidate(buckets.filter(Boolean))   // plain code, no agent
-// risk / adversarial pass over the consolidated inventory
-const risk = await spend(riskPrompt(inventory), {phase: 'Risk', schema: RISK})
-const opus = Math.min(used, 10), sonnet = Math.max(0, used - 10)
+const risk = await spend('audit', riskPrompt(inventory), {phase: 'Risk', schema: RISK})
 log(`agents used: ${used}/${BUDGET} (opus ${opus} · sonnet ${sonnet})`)
 return { inventory, risk }
+// Wave workflows use the same spend(): spend('execute', brief, {isolation: 'worktree'})
+// for ≤4 parallel Sonnet executors, spend('audit', …) for regression review,
+// spend('gate', …) for the ⚠gate executor and its verifier.
 ```
 
 Consolidate into an internal inventory: candidate tasks, each with repo(s),
@@ -271,19 +316,23 @@ Non-negotiable rules:
    the user can take: dashboards, DNS, purchases, approvals) is listed separately and
    leaves the task `blocked`, never `completed`.
 3. **WORKFLOW is always present**, even if the executing session has no ultracode:
-   spell out exactly what to DELEGATE to sub-agents/Workflow (investigation per
-   scope, deliverable audit rounds, regression review) and, on ⚠gate waves, the
-   mandatory **adversarial verification**: ONE `opus` sub-agent (`sonnet` once the
-   counter passed 10) that did NOT implement attacks the diff using that wave's
-   attack checklist from §6. WORKFLOW always opens with the **AGENT BUDGET & ROLES**
-   line: max 20 sub-agents in the executing session; the main session implements
-   everything itself — sub-agents (Opus 1–10, Sonnet 11–20) investigate, audit and
-   verify, never implement. Never emit a WORKFLOW that assigns implementation to a
-   sub-agent, that audits the executor's diff with the executor's own tier, or whose
-   agents add up to more than 20.
-4. Loop discipline: implement → verify (run the DoD-auto) → fix → repeat. Max 5
-   rounds; 3 attempts on the SAME failure → stop and report. Never degrade tests to
-   pass; never mark done what is not done.
+   it opens with the **AGENT BUDGET & ROLES** block and spells out the per-task
+   cycle from "Agent roles" — Opus investigates → the orchestrator audits the
+   deliverable → executor brief → `sonnet` executors implement (≤4 in parallel,
+   disjoint files, own worktrees) → the orchestrator runs the DoD-slice, escalating
+   Sonnet → Opus → itself on the 2nd failure of the same line → Opus regression
+   review → the orchestrator integrates and runs the FULL DoD-auto. On ⚠gate waves
+   the executor is `opus` and the mandatory **adversarial verification** is ANOTHER
+   `opus` (the reserved one) that did NOT implement, attacking the diff with that
+   wave's attack checklist from §6. WORKFLOW embeds one `## Executor brief` block
+   per task, pre-filled from SCOPE. Never emit a WORKFLOW where the main session
+   implements first, where an executor self-approves, where the diff is audited by
+   the executor's own tier, or whose agents add up to more than 20.
+4. Loop discipline: brief → execute → verify (the orchestrator runs the DoD-slice)
+   → fix → repeat. Max 5 rounds; the executor's 2nd failure of the SAME DoD line
+   escalates the task one tier up (Sonnet → Opus → orchestrator) with the attempt
+   log; 3 attempts on the SAME failure at session level → stop and report. Never
+   degrade tests to pass; never mark done what is not done.
 5. Prompts are written for **Fable at high effort** (precise, dense, zero ambiguity)
    but must be executable by any model.
 6. Each prompt is self-contained AND declares its mode: starts with "Start a clean
@@ -354,18 +403,22 @@ happen every session is not a note — it is a hook.
   go stale, so prompts verify cheaply FIRST and re-scope only on divergence.
 - **Deep by design, bounded by budget and roles — the agent budget is 20.** At
   most 20 delegated agents per analysis phase (Step 3) and per executing wave
-  session, under the tiered protocol ("Agent roles"): the main session executes
-  and never spawns its own tier; sub-agents investigate, audit, review regression
-  and verify but never implement; `opus` for delegated agents 1–10, `sonnet` from
-  the 11th; every call names its model. This holds in EVERY effort level —
-  ultracode changes the orchestration (one Workflow + adversarial cross-check),
-  never the roles or the count. Exceeding 20 is a protocol violation; it may only
-  be raised by the user's explicit authorization for that single run, and the
-  logbook records `agents used: n/20 (opus a · sonnet b)`. Depth comes from six
-  documents + one self-contained prompt per wave + cheap tiers doing the exhaustive
-  reviews, not from spending the executor's tokens on them. Do not silently cut
-  corners either; if the user wants cheap, they pick a lighter effort in Step 1 —
-  the budget is a cost lever, not a quality lever.
+  session, under the tiered protocol ("Agent roles"): the main session
+  orchestrates, audits deliverables, writes executor briefs and runs the DoD — it
+  never implements first and never spawns its own tier; `opus` investigates,
+  audits, reviews regression, verifies gates and implements ⚠gate waves (quota 10,
+  1 reserved for the gate verifier); `sonnet` implements NO-gate tasks from briefs
+  (≤4 in parallel, own worktrees) and never self-approves; escalation Sonnet →
+  Opus → orchestrator on the 2nd failure of the same DoD line; every call names
+  its model. This holds in EVERY effort level — ultracode changes the orchestration
+  (Workflow per phase + adversarial cross-check), never the roles or the count.
+  Exceeding 20 is a protocol violation; it may only be raised by the user's
+  explicit authorization for that single run, and the logbook records `agents
+  used: n/20 (opus a · sonnet b) · escalations`. Depth comes from six documents +
+  one self-contained prompt per wave + cheap tiers doing the volume (implementation
+  and exhaustive reviews) while the orchestrator's context stays lean. Do not
+  silently cut corners either; if the user wants cheap, they pick a lighter effort
+  in Step 1 — the budget is a cost lever, not a quality lever.
 - No invented verification: every DoD-auto line must use commands/scripts that exist
   in the repo (or that a task in the plan explicitly creates first).
 - No secrets ever — in documents, prompts, or examples; variable names only.

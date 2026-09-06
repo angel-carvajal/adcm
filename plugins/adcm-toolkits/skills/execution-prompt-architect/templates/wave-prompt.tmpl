@@ -8,10 +8,15 @@ Rules when instantiating:
   the Step 3 investigation (the executing session must never re-derive file lists).
   WORKFLOW is ALWAYS present — even if the executing session has no ultracode enabled,
   the prompt itself instructs the delegation — and it opens with the fixed AGENT
-  BUDGET & ROLES block. Never emit a WORKFLOW that assigns implementation to a
-  sub-agent, that audits the executor's diff with the executor's own tier, or whose
-  agents add up to more than 20 (investigators + auditors + regression reviewers +
-  verifier). Sub-agents 1-10 are `opus`, 11-20 `sonnet`, always explicit.
+  BUDGET & ROLES block, followed by one `## Executor brief` per task pre-filled from
+  SCOPE (FILES, DOD-SLICE, FORBIDDEN) with placeholders for what the orchestrator
+  completes in session (DELIVERABLE, DESIGN DECISIONS, STOP IF). Never emit a
+  WORKFLOW where the main session implements first, where an executor
+  self-approves, where the diff is audited by the executor's own tier, or whose
+  agents add up to more than 20 (investigators + executors + reviewers + verifier).
+  Executors are `sonnet` on NO-gate waves and `opus` on ⚠gate waves; auditors are
+  `opus` until the quota of 10 (1 reserved for the gate verifier), then `sonnet`;
+  `model` always explicit.
 - SCOPE budget: ~15 lines per task (hard cap 25 for legitimately multi-file tasks),
   ≤60 per wave. Overflow (long symbol notes, full consumer lists) stays in the task's
   Scope manifest card in detailed-plan.md; the prompt keeps files + census. Compress
@@ -65,10 +70,13 @@ that manifest, and report the drift in the logbook at close.
   else "symbol detail: detailed-plan.md §{{section}}"}}
 
 # LOOP
-implement → verify (run the DoD-auto) → fix → repeat. Max 5 rounds; 3 attempts on the
-SAME failure without converging → stop and report (don't degrade tests, don't mark
-done what isn't done). {{Wave-specific failure policy: known flaky checks, retries
-that don't count as failures, when to stop early and leave DoD-human.}}
+brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → repeat. Max 5
+rounds. Escalation ladder: the executor's 2nd failure of the SAME DoD line moves the
+task one tier up as a NEW agent carrying the attempt log ({{sonnet → opus → you |
+opus → you on ⚠gate waves}}); 3 attempts on the SAME failure at session level
+without converging → stop and report (don't degrade tests, don't mark done what
+isn't done). {{Wave-specific failure policy: known flaky checks, retries that don't
+count as failures, when to stop early and leave DoD-human.}}
 
 # VISUAL CHECK (mandatory if the wave touches UI: .pug/.html/.scss/.css/components)
 grep + build only prove the code is THERE, not that it LOOKS right — they never catch real width,
@@ -82,42 +90,68 @@ Chrome and review the screenshot YOURSELF:
   fonts/colors. Only then mark the UI task completed.
 
 # WORKFLOW (fan-out)
-AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL. YOU (the main
-session) implement every change yourself — no sub-agent writes code, and you never
-audit your own diff with a sub-agent of your own tier. Delegate investigation,
-deliverable audits, regression review and adversarial verification: sub-agents 1-10
-run on `opus`, 11-20 on `sonnet` (always pass `model` explicitly; one counter for
-the whole session, starting at zero). Audit what they DELIVER (solution · files ·
-considerations · open questions — never code) against this SCOPE; send follow-up
-questions to the SAME agent (SendMessage — costs 0), max 5 rounds, then implement.
-In ultracode: ONE Workflow with ≤20 agent() calls, each with an explicit model, no
-unbounded loops or panels. The 21st agent is a protocol violation — stop and ask.
-Log `agents used: n/20 (opus a · sonnet b)` at close.
-{{ALWAYS spell out the delegation, e.g.:
-1. {{task}}: launch {{k}} `opus` sub-agents IN PARALLEL, one per {{scope}}, each
+AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL, one counter starting
+at zero, `model` always explicit. YOU (the main session) ORCHESTRATE: you decide
+design and scope, audit what investigators DELIVER (solution · files ·
+considerations · open questions — never code) against this SCOPE, write one
+executor brief per task, run every DoD-slice and the full DoD-auto YOURSELF, and
+integrate. You do NOT implement first, and you never audit a diff with a sub-agent
+of your own tier. `opus` sub-agents investigate, review regression and verify (quota
+10, 1 reserved for the ⚠gate verifier; audits pass to `sonnet` once spent).
+`sonnet` sub-agents IMPLEMENT NO-gate tasks from your briefs — ≤4 in parallel with
+EXCLUSIVE ownership of disjoint files, each in its own worktree — and return diff
+summary + DoD-slice commands with output + doubts, never a bare "done". Follow-ups
+to a live agent (SendMessage) cost 0; a new agent costs 1. In ultracode: Workflow
+scripts per phase (investigate → implement → review) with ≤20 agent() calls in
+total, `isolation: 'worktree'` on parallel executors, no unbounded loops or panels.
+The 21st agent is a protocol violation — stop and ask. Log `agents used: n/20 (opus
+a · sonnet b) · escalations` at close.
+{{ALWAYS spell out the cycle with real IDs and scopes, e.g.:
+1. Investigate: launch {{k}} `opus` sub-agents IN PARALLEL, one per {{scope}}, each
    returning solution · files to touch (with why) · considerations · open questions
    — NOT code. Sub-agents do NOT run {{expensive_global_check}}.
 2. Audit their deliverables against SCOPE (consumers covered? files missing?
-   inviolable decisions respected?); iterate with SendMessage until consensus.
-3. Implement the whole wave YOURSELF, serially, then run the FULL DoD-auto yourself
-   — never trust a sub-agent's self-report.
-4. Regression review: {{k}} sub-agents (`opus`/`sonnet` per the counter) over the
-   diff + the named flows; fix every finding and re-run the DoD-auto.}}
-{{If ⚠gate: "Before closing: MANDATORY adversarial verification — launch ONE `opus`
-sub-agent (`sonnet` if the counter passed 10) that did NOT see the implementation,
-give it only the diff + the DoD + the attack checklist for {{Wx}} in execute.md §6.
-Every finding is fixed and re-verified before close."}}
+   inviolable decisions respected?); iterate with SendMessage, ≤5 rounds.
+3. Brief: complete the `## Executor brief` blocks below (DELIVERABLE · DESIGN
+   DECISIONS · STOP IF) from the audited deliverables.
+4. Execute: launch {{k ≤ 4}} `sonnet` executors IN PARALLEL, one brief each, disjoint
+   files ({{A: scope}}, {{B: scope}}), own worktrees; their gate is their DOD-SLICE.
+5. Verify: run each DOD-SLICE yourself; a failure goes back to the SAME executor;
+   the 2nd failure of the same line escalates (sonnet → opus → you) with the
+   attempt log. Integrate the worktrees.
+6. Review: {{r}} `opus` sub-agents (`sonnet` once the quota is spent) review
+   regression over the integrated diff + the named flows; every finding goes back
+   to the executor holding the task; then run the FULL DoD-auto yourself.}}
+{{If ⚠gate: "This is a ⚠gate wave: the executor in step 4 is ONE `opus` sub-agent
+(serial, not sonnet; ladder opus → you). Before closing: MANDATORY adversarial
+verification — launch ANOTHER `opus` sub-agent (the reserved one) that did NOT see
+the implementation, give it only the diff + the DoD + the attack checklist for
+{{Wx}} in execute.md §6. Every finding is fixed and re-verified before close."}}
 {{If advisory (NO-gate but the task spec or risk profile asks for an independent
 review): "Wave is NO-gate, with ADVISORY review — launch ONE `opus` sub-agent
-(`sonnet` if the counter passed 10) that did NOT see the implementation, give it the
+(`sonnet` if the quota is spent) that did NOT see the implementation, give it the
 diff + the DoD + the advisory checklist in execute.md §6. Findings are fixed before
 close but do not block delivery policy."}}
 {{If NO-gate plain: "Wave is NO-gate (§5): no adversarial verification required."}}
 
+## Executor brief — {{ID}} ({{one block per task; ≤40 lines each}})
+- TASK: {{ID}} — {{title}} · executor: {{sonnet | opus (⚠gate)}}
+- FILES: {{Modify/Create with why + Read-first exemplars — copied from # SCOPE}}
+- DELIVERABLE: {{filled in session: Opus's audited deliverable with your decisions}}
+- DESIGN DECISIONS: {{filled in session: what is settled and not negotiable}}
+- DOD-SLICE: {{command}} → {{expected}} {{· the lines of the DoD-auto this task owns}}
+- STOP IF: {{an expected file is missing · the census diverges · a consumer contract
+  would change · a test would have to be degraded · {{task-specific condition}}}} —
+  stop and report, do not improvise.
+- FORBIDDEN: {{paths outside this task}} · no dependency upgrades · no secrets
+- RETURN: diff summary per file · every DOD-SLICE command with its output · open
+  questions. Never report "done" — the orchestrator verifies.
+
 # GUARDRAILS & CLOSE
 Touch nothing outside the scope of {{IDs}} ({{explicit allowed paths}}). No secrets in
-code/commits/logs. Agent budget 20 — sub-agents never implement, opus 1-10 then
-sonnet — is a hard limit of this session (see WORKFLOW).
+code/commits/logs. Agent budget 20 with fixed roles — you orchestrate and verify,
+opus investigates/audits (quota 10), sonnet implements from briefs, ladder sonnet →
+opus → you — is a hard limit of this session (see WORKFLOW).
 {{Wave-specific hard limits: "do NOT upgrade dependency X", "do NOT
 touch folder Y (Wave 3's scope)", inviolable decisions from master-plan §8 that this
 wave could violate.}} When the DoD-auto is green: {{delivery per execute.md §3 —
@@ -125,8 +159,8 @@ open MR / commit without push}}, then run the FULL doc-sync at close (`execute.m
 §2b — "append the logbook" means ALL of it): logbook entry in `{{docs_dir}}/task.md`
 (TODAY's date — never hardcoded — + branch/MR + tasks closed + **files touched +
 manifest drift** + notes + wall clock + **agents used n/20 (opus a · sonnet b)**,
-one line per agent with its model, role and scope), status flip in task.md's wave
-map AND this
+one line per agent with its model, role and scope + **escalations** (none, or
+ID: tier → tier with the reason)), status flip in task.md's wave map AND this
 prompt's `execute.md §7` header (✅ / ⛔ if blocked on a DoD-human), mark {{IDs}} ✅ in
 `detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
 refresh the Scope manifests of LATER waves whose surfaces this wave changed (and
