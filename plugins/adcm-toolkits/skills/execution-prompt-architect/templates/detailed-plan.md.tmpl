@@ -34,6 +34,9 @@ Generate in the user's language; keep the document name detailed-plan.md.
   wave prompts inline it as `# SCOPE` so executing sessions never re-derive it. It is
   refreshed at every wave close (execute.md §2b) with what was ACTUALLY touched, so
   later waves inherit fresh state.
+- **Executor per task**: `sonnet` by default (from an executor brief, execute.md
+  §1.8); `opus` on ⚠gate waves. Recorded in every card as `Executor:`; the
+  orchestrator never implements first (escalation ladder, execute.md §1.7).
 - **Base DoD** (applies to EVERY task, on top of its own DoD):
   - [ ] {{repo_quality_command — e.g. lint/typecheck/tests of that repo}} → exit 0
   - [ ] No files touched outside the task's scope
@@ -47,7 +50,7 @@ Generate in the user's language; keep the document name detailed-plan.md.
 ### ☐ T-W1-1 — {{task_title}}
 
 - **Repo(s):** `{{repo}}`
-- **Owner:** {{owner}}
+- **Owner:** {{owner}} · **Executor:** {{sonnet | opus (⚠gate)}}
 - **Technical description:** {{2-5 sentences of real technical depth: exact files/
   modules/surfaces touched, counts found in the analysis ("34 call sites of X"),
   key implementation decisions, order within the task.}}

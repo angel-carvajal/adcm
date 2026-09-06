@@ -8,12 +8,15 @@ ready-to-run, copy-paste prompts per wave.
 > ⚠ **Deep but bounded, with fixed roles.** This skill spends tokens on depth — a
 > bucketed analysis fan-out across your repos, a dependency-ordered wave plan, six
 > cross-linked documents plus one fully instantiated prompt per wave — under a
-> tiered protocol: **the main session (Fable) implements everything itself and
-> never audits its own work with its own tier; Opus sub-agents carry investigation,
-> audits and regression review; Sonnet relieves Opus after the 10th agent; budget
-> 20 sub-agents per analysis phase and per wave session, ultracode included.**
-> Every generated wave prompt carries that budget and those roles as a hard limit,
-> and the logbook records the agents actually used per model.
+> tiered protocol: **the main session (Fable) orchestrates — audits deliverables,
+> writes executor briefs, runs the DoD itself — and never implements first; Opus
+> sub-agents investigate, review regression, verify gates and implement ⚠gate
+> waves; Sonnet sub-agents implement NO-gate tasks from briefs (up to 4 in
+> parallel, own worktrees); an escalation ladder Sonnet → Opus → Fable kicks in on
+> the 2nd failure of the same DoD line; budget 20 sub-agents per analysis phase
+> and per wave session, ultracode included.** Every generated wave prompt carries
+> that budget, those roles and one executor brief per task as a hard limit, and
+> the logbook records the agents actually used per model plus every escalation.
 
 ## The principle
 
@@ -80,17 +83,18 @@ analysis is faster, cheaper and far more precise.
 
 ## Recommended models
 
-- **Running this skill / the analysis**: the main session is the executor —
+- **Running this skill / the analysis**: the main session is the orchestrator —
   **Fable** recommended (max effort; ultracode for complex multi-repo work), Opus or
-  Sonnet accepted. Sub-agent models are fixed by the protocol: `opus` for delegated
-  agents 1–10, `sonnet` for 11–20 (one tier down if the main session is not Fable).
+  Sonnet accepted. Sub-agent models are fixed by the protocol: `opus` investigates,
+  audits and runs ⚠gate waves (quota 10 per session), `sonnet` implements from
+  executor briefs (one tier down if the main session is not Fable).
 - **Executing the generated wave prompts**: they are tuned for **Fable at max
-  effort** but run on any model. Every prompt includes a `WORKFLOW (fan-out)`
-  section that spells out what to delegate (investigation, deliverable audits,
-  regression review, adversarial verification) — the executor implements everything
-  itself. Ultracode changes the orchestration (one Workflow + an adversarial
-  cross-check), not the roles or the count: the 20-agent budget applies in every
-  effort level.
+  effort** as orchestrator but run on any model. Every prompt includes a `WORKFLOW
+  (fan-out)` section with the per-task cycle (investigate → audit the deliverable →
+  brief → Sonnet executes → the orchestrator verifies and escalates → Opus reviews
+  regression → integrate) and one pre-filled executor brief per task. Ultracode
+  changes the orchestration (a Workflow per phase + an adversarial cross-check),
+  not the roles or the count: the 20-agent budget applies in every effort level.
 
 ## Requirements
 
