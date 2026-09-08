@@ -1,0 +1,49 @@
+<!--
+Rendered by scripts/render_report.py. Kept here so the shape is reviewable without
+reading Python, and so a project can fork the layout without forking the logic.
+
+Section order is deliberate:
+  1. Agent readiness  — the external, unmodified score, with its scan date
+  2. Findings         — ordered by traffic impact, each with WHERE / WHAT / FIX / PROVES IT
+  3. Checked and passing — so the next run distinguishes a regression from a new check
+  4. Not verified     — the honesty section; never optional, never a footnote
+
+"Proves it" is the load-bearing field. A finding without a reproducing command is an
+opinion, and opinions do not survive contact with an execution wave.
+-->
+# Agentic SEO report — {{url}}
+
+Generated {{date}} · {{n_findings}} finding(s) · {{n_passed}} check(s) passed
+{{rules_line}}
+
+## Agent readiness (is-agentic.com)
+
+**{{score}}/100 — {{label}}**
+Scanned `{{scanned_at}}` — {{staleness_note}}
+
+| Bucket | Earned | Available |
+|---|---|---|
+{{bucket_rows}}
+
+{{issue_table}}
+{{comparison_line}}
+
+## Findings, ordered by traffic impact
+
+{{#each finding}}
+### {{severity_icon}} {{summary}}
+
+- **Check** `{{check}}` · severity **{{severity}}** · tags: {{tags}}
+- **Where** {{where}}
+- **What happens** {{detail}}
+- **Fix** {{fix}}
+- **Proves it** `{{command}}`
+{{/each}}
+
+## Checked and passing
+
+{{passing_list}}
+
+## Not verified
+
+{{not_verified_list}}

@@ -1,0 +1,35 @@
+# Project hard rules for agentic-seo-report.
+#
+# Without this file the skill runs with generic guardrails and SAYS SO in the report header.
+# With it, two things happen:
+#   1. Recommendations are filtered — nothing that would publish a forbidden value is proposed.
+#   2. The FINISHED report is scanned against forbidden_terms, and refused if it leaks one.
+#
+# Deliberately a flat, tiny format: a config that needs a parser dependency is a config
+# people stop updating.
+
+name: Example Food Trailers
+
+# Terms that must never appear in the published site OR in this skill's own report.
+# Matched case-insensitively as substrings, so keep them specific enough not to false-positive.
+forbidden_terms:
+  - costo_real
+  - precio_costo
+  - margen
+  - profit margin
+  - gross margin
+
+# Recommendations the skill must never make for this project, with the reason.
+# These are read by the model before it writes the findings.
+never_recommend:
+  - "Offer or Product schema carrying the exact price — public surface is a band and a range only"
+  - "content disclosing manufacturing location, subcontractors or supplier names"
+  - "process-disclosure or how-it-is-made pages (standard E-E-A-T advice, wrong for this project)"
+  - "any crawl-as-a-service or keyword API that ingests page content"
+
+# Free-form context the model should hold while judging findings.
+notes: >
+  Bilingual ES/EN site, Express + Pug SSR. Local service business serving a single state only.
+  Public pricing surface is a band with a "from" figure — never an exact quote.
+  The Spanish half is not a translation afterthought: it is the primary audience for a large
+  part of the market, so parity gaps there cost more than they would elsewhere.
