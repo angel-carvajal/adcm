@@ -1,0 +1,134 @@
+/* Design tokens — {{PROJECT_NAME}}
+ * Generated {{DATE}} by design-direction-architect.
+ * Single source of truth. brief.md describes; it does not redefine.
+ * Brand constraints override extracted reference values.
+ */
+
+/* ============================================================
+ * LOCKED VARIANT — use when brief.md's Brand status is
+ * locked or partial (a design system was found in STEP 0).
+ *
+ * Source of truth: {{DS_PATH}}. This file MAPS DS names to the
+ * names brief.md uses and lists NEW tokens proposed as a PR to
+ * the DS. Never a second :root that restates DS values — every row
+ * below points at the DS token. A literal value appears only in the
+ * "New tokens proposed" block, as a PR proposal, never as a source.
+ *
+ * Delete this block (and the "New tokens proposed" block below
+ * it) on a project with no DS; use the OPEN VARIANT further
+ * down instead. Delete the OPEN VARIANT if this block applies.
+ * ============================================================ */
+
+:root {
+  /* — Color: ground and ink — */
+  --ground:         var(--{{DS_GROUND}});
+  --surface:        var(--{{DS_SURFACE}});
+  --surface-raised: var(--{{DS_SURFACE_RAISED}});
+  --ink:            var(--{{DS_INK}});
+  --ink-muted:      var(--{{DS_INK_MUTED}});
+  --border:         var(--{{DS_BORDER}});
+
+  /* — Color: accent — */
+  --accent:         var(--{{DS_ACCENT}});
+  --accent-ink:     var(--{{DS_ACCENT_INK}});
+  --accent-quiet:   var(--{{DS_ACCENT_QUIET}});
+
+  /* — Type — */
+  --font-display: var(--{{DS_FONT_DISPLAY}});
+  --font-body:    var(--{{DS_FONT_BODY}});
+  --font-mono:    var(--{{DS_FONT_MONO}});
+
+  --step--1: var(--{{DS_SIZE_SM}});
+  --step-0:  var(--{{DS_SIZE_BASE}});
+  --step-1:  var(--{{DS_SIZE_LG}});
+  --step-2:  var(--{{DS_SIZE_XL}});
+  --step-3:  var(--{{DS_SIZE_2XL}});
+  --step-4:  var(--{{DS_SIZE_DISPLAY}});
+
+  /* — Spacing, shape, motion — map every name the reduced-motion block
+     below overrides, plus whatever else this brief needs — */
+  --space-4:   var(--{{DS_SPACE_4}});
+  --radius:    var(--{{DS_RADIUS}});
+  --dur-fast:  var(--{{DS_DUR_FAST}});
+  --dur:       var(--{{DS_DUR}});
+  --dur-slow:  var(--{{DS_DUR_SLOW}});
+}
+
+/* New tokens proposed — this brief needs these but the DS does not
+ * have them yet. File a PR to {{DS_PATH}} adding them before
+ * builders consume them; do not invent values that bypass the DS.
+ */
+:root {
+  /* --{{NEW_TOKEN_NAME}}: {{NEW_TOKEN_VALUE}};  -- {{WHY_ITS_NEEDED}} */
+}
+
+/* ============================================================
+ * OPEN VARIANT — use when brief.md's Brand status is open (no
+ * design system found in STEP 0). Delete the LOCKED VARIANT
+ * block above when this variant applies.
+ * ============================================================ */
+
+:root {
+  /* — Color: ground and ink — */
+  --ground:        {{GROUND}};
+  --surface:       {{SURFACE}};
+  --surface-raised:{{SURFACE_RAISED}};
+  --ink:           {{INK}};          /* contrast on ground: {{RATIO_INK}} */
+  --ink-muted:     {{INK_MUTED}};    /* contrast on ground: {{RATIO_MUTED}} */
+  --border:        {{BORDER}};
+
+  /* — Color: accent — */
+  --accent:        {{ACCENT}};       /* contrast on ground: {{RATIO_ACCENT}} */
+  --accent-ink:    {{ACCENT_INK}};   /* text on accent: {{RATIO_ON_ACCENT}} */
+  --accent-quiet:  {{ACCENT_QUIET}};
+
+  /* — Type — */
+  --font-display: {{DISPLAY_STACK}};
+  --font-body:    {{BODY_STACK}};
+  --font-mono:    {{MONO_STACK}};
+
+  --step--1: {{SIZE_SM}};
+  --step-0:  {{SIZE_BASE}};
+  --step-1:  {{SIZE_LG}};
+  --step-2:  {{SIZE_XL}};
+  --step-3:  {{SIZE_2XL}};
+  --step-4:  {{SIZE_DISPLAY}};
+
+  --leading-tight: {{LEADING_TIGHT}};
+  --leading-body:  {{LEADING_BODY}};
+  --tracking-display: {{TRACKING_DISPLAY}};
+  --measure: {{MEASURE}};            /* e.g. 68ch */
+
+  /* — Spacing (base {{BASE_UNIT}}) — */
+  --space-1: {{SP1}};
+  --space-2: {{SP2}};
+  --space-3: {{SP3}};
+  --space-4: {{SP4}};
+  --space-5: {{SP5}};
+  --space-6: {{SP6}};
+  --section-y: {{SECTION_Y}};
+  --section-y-mobile: {{SECTION_Y_MOBILE}};
+
+  /* — Shape — */
+  --radius-sm: {{RADIUS_SM}};
+  --radius:    {{RADIUS}};
+  --radius-lg: {{RADIUS_LG}};
+  --shadow:    {{SHADOW}};
+
+  /* — Motion (budget: {{MOTION_BUDGET}}) — */
+  --dur-fast: {{DUR_FAST}};
+  --dur:      {{DUR}};
+  --dur-slow: {{DUR_SLOW}};
+  --ease:     {{EASE}};
+  --ease-out: {{EASE_OUT}};
+}
+
+{{DARK_BLOCK}}
+/* If both themes are in scope, redefine ONLY the color tokens here:
+ * @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { … } }
+ * :root[data-theme="dark"] { … }
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; --dur-slow: 0ms; }
+}
