@@ -3,7 +3,8 @@
 Turns your goals + a deep, multi-agent analysis of your code into the complete
 execution brain of a project: executive proposal, master plan, detailed task plan,
 timeframe plan (calendar schedule), task tracker, and an execution protocol with
-ready-to-run, copy-paste prompts per wave.
+ready-to-run, copy-paste prompts per wave — each carrying its reuse/extraction plan, a
+comment policy, and a code-simplifier pass that closes every wave.
 
 > ⚠ **Deep but bounded, with fixed roles.** This skill spends tokens on depth — a
 > bucketed analysis fan-out across your repos, a dependency-ordered wave plan, six
@@ -12,17 +13,22 @@ ready-to-run, copy-paste prompts per wave.
 > writes executor briefs, runs the DoD itself — and never implements first; Opus
 > sub-agents investigate, review regression, verify gates and implement ⚠gate
 > waves; Sonnet sub-agents implement NO-gate tasks from briefs (up to 4 in
-> parallel, own worktrees); an escalation ladder Sonnet → Opus → Fable kicks in on
+> parallel, own worktrees); one packaged `code-simplifier` pass (model: opus) closes
+> every wave; an escalation ladder Sonnet → Opus → Fable kicks in on
 > the 2nd failure of the same DoD line; budget 20 sub-agents per analysis phase
-> and per wave session, ultracode included.** Every generated wave prompt carries
-> that budget, those roles and one executor brief per task as a hard limit, and
-> the logbook records the agents actually used per model plus every escalation.
+> and per wave session, with the Opus quota of 10 reserving two slots — the gate
+> verifier and the simplify pass — ultracode included.** Every generated wave prompt
+> carries that budget, those roles, one executor brief per task and the wave's
+> simplifier brief as a hard limit, and the logbook records the agents actually used
+> per model, what was reused or extracted, whether the simplifier ran, plus every
+> escalation.
 
 ## The principle
 
 Work ships in **waves** of batched sessions (1–4 coupled tasks per wave). Each wave
-runs as a self-verifying loop — implement → verify → fix — whose **only exit
-criterion is a command-verifiable Definition of Done (DoD-auto)**, never fatigue.
+runs as a self-verifying loop — implement → verify → fix → simplify → re-verify —
+whose **only exit criterion is a command-verifiable Definition of Done (DoD-auto)**,
+run one last time after the simplifier pass, never fatigue.
 Goals are tracked per task, parallel work fans out to sub-agents/workflows with
 disjoint file ownership, and risk gates (⚠) require **adversarial verification** by
 an agent that did not write the code. Batch migrations follow the same protocol:
@@ -31,7 +37,9 @@ dependency-ordered waves, each with its own well-defined prompt.
 **Wave prompts are self-contained.** The analysis is paid ONCE, at plan time: each
 prompt's `# SCOPE (manifest)` embeds the files to modify (with why), the impact
 census of shared surfaces (a component edited for one page but consumed by 10 more
-lists all 10 — the solution keeps their contract or adapts them in scope), and a
+lists all 10 — the solution keeps their contract or adapts them in scope), the reuse
+verdict (consume this helper · extract it here and rewire these consumers · duplicate
+deliberately, and why), and a
 cheap census command the executing session runs FIRST as a freshness guard. Clean
 sessions execute in auto mode without re-analyzing the project; at every wave close a
 doc-sync ritual refreshes later waves' manifests AND delta-refreshes the project
@@ -48,10 +56,10 @@ sent at the very end so the owner sees files + links on a phone without scrollin
 |---|---|
 | `executive-proposal.md` | PITCH — first part of the family: what is sought, what we gain, the plan in N steps, when/who, investment & risk, and what we ask to approve (for stakeholders, jargon-free) |
 | `master-plan.md` | WHY — core decision, target architecture, wave order, timeline with exit gates, risks, affected repos, inviolable decisions |
-| `detailed-plan.md` | WHAT — every task with ID, repo(s), owner, technical description, **Scope manifest** (files to modify/create with why, read-first exemplars, impact census of consumers, freshness check, symbol notes), DoD checkboxes, dependencies |
+| `detailed-plan.md` | WHAT — every task with ID, repo(s), owner, technical description, **Scope manifest** (files to modify/create with why, read-first exemplars, impact census of consumers, reuse/extraction plan, freshness check, symbol notes), DoD checkboxes, dependencies |
 | `timeframe-plan.md` | WHEN — start/target/buffer summary, per-wave schedule (sessions + calendar days, dependencies, parallelism, estimated week), critical path, calendarized milestones + DoD-human, week-by-week table, calendar assumptions & risks |
 | `task.md` | STATE — wave map, weekly burn, execution logbook |
-| `execute.md` | HOW — protocol (principles, doc-sync at close, merge policy, checkpoint/resume, attack checklists) + one copy-paste prompt per wave (GOAL · TASKS · SCOPE manifest · LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) |
+| `execute.md` | HOW — protocol (principles — reuse, comment policy and the per-wave code-simplifier pass included —, doc-sync at close, merge policy, checkpoint/resume, attack checklists) + one copy-paste prompt per wave (GOAL · TASKS · SCOPE manifest · LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) |
 | `plans.html` (optional) | A single-file visual version for presenting — 4 tabs: executive proposal (first), master plan, detailed plan, timeline (pure-CSS Gantt by wave + week-by-week table) (doc-nav, TOC, light/dark) |
 
 ## Install
@@ -91,13 +99,20 @@ analysis is faster, cheaper and far more precise.
 - **Executing the generated wave prompts**: they are tuned for **Fable at max
   effort** as orchestrator but run on any model. Every prompt includes a `WORKFLOW
   (fan-out)` section with the per-task cycle (investigate → audit the deliverable →
-  brief → Sonnet executes → the orchestrator verifies and escalates → Opus reviews
-  regression → integrate) and one pre-filled executor brief per task. Ultracode
-  changes the orchestration (a Workflow per phase + an adversarial cross-check),
-  not the roles or the count: the 20-agent budget applies in every effort level.
+  brief → Sonnet executes → the orchestrator verifies, escalates and integrates → Opus
+  reviews regression → checkpoint commit + the code-simplifier pass → re-run the full
+  DoD), one pre-filled executor brief per task and one simplifier brief per wave.
+  Ultracode changes the orchestration (a Workflow per phase + an adversarial
+  cross-check), not the roles or the count: the 20-agent budget applies in every
+  effort level.
 
 ## Requirements
 
 No runtime dependencies. Markdown-only skill read by Claude. Sub-agent fan-out uses
 Claude Code's built-in agents/Workflow; in other environments it degrades to
 sequential analysis.
+
+Recommended: the official `code-simplifier` plugin (`/plugin install
+code-simplifier@claude-plugins-official`), the default carrier of the per-wave simplify
+pass. Without it, the same `## Simplifier brief` goes to one sub-agent at the auditor
+tier — the brief is the contract, the plugin only its carrier.

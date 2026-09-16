@@ -29,17 +29,49 @@ Generate in the user's language; keep the document name detailed-plan.md.
   scripts/seeders, and split deep JSX into subcomponents instead of `<div>` + nested
   className ternaries; flatten nested ternaries. Exclude deeply-nested HTML (emails with
   table + MSO conditionals) from the auto-formatter if it worsens them (`.prettierignore`).
+- **Reuse before writing**: logic that already exists is consumed, not rewritten;
+  logic two or more components use or need is extracted ONCE into a shared helper both
+  consume (rule of TWO). Guard: extract only when both consumers would change together
+  (same-behavior test) — when they are expected to diverge, duplicate deliberately and
+  record the why. The helper lives in the project's shared root, never inside one
+  consumer; across repos, in a shared package when one exists, else in the repo owning
+  the surface it is coupled to (see the ownership convention above), consumed through
+  the existing dependency direction; when no dependency direction exists between the
+  two repos, duplicate deliberately and record the why in the `task.md` logbook. The decision is made in PLANNING and recorded in
+  the task's Scope manifest (`Reuse:`), never improvised at execution time — and the
+  helper plus the rewiring of ALL its current consumers is ONE task, which every
+  consuming task lists under `Depends on`.
+- **Comments explain the WHY, never the plan**: a comment earns its place when it
+  explains non-obvious logic (an invariant, a workaround for a named external bug, a
+  gotcha, a non-obvious algorithm), documents a public API in this repo's existing
+  convention, or is a TODO pointing at the issue tracker. Never restate what the code
+  does, narrate decisions or rationale ("we chose X because"), narrate changes ("added
+  in wave 2", "moved from"), reference the plan (task IDs, wave numbers, execution-doc
+  names) or leave commented-out code. Decisions already live in `master-plan.md`, in
+  these task cards and in the `task.md` logbook; a comment repeating them is a second
+  record that rots.
 - **Scope manifests**: every task card carries a `Scope manifest` — the structured
-  output of the analysis (files + why + impact + census). It is the POSITIVE scope:
+  output of the analysis (files + why + impact + reuse + census). It DEFINES the task's
+  scope — the shared helper and the consumers it names are inside it — and it is the
+  POSITIVE scope:
   wave prompts inline it as `# SCOPE` so executing sessions never re-derive it. It is
   refreshed at every wave close (execute.md §2b) with what was ACTUALLY touched, so
   later waves inherit fresh state.
 - **Executor per task**: `sonnet` by default (from an executor brief, execute.md
   §1.8); `opus` on ⚠gate waves. Recorded in every card as `Executor:`; the
-  orchestrator never implements first (escalation ladder, execute.md §1.7).
+  orchestrator never implements first (escalation ladder, execute.md §1.7). The
+  executor is not the last hand on the code: every wave ends with one code-simplifier
+  pass over its integrated diff, run by the orchestrator (execute.md §1.11).
 - **Base DoD** (applies to EVERY task, on top of its own DoD):
   - [ ] {{repo_quality_command — e.g. lint/typecheck/tests of that repo}} → exit 0
-  - [ ] No files touched outside the task's scope
+  - [ ] No files touched outside the task's scope (the scope IS this card's Scope
+    manifest: the shared helper and its named consumers are inside it)
+  - [ ] No added comment narrates the plan: `git diff {{base_branch}}...HEAD -- ':!*.md'
+    ':!{{docs_dir}}' | grep -E '^[+][^+]' | grep -E '(//|#|/[*]|^[+][[:space:]]*[*]|--|<!--)'
+    | grep -E '(T-W[0-9]+-[0-9]+|(^|[^A-Za-z0-9_])W[0-9]+([^A-Za-z0-9_]|$)|master-plan|detailed-plan|timeframe-plan|executive-proposal|execute\.md|task\.md)'
+    | wc -l | tr -d ' '` → `0` (BSD and GNU grep; `wc -l` because `grep -c` exits 1 on a
+    clean diff; narration vs why stays a judgement call for the regression review and
+    the simplifier, never for grep)
   - [ ] No secrets in code, commits or docs
   - [ ] Conventional commit(s), atomic, referencing the task ID
 
@@ -61,15 +93,25 @@ Generate in the user's language; keep the document name detailed-plan.md.
   - **Impact:** `{{shared_surface}}` ← {{N}} consumers: {{paths}}. {{Contract kept
     for all of them, or their adaptation is explicitly in this task's scope; the DoD
     must cover the consumers (build/tests of affected apps).}}
+  - **Reuse:** {{EXACTLY one verdict — consume: `{{path}}` (the helper that already
+    does this) · extract: `{{path}}` ← consumers: `{{files}}` (rule of TWO; this task
+    creates the helper AND rewires every listed consumer; every consuming task lists
+    this one under Depends on; the duplication census rides the Census line below) ·
+    deliberate duplicate: {{why they are expected to diverge}} · none}}
   - **Census:** `{{command}}` → expected {{N}} (as of {{analysis_date}}) · tolerance
     {{exact | ±1 for small counts (<10); ±X% only for large censuses}}. Divergence
     beyond tolerance at execution ⇒ STOP, re-scope against this card, update this
-    manifest, log the drift in task.md.
+    manifest, log the drift in task.md. {{· duplication flavour when this card's Reuse
+    verdict is `extract`: `rg -l '{{distinctive_snippet}}' | wc -l` → {{N}} today,
+    expected 1 after this task — same STOP-on-divergence semantics}}
   - **Symbol notes:** {{exact members to delete/preserve/rename, file:line — when the
-    analysis already has them; this is the overflow home when the prompt budget is hit}}
+    analysis already has them; this is the overflow home when the prompt budget is
+    hit, including the full consumer list of an extracted helper}}
 - **DoD:**
   - [ ] {{command}} → {{expected_result}}
   - [ ] {{observable_assertion}}
+  - [ ] {{On an extraction: the build/test command of EVERY rewired consumer → exit 0 ·
+    the duplication census → 1}}
 - **Depends on:** {{task_ids_or_none}}. **Blocks:** {{task_ids_or_what_it_unblocks}}.
 
 ### ☐ T-W1-2 — {{task_title}}

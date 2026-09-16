@@ -41,8 +41,14 @@ Append one entry per wave session (including `[PARTIAL]` ones — see `execute.m
   expected, which detailed-plan manifests (incl. later waves) were updated}}
 - **Notes/decisions:** {{what future sessions must know}}
 - **Wall clock:** {{duration — becomes the baseline for similar waves}}
+- **Reuse:** {{helpers consumed/extracted · consumers rewired · duplication census
+  before → after · unplanned duplication found → follow-up candidate | none}}
+- **Simplifier:** {{carrier: packaged `code-simplifier:code-simplifier` | fallback
+  sub-agent at the auditor tier · ran over `{{checkpoint_sha}}..HEAD` · files touched ·
+  DoD re-verified | reverted to the checkpoint (why) | not run (why)}}
 - **Agents used:** {{n}}/20 (opus {{a}} · sonnet {{b}}) — {{one line per sub-agent:
-  model + role (investigate / execute / review / verify) + scope; the budget and the
-  roles are a hard limit of the session (execute.md §1.7)}}
+  model + role (investigate / execute / review / simplify / verify) + scope; the
+  `simplify` line is the wave's code-simplifier pass and costs 1 agent + 1 of the Opus
+  quota; the budget and the roles are a hard limit of the session (execute.md §1.7)}}
 - **Escalations:** {{none | ID: sonnet → opus (reason, attempts) · ID: opus →
   orchestrator (reason)}}

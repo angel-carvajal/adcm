@@ -12,7 +12,9 @@ execute.md.
 > **What this is.** The operating manual of the build. It defines HOW the catalog in
 > `detailed-plan.md` gets executed: **wave sessions** (not 1 task = 1 session),
 > self-verified loops with the **DoD-auto as the exit criterion**, workflow fan-out
-> where parallelism helps, and **mandatory adversarial verification at ⚠gates**. The
+> where parallelism helps, **one code-simplifier pass over every wave's integrated
+> diff before the final DoD run**, and **mandatory adversarial verification at
+> ⚠gates**. The
 > copy-paste prompts per wave are at the end (§7). Keep in sync with `task.md`
 > (state) and `master-plan.md` (rationale). Prompts are tuned for Fable at high
 > effort but run on any model.
@@ -23,7 +25,9 @@ execute.md.
 2. **The loop ends by DoD, not by fatigue.** Each wave defines its **DoD-auto**: a
    list 100% verifiable by command. While it isn't green the loop continues:
    implement → verify → fix. Max 5 rounds; if the SAME failure doesn't converge in
-   **3 attempts** → stop, report, **never degrade tests to pass**.
+   **3 attempts** → stop, report, **never degrade tests to pass**. Then ONE simplify
+   pass (§1.11) → re-verify: the FULL DoD-auto runs AGAIN after it, so the green DoD
+   is always the DoD of the shipped diff.
 3. **DoD-auto ≠ DoD-human.** Actions only {{owner}} can take (dashboards, DNS,
    purchases, approvals) live in the **DoD-human**: when the DoD-auto is exhausted
    the task is marked `blocked` with the human checklist rendered at close. It only
@@ -33,6 +37,9 @@ execute.md.
    verification** by ANOTHER `opus` sub-agent (the reserved one — never the
    executor itself, never the orchestrator's tier) that did NOT see the
    implementation, given only the diff + the DoD + that wave's attack checklist (§6).
+   This covers the simplifier too: it edits code, so it is an implementer — the
+   orchestrator re-runs the DoD over its edits, and on ⚠gate waves the simplifier is
+   neither the executor nor the reserved verifier, and runs BEFORE the verification.
 5. **Inviolable decisions** (no session may contradict them — from
    `master-plan.md` §8): {{list_them_inline}}.
 6. **No hardcoded dates**: the logbook uses the date of the day of execution.
@@ -41,22 +48,88 @@ execute.md.
    (solution · files · considerations · open questions), writes one executor brief
    per task, runs every DoD-slice and the full DoD-auto itself, and integrates —
    it never implements first and never spawns its own tier. `opus` sub-agents
-   investigate, review regression and verify (quota 10 per session, 1 reserved for
-   the ⚠gate verifier; audits pass to `sonnet` once spent) and are the executors
+   investigate, review regression and verify (quota 10 per session, 2 reserved — the
+   ⚠gate verifier and the simplify pass; audits pass to `sonnet` once the rest is
+   spent) and are the executors
    on ⚠gate waves. `sonnet` sub-agents implement NO-gate tasks from briefs, ≤4 in
-   parallel with disjoint files in their own worktrees, and never self-approve.
+   parallel with disjoint files in their own worktrees (a shared helper is not a
+   disjoint file: the task that extracts it closes before its consumers start), and
+   never self-approve. ONE packaged `code-simplifier:code-simplifier` pass per wave,
+   called with an explicit `model: opus` (one tier down with the roles when the main
+   session is not Fable), costs 1 of the 20 and 1 of the Opus quota and is verified by
+   the orchestrator, never by itself.
    **Escalation ladder** Sonnet → Opus → orchestrator: the 2nd failure of the SAME
    DoD line moves the task one tier up as a new agent carrying the attempt log.
    One counter per session, `model` always explicit, `SendMessage` to a live agent
    costs 0. Ultracode changes the orchestration (Workflow per phase + adversarial
    cross-check), never roles or count. Exceeding 20 is a protocol violation; the
-   logbook records `agents used: n/20 (opus a · sonnet b)` and every escalation.
+   logbook records `agents used: n/20 (opus a · sonnet b)` with each agent's role
+   (investigate / execute / review / simplify / verify) and every escalation. `model`
+   always explicit includes packaged agents: the call names it, the plugin's
+   frontmatter is irrelevant.
 8. **Executor brief.** What the orchestrator hands to an executor, ≤40 lines:
-   `TASK · FILES (from the Scope manifest) · DELIVERABLE (Opus's audited deliverable
-   with the orchestrator's decisions) · DESIGN DECISIONS · DOD-SLICE (command →
-   expected) · STOP IF (stop and report instead of improvising) · FORBIDDEN ·
-   RETURN (diff summary per file · commands + output · open questions)`. Every §7
-   prompt carries one pre-filled block per task. A poor brief produces poor code.
+   `TASK · FILES (from the Scope manifest — the shared helper and EVERY consumer to
+   rewire included when the manifest says so) · DELIVERABLE (Opus's audited deliverable
+   with the orchestrator's decisions) · DESIGN DECISIONS (incl. the reuse verdict and
+   the helper's home — not negotiable) · DOD-SLICE (command →
+   expected; an extraction adds every rewired consumer's build/test and the duplication
+   census → 1) · STOP IF (stop and report instead of improvising — including a consumer
+   the census does not name, a helper home crossing repos, or duplication the brief
+   does not name) · FORBIDDEN (paths outside the brief — the named helper and its
+   consumers ARE in scope —, dependency changes, and comments narrating decisions,
+   rationale or plan references, §1.10) ·
+   RETURN (diff summary per file · commands + output · what was extracted or consumed
+   and which consumers were rewired · open questions)`. Every §7
+   prompt carries one pre-filled block per task, plus the wave's `## Simplifier brief`
+   (§1.11). A poor brief produces poor code.
+
+9. **REUSE before writing — decided in planning.** Logic that already exists is
+   consumed; logic two or more components use or need is extracted ONCE into a shared
+   helper both consume (rule of TWO, guarded by the same-behavior test: extract only
+   when both consumers would change together — otherwise it is a deliberate duplicate
+   with its why recorded). The verdict travels in the task's Scope manifest and in the
+   prompt's `# SCOPE`; an executing session APPLIES it and runs the duplication census
+   FIRST, it never hunts for duplication. The helper plus the rewiring of ALL its
+   current consumers is ONE task — every consuming task lists it under `Depends on`, so
+   it closes before they start and is never parallelised with them — and its DoD covers
+   every rewired consumer. Duplication found anyway is reported, not improvised on: if
+   every implicated file is already in this wave's SCOPE the orchestrator amends the
+   briefs and extracts in-wave (helper first, consumers after, serialized); if any file
+   is outside, it goes to the logbook `Reuse:` field as a follow-up candidate and into
+   the later-wave manifests at doc-sync (§2b step 3).
+10. **COMMENTS explain the WHY, never the plan.** Allowed: the why of non-obvious
+    logic (an invariant, a workaround for a named external bug, a gotcha, a
+    non-obvious algorithm), public-API docstrings in this repo's existing convention,
+    TODOs pointing at the repo's issue tracker when it has one. Not allowed: restating
+    what the code does, decision or rationale narration ("we chose X because"), change
+    narration ("added in wave 2", "moved from"), plan references (task IDs, wave
+    numbers, execution-doc names) and commented-out code. The reason: decisions already
+    live in `master-plan.md` (§1 with its rejected alternatives, §3, §4, §8), in the
+    `detailed-plan.md` cards and in the `task.md` logbook — a comment repeating them is
+    a second record that rots. One Base DoD line makes the plan-reference half
+    command-verifiable; narration vs why is a judgement call and belongs to the `opus`
+    regression review and to the simplifier, never to a fuzzy grep.
+11. **SIMPLIFY — one pass per wave.** Once the regression findings are fixed, the
+    orchestrator makes a checkpoint commit and runs the packaged agent
+    `code-simplifier:code-simplifier` with an explicit `model: opus` over the wave's
+    integrated diff, driven by the `## Simplifier brief` (≤20 lines: the diff's file
+    list and nothing else · the project conventions override the agent's built-in style
+    defaults · the executor briefs' design decisions are not negotiable · the comment
+    policy of §1.10 · no behavior, dependency, formatting-only or test changes ·
+    returns a diff summary per file and what it skipped). It costs 1 of the 20 and 1 of
+    the Opus quota, never self-approves, and on ⚠gate waves runs BEFORE the reserved
+    verifier. Cap: ONE pass, edits applied in ONE round, never a simplify → verify
+    loop. If the FULL DoD-auto fails after it: ONE fix round to the SAME simplifier
+    (`SendMessage`, cost 0 — if it cannot be reached, skip straight to the revert); a
+    second failure goes back to the checkpoint commit (`git reset --hard` while the
+    branch is unpushed, `git revert` of the simplify commit if already pushed) and the
+    wave closes on the pre-simplify diff, recorded in the logbook. That retry consumes
+    neither the 5 rounds nor the 3 attempts. The simplifier edits the wave branch in
+    place; the orchestrator commits its diff. The brief is the contract and the packaged
+    agent only its default carrier: where `code-simplifier:code-simplifier` is not
+    installed, the same `## Simplifier brief` goes to ONE sub-agent at the auditor tier —
+    same model, cost, cap and RETURN — and the logbook `Simplifier:` field records which
+    carrier ran.
 
 ## 2. Canonical wave-prompt template
 
@@ -70,8 +143,11 @@ Load the skill `{{project_context_skill}}`, read
 # GOAL — Wave <Wx>: <titles>
 Work EXACTLY the tasks <IDs> (specs: detailed-plan.md — read them in full; they are
 the specification).
-DoD-auto (the loop's EXIT criterion; everything by command):
+DoD-auto (the loop's EXIT criterion; everything by command — the FULL run happens
+AFTER the simplify pass):
 - [ ] <command> → <expected result>
+- [ ] <the comment-hygiene command from detailed-plan §0 Base DoD, with this wave's base branch> → 0
+- [ ] (if a task extracts a helper) <build/test of EVERY rewired consumer> → exit 0 · <dup census> → 1
 - [ ] (if the wave touches UI) a REVIEWED screenshot of the render — see "VISUAL CHECK"
 
 # TASKS
@@ -81,19 +157,25 @@ verification. Checkpoint commit (Conventional) at each internal task close.
 # SCOPE (manifest)
 <per task, inlined from its Scope manifest card in detailed-plan.md: Modify/Create
 with a 1-line why per file · Read first exemplars · Impact (shared surface ← N
-consumers; contract kept or adaptation in scope; DoD covers the consumers) · Census
+consumers; contract kept or adaptation in scope; DoD covers the consumers) · Reuse in
+1–2 lines (consume <path> | extract → <path>; rewire <A,B,C> | deliberate duplicate —
+<why> | none; the dup census rides the Census line) · Census
 command → expected N · tolerance (exact/±1 for small counts; ±X% only for large) ·
 Symbol notes when they fit the budget, else the pointer to the card. The
-investigation already ran: do NOT re-derive these lists. Census FIRST; divergence
-beyond tolerance ⇒ STOP and re-scope against detailed-plan. Budget ~15 lines/task
-(hard cap 25 for multi-file tasks), ≤60/wave — overflow stays in the card.>
+investigation already ran: do NOT re-derive these lists and do NOT hunt for
+duplication — apply the reuse verdict. Census FIRST; divergence
+beyond tolerance ⇒ STOP and re-scope against detailed-plan. Budget UNCHANGED ~15
+lines/task (hard cap 25 for multi-file tasks), ≤60/wave — the reuse line lives inside
+the ~15, overflow stays in the card.>
 
 # LOOP
-brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → repeat. Max 5
+brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → repeat, then ONE
+simplify pass → re-verify. Max 5
 rounds; the executor's 2nd failure of the same DoD line escalates the task one tier
 up (sonnet → opus → you) with the attempt log; 3 attempts on the same failure at
 session level → stop and report (don't degrade tests, don't mark done what isn't
-done).
+done). The simplify pass consumes no round: a DoD failure after it gets ONE fix round
+to the same simplifier, then a revert to the checkpoint commit.
 
 # VISUAL CHECK (MANDATORY if the wave touches UI: .pug/.html/.scss/.css/components)
 grep + build only prove the code is THERE, not that it LOOKS right (they never catch real width,
@@ -106,21 +188,36 @@ if i18n. Verify width/responsive (not "compacted"), i18n, no overlaps, design-sy
 AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL; YOU orchestrate —
 audit deliverables, write executor briefs, run every DoD-slice and the full
 DoD-auto yourself, integrate; you never implement first. `opus` investigates,
-reviews regression and verifies (quota 10, 1 reserved for the ⚠gate verifier) and
+reviews regression and verifies (quota 10, 2 reserved: the ⚠gate verifier and the
+simplify pass) and
 implements ⚠gate waves; `sonnet` implements NO-gate tasks from briefs (≤4 parallel,
-disjoint files, own worktrees), never self-approves. Ladder sonnet → opus → you.
+disjoint files, own worktrees; an extraction task runs before its consumers, never
+beside them), never self-approves. ONE `code-simplifier:code-simplifier` pass per wave
+with an explicit `model: opus` (1 of the 20, 1 of the quota, never self-approving).
+Ladder sonnet → opus → you.
 Model always explicit; SendMessage follow-ups cost 0. In ultracode: Workflow per
 phase, ≤20 agent() calls in total, isolation: 'worktree' on parallel executors.
 <the per-task cycle with real IDs: investigate → audit deliverable → brief →
-execute → verify/escalate → regression review → integrate; on ⚠gates: opus executor
-+ adversarial verification by ANOTHER opus with the attack checklist from §6>
+execute → verify/escalate → integrate the worktrees → regression review → checkpoint
+commit + simplify pass → run the FULL DoD-auto; on ⚠gates: opus executor, the simplify
+pass BEFORE the adversarial verification by ANOTHER opus with the attack checklist from §6>
 ## Executor brief — <ID>
-<TASK · FILES (from SCOPE) · DELIVERABLE · DESIGN DECISIONS · DOD-SLICE · STOP IF ·
-FORBIDDEN · RETURN — one block per task, ≤40 lines, see §1.8>
+<TASK · FILES (from SCOPE, the helper and its consumers included) · DELIVERABLE ·
+DESIGN DECISIONS (incl. the reuse verdict) · DOD-SLICE · STOP IF · FORBIDDEN (the
+helper and its named consumers ARE in scope; no narrating comments) · RETURN (+ what
+was extracted or consumed and which consumers were rewired) — one block per task, ≤40
+lines, see §1.8>
+## Simplifier brief
+<one per wave, ≤20 lines, see §1.11: AGENT (code-simplifier:code-simplifier, model:
+opus) · FILES (the wave's diff file list, code only) · CONVENTIONS (project over the
+agent's built-in defaults) · DESIGN DECISIONS (not negotiable) · COMMENTS (§1.10) ·
+FORBIDDEN · RETURN>
 
 # GUARDRAILS & CLOSE
-Touch nothing outside the tasks' scope. No secrets in code/commits. When the DoD-auto
-is green: <delivery per §3>, then run the FULL doc-sync at close (§2b — "append the
+Touch nothing outside the tasks' scope — the scope IS the Scope manifest, so the
+shared helper and its named consumers ARE in scope when the manifest lists them. No
+secrets in code/commits. When the simplify pass has run and the DoD-auto is green
+AFTER it: <delivery per §3>, then run the FULL doc-sync at close (§2b — "append the
 logbook" means ALL of it), and list any pending DoD-human marking those tasks
 blocked.
 ```
@@ -132,13 +229,20 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
 
 1. **`task.md`** — logbook entry with the extended schema (date of execution ·
    branch/MR · tasks closed · **files touched** · **manifest drift** · notes · wall
-   clock · **agents used n/20 (opus a · sonnet b)** · **escalations**) AND the
+   clock · **reuse** (helpers consumed/extracted · consumers rewired · dup census
+   before → after · unplanned duplication found → follow-up | none) · **simplifier**
+   (carrier: packaged | fallback sub-agent · ran over `{{checkpoint_sha}}..HEAD` · files
+   touched · DoD re-verified | reverted (why) | not run (why)) · **agents used n/20 (opus a · sonnet b)** with roles investigate /
+   execute / review / simplify / verify · **escalations**) AND the
    wave-map status flip.
 2. **`execute.md` §7** — this wave's prompt header flip (`☐` → `✅ DONE (date)` /
    `🔄` / `⛔`).
 3. **`detailed-plan.md`** — mark the tasks done; update their Scope manifests with
    what was ACTUALLY touched; for every LATER wave whose manifest names surfaces this
-   wave changed, refresh its file lists and census expected counts.
+   wave changed, refresh its file lists and census expected counts. A helper born in
+   this wave is written into the `Reuse:` verdict and the Read-first list of every
+   later wave that needs the same logic, so the next wave consumes it instead of
+   duplicating it again.
 4. **`execute.md` §7** — regenerate the prompt of any later wave whose manifest
    changed in (3): its `# SCOPE` must match detailed-plan.
 5. **Delivery message — ENDS with a links block, no filler**: the last paragraph of
@@ -199,15 +303,20 @@ re-run this doc-sync when {{owner}} pushes/merges.
 
 | Wave type | Delivery |
 |---|---|
-| NO-gate | {{e.g. auto-merge the MR if pipeline green and DoD-auto passed / commit without push for review}} |
-| ⚠gate ({{gate_wave_ids}}) | **No merge** — {{owner}} reviews after the adversarial verification |
+| NO-gate | {{e.g. auto-merge the MR if pipeline green and DoD-auto passed / commit without push for review}} — only once the simplify pass ran and the DoD-auto was re-run green AFTER it |
+| ⚠gate ({{gate_wave_ids}}) | **No merge** — {{owner}} reviews after the simplify pass and the adversarial verification |
+
+Nothing is delivered — MR opened, merged, or committed for review — on a diff the
+simplify pass has not seen, or on a DoD that predates it (§1.11).
 
 ## 4. Checkpoint / resume
 
 If a session dies mid-wave: partial state lives in (a) the wave branch's checkpoint
 commits and (b) a `[PARTIAL]` logbook entry with: internal tasks closed, exact step in
 progress, which executor tier held each open task and on which rung of the ladder
-(attempt log), unmerged worktrees, and the next command to run. The resuming session
+(attempt log), unmerged worktrees, whether the simplify pass already ran and over
+which checkpoint commit (so the resuming session neither repeats nor skips it), and
+the next command to run. The resuming session
 reads the `[PARTIAL]` entry, checks out the branch and continues the loop from that
 rung — it does NOT restart, and it does NOT re-brief tasks whose worktree is intact.
 
@@ -226,6 +335,10 @@ rung — it does NOT restart, and it does NOT re-brief tasks whose worktree is i
 {{Advisory tier — for NO-gate waves whose task spec still asks for an independent
 review: list an "advisory checklist" here the same way; the reviewer's findings are
 fixed before close but don't change the delivery policy (§3).}}
+Maintainability findings are in scope for BOTH tiers, with the same license as
+indentation hell: leftover duplication (logic the manifest said to extract, or the
+same logic written twice) and comment noise (narration of decisions, rationale or plan
+references — §1.10) are legitimate findings, reported and fixed like any other.
 
 ## 7. Wave prompts (instantiated, copy-paste)
 

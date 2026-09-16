@@ -27,7 +27,10 @@ future sessions from re-litigating the decision.}}
 ## 2. Target architecture
 
 {{Target state: layers, boundaries, who may depend on whom. Use a table or diagram.
-Include the boundary rules a wave prompt can enforce ("X never imports Y").}}
+Include the boundary rules a wave prompt can enforce ("X never imports Y") and WHERE
+SHARED HELPERS LIVE — the shared root every extraction targets (detailed-plan §0
+"Reuse before writing") — so extraction follows the architecture instead of the first
+consumer.}}
 
 | Layer / module | Contains | May depend on |
 |---|---|---|
@@ -68,13 +71,20 @@ ordering, what each wave unblocks. One short paragraph per wave.}}
 ## 8. Inviolable decisions
 
 Rules NO session or wave may contradict (each wave prompt's guardrails inherit them).
-Two are STANDING (include them always, before the project-specific ones):
+Three are STANDING (include them always, before the project-specific ones):
 
 - **Cross-repo ownership by COUPLING, never by consumer** (detailed-plan §0): an
   artifact lives in the repo whose surface it is coupled to — schema-coupled SQL with
   the schema, app-importing scripts with the app.
 - **Docs repo commit+push at every close** (execute.md §2b step 9): the docs dir is
   its own nested git repo; an unpushed logbook does not exist.
+- **Code quality is a deliverable** (detailed-plan §0 · execute.md §1.9–§1.11): reuse
+  is decided in planning — existing logic is consumed, logic two or more components
+  need is extracted once into a shared helper both consume, and nobody improvises an
+  abstraction while implementing; comments explain the WHY of non-obvious logic and
+  never narrate decisions, changes or plan references (that record lives in these
+  documents and in the `task.md` logbook); and every wave ends with one code-simplifier
+  pass over its integrated diff before the final DoD-auto run.
 
 1. {{inviolable_rule — e.g. security boundaries, secrets policy, commit conventions,
    directories that must not be touched}}
