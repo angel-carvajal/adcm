@@ -6,7 +6,7 @@ ADCM public toolkits for Claude Code (open-source).
 
 | Plugin | What it does | Skills |
 |---|---|---|
-| `adcm-toolkits` | Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context), a code-project… | business-context-generator, code-project-context-generator, council, execution-prompt-architect |
+| `adcm-toolkits` | Public ADCM toolkits: the Council multi-advisor deliberation framework (generic, bring-your-own-context), a code-project… | agentic-seo-report, business-context-generator, code-project-context-generator, council, design-direction-architect, execution-prompt-architect |
 
 ## Install
 

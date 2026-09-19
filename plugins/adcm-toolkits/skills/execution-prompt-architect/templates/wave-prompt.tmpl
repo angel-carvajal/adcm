@@ -246,7 +246,9 @@ open MR / commit without push}}, then run the FULL doc-sync at close (`execute.m
 manifest drift** + notes + wall clock + **reuse** (helpers consumed/extracted ·
 consumers rewired · dup census before → after · unplanned duplication found →
 follow-up | none) + **simplifier** (carrier: packaged | fallback sub-agent · ran over
-{{checkpoint_sha}}..HEAD · files touched · DoD re-verified | reverted (why) | not run (why)) + **agents used n/20 (opus a · sonnet
+{{checkpoint_sha}}..HEAD · files touched · DoD re-verified | reverted (why) | not run (why)) + **orchestrator fix**
+(none, or `<file>` — <why a brief would have cost more than the change>, ≤~20 lines —
+an unlogged one is a protocol violation) + **agents used n/20 (opus a · sonnet
 b)**, one line per agent with its model, role (investigate / execute / review /
 simplify / verify) and scope + **escalations** (none, or
 ID: tier → tier with the reason)), status flip in task.md's wave map AND this
@@ -266,8 +268,10 @@ arrives dead, `localhost` does not. Read the IP at close time, bind to `0.0.0.0`
 `curl` both before handing them over; start the preview server yourself if none runs,
 with HTTP Range support or mobile video dies; served PDF; report); (b) ALWAYS the
 project's canonical artifacts from `{{docs_dir}}/artifacts.json` — republished to
-their SAME URL first if their HTML changed (Artifact tool with `url`, read the live
-version before publishing; a flipped badge without a republish is a stale link);
+their SAME URL first if their HTML changed (for `prompts.html` that means
+REGENERATING it from §7 first with `prompts-regen.py`, never hand-editing the HTML)
+via the Artifact tool with `url`, read the live
+version before publishing; a flipped badge without a republish is a stale link;
 (c) repo paths and commit hashes, one line each — reference, not delivery.
 FORMAT: every link is a plain Markdown bullet `- [emoji Title](url)` — never inside
 a code fence, backticks, or 4-space indentation ({{owner}} taps these on a phone;

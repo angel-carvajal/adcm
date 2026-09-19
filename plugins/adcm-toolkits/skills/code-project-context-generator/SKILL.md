@@ -49,13 +49,19 @@ The skill needs the absolute path of the project. Strategy:
 Verify that the path exists and that it has typical project indicators (`.git/`, `package.json`, `composer.json`, `pyproject.toml`, `requirements.txt`, `Cargo.toml`, `go.mod`, etc.). If there are none, confirm with the user that it really is a code project before continuing.
 
 **Code repo vs container.** The standard layout (see
-`../execution-prompt-architect/references/project-structure.md`) is a CONTAINER that is
-not a git repo — `<container>/{ai-brain, ai, projects}` — with the code under
-`projects/` (plain grouping folder, one git repo per engineering project) and ALL
-documentation in `ai-brain/`. The scan target is always one **project repo**, but
-detect the container: if an ancestor holds sibling `ai-brain/` and/or `ai/` folders,
-record the container path — the generated skill must describe the whole container in
-its architecture map and route planned work and docs to the sibling `ai-brain/`.
+`../execution-prompt-architect/references/project-structure.md`, sections "The
+container" and "Where ai-brain may live") is a CONTAINER that is not a git repo, with
+the code under `projects/` (plain grouping folder, one git repo per engineering
+project — some containers use `p-engineering/`/`engineering/` instead) and ALL
+documentation in `ai-brain/`. The brain itself sits at `ai/ai-brain/` canonically, or
+at one of two accepted alternates: the container root (`<container>/ai-brain/`) or
+`docs/ai-brain/` with a MANDATORY symlink `ai/ai-brain -> ../docs/ai-brain`. The scan
+target is always one **project repo**, but detect the container: if an ancestor holds
+a sibling `ai-brain/` (at any of the three positions) and/or an `ai/` folder — which
+may hold `<slug>-{ai|ia}-admin` and `-common` marketplaces, or venture-specific
+variants (`-commercial`, `-platform`, `-academic`) — record the container path; the
+generated skill must describe the whole container in its architecture map and route
+planned work and docs to the sibling `ai-brain/`, wherever it actually lives.
 
 ### STEP 1: Collect minimal metadata
 
@@ -227,9 +233,11 @@ Offer both routes (mirror of business-context-generator's delivery):
 By the standard container layout (see
 `../execution-prompt-architect/references/project-structure.md`), the skill lands in
 `<container>/ai/<slug>-{ai|ia}-common/plugins/<plugin>/skills/code-project-context-[project-name]/`
-— the operational/engineering marketplace of the project (create it there if missing:
+— the operational/engineering marketplace of the project, or the venture's variant of
+it already in use (`-platform`, `-commercial`; see project-structure.md rule 6 for the
+full naming convention). Create it there if missing:
 `.claude-plugin/marketplace.json` + `plugins/<plugin>/.claude-plugin/plugin.json`, own
-git repo). Then bump the plugin's `version` (minor for a new skill, patch for a
+git repo. Then bump the plugin's `version` (minor for a new skill, patch for a
 refresh), update the marketplace README table, commit in THAT repo — and never push
 for the user. Registration lives in the profile's Claude settings, not the container.
 

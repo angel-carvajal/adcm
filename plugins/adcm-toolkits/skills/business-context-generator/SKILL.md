@@ -10,12 +10,17 @@ description: >
   'register a business', 'create a business profile', 'I want you to know my
   business', 'give me context for another business', 'I have another business',
   'crear contexto de negocio', 'nuevo negocio', 'registrar negocio', 'perfil de
-  negocio', 'business context', or any variation where they want Claude to
-  understand and remember a business for future working sessions.
+  negocio', 'business context', 'I already have the material', 'mine my
+  documents', 'build the context from what exists', 'ya tengo el material',
+  'sácalo de los documentos', 'arma el contexto con lo que ya existe', or any
+  variation where they want Claude to understand and remember a business for
+  future working sessions.
 compatibility: >
   No runtime dependencies. Markdown-only skill. Uses AskUserQuestion for the
   interview and WebFetch for website research when available; degrades to a
   plain-text interview without them. Works in Claude Code, Cowork, and claude.ai.
+last_updated: 2026-09-19
+protocol: 0.11.0
 ---
 
 # Business Context Generator
@@ -46,6 +51,7 @@ task — documents, reports, quotes, marketing, lead replies, analysis, decision
 |---|---|---|
 | `references/interview-guide.md` | the 8 interview rounds, Express/Full modes, per-round confidentiality question | STEP 2 |
 | `references/web-research.md` | website research protocol (what to fetch, what to extract, confirm-don't-ask) | STEP 1 |
+| `references/existing-sources.md` | mining protocol: source families, miner brief, fact-sheet schema, consolidation, confidentiality defaults | STEP 1b |
 | `references/delivery-guide.md` | how to deliver the generated skill (private marketplace or `.skill` zip) | STEP 5 |
 | `templates/SKILL.md.tmpl` | index of the generated skill (identity, hard rules, task→file map, rules) | STEP 3 |
 | `templates/*.md.tmpl` | one per generated reference file (`company`, `offering`, `market`, `brand`, `sales`, `operations`, `objectives`, `INTERNAL`) | STEP 3 |
@@ -55,9 +61,26 @@ When an absolute path is needed, this skill lives at
 
 ---
 
+## Agent roles (the tiered protocol)
+
+Same tiered protocol as `execution-prompt-architect` (canonical role table in its
+"Agent roles" section); here the roles mine sources instead of writing code:
+
+| Role | Model | Does | Never does |
+|---|---|---|---|
+| **Orchestrator** | the main session (Fable) | Owns STEP 0. Writes the miner briefs. **Audits** every fact sheet that comes back (contradictions, staleness, confidentiality class) and consolidates them into ONE sheet. Runs the interview and renders the templates. Fills a tiny gap itself (one Read/grep) instead of spending an agent. | Mine a whole source family itself when agents are available. Delegate AskUserQuestion. Spawn agents of its own tier. |
+| **Miner / Auditor** | `opus` sub-agents (quota 10) | One source FAMILY each: extracts facts into the row schema, flags UNKNOWNs, proposes a confidentiality class. Also the single refuter pass over the consolidated sheet. | Write files. Interview the user. Invent a value. Read outside its `PATHS`. |
+| **Bulk extractor** | `sonnet` sub-agents | Mechanical families: decks/HTML, CSS tokens, catalog dumps. Proposes a class; the orchestrator decides. | Judge confidentiality, resolve conflicts, or decide scope. |
+
+**Budget: 20 delegated agents per run.** `model` is ALWAYS explicit; `SendMessage`
+to a live miner costs 0; a realistic run spends 4–8. Reaching 20 means STOP and ask
+the user — and no agent may spawn unbounded amplifiers of its own.
+
+---
+
 ## Workflow
 
-### STEP 0: Language, mode, and target
+### STEP 0: Language, mode, target, and existing sources
 
 1. **Language.** Run the interview in the user's language (auto-detect from their
    prompt). Ask once, in Round 1, which language the generated skill's *content*
@@ -71,6 +94,13 @@ When an absolute path is needed, this skill lives at
 3. **Depth.** Offer two modes: **Express** (~20 min — essential rounds only;
    everything else is recorded as `[TO BE DEFINED]`) and **Full** (~45–60 min —
    all 8 rounds).
+4. **Existing sources.** Asked in the SAME AskUserQuestion call as mode and
+   language: does the venture already have artifacts to mine — sales decks or
+   presentations, a database (seed/migrations with catalog and prices), a
+   quoting/pricing tool, execution or planning docs of this or a sibling venture,
+   brand assets (CSS tokens, logos), prior Claude skills or memory files? **YES →
+   STEP 1b**, and the interview shrinks to the UNKNOWN list. **NO** → the classic
+   flow, unchanged.
 
 ### STEP 1: Website research (before asking anything)
 
@@ -79,6 +109,25 @@ with WebFetch **before Round 1**. Pre-fill everything you can (identity, offerin
 value proposition, portfolio, hours, tone of the current copy) and turn questions
 into confirmations. Ask the owner whether the website is a reliable source of truth.
 If WebFetch is unavailable or the site fails, degrade to the plain interview.
+
+### STEP 1b: Pre-fill from EXISTING SOURCES (fan-out)
+
+Only when STEP 0 item 4 answered YES. Read `references/existing-sources.md`.
+
+1. **Inventory with the owner.** Agree the paths: one line per source family and
+   what that family should prove.
+2. **Fan out ONE agent per family** (≤6): `opus` for judgement families, `sonnet`
+   for bulk ones, each with a miner brief plus the fact-sheet row schema.
+   Families are **DISJOINT trees** — no two miners read the same path.
+3. **Audit and consolidate — the orchestrator, never delegated.** Dedupe; resolve
+   conflicts by authority (**prod DB > product code > execution docs > collateral
+   > memory > website**); assign a class per fact; emit an explicit UNKNOWN list.
+   The result is ONE fact sheet.
+4. **Present the sheet as a confirmation batch**, then go to STEP 2 with the
+   interview reduced to the UNKNOWNs plus everything marked `inferred`.
+
+Website research (STEP 1) is simply family **F0**, with the lowest authority of all.
+**Never block on mining:** a family that yields nothing becomes UNKNOWNs.
 
 ### STEP 2: The interview
 
@@ -94,9 +143,17 @@ Read `references/interview-guide.md` and run the rounds with AskUserQuestion
 - **R7 — Numbers & direction** (optional — offer "now or another session?")
 - **R8 — Closing & rules** (essential, short)
 
-Rules that always apply: never re-ask what the conversation or the website already
-answered — confirm instead; in every round, explicitly ask what is confidential;
-record unanswered items as `[TO BE DEFINED]`.
+Rules that always apply: never re-ask what the conversation, the website or the
+fact sheet already answered — confirm instead; in every round, explicitly ask what
+is confidential; record unanswered items as `[TO BE DEFINED]`.
+
+**With a fact sheet the interview shrinks.** R1–R7 collapse into (a) ONE
+confirmation batch per round carrying only that round's mined facts ("tick what is
+wrong") and (b) questions for that round's UNKNOWNs and every fact marked
+`inferred`; `verbatim` facts are confirmed in bulk. **R8 always runs in full** —
+hard rules, "never say X" and the confidentiality split are the owner's judgements,
+not artifacts. A well-mined Full interview lands near Express in wall clock without
+losing a round.
 
 ### STEP 3: Generate the skill
 
@@ -113,9 +170,23 @@ Render the templates in `templates/` with the collected answers:
    and `INTERNAL.md` (INTERNAL.md is always generated).
 3. Everything the owner marked confidential goes to `references/INTERNAL.md` —
    never inline in the other files.
-4. List every `[TO BE DEFINED]` item in the "Pending context" section of
-   `objectives.md`, so the generated skill knows what it is missing.
-5. Render all content — including section headings — in the language chosen in
+4. **Provenance survives generation.** Every mined fact keeps an HTML comment at
+   the end of the line or bullet it feeds —
+   `<!-- src: <path>#<anchor> · as-of <date> · verbatim|derived|inferred -->` —
+   invisible when rendered. The full fact sheet, private paths included, is
+   appended to `references/INTERNAL.md` under `## Sources & freshness`: paths to a
+   venture's repos and databases are themselves internal.
+5. **Mined ≠ public.** A fact's class follows the AUDIENCE of the artifact it came
+   from, never its location on disk: a price in a dealer deck is partner-facing →
+   `INTERNAL.md` unless the owner declassifies it; a price in a migration or a
+   quoting RPC is CONFIDENTIAL by default; a claim on the public website is
+   public. The STEP 4 review is unchanged — the owner still has the last word.
+6. List every `[TO BE DEFINED]` item in the "Pending context" section of
+   `objectives.md`. An item that came from an UNKNOWN records what was already
+   searched — `[TO BE DEFINED] — margins (not found in: migrations, quoting tool,
+   execution docs; searched 2026-09-19)` — so update-mode never re-mines the same
+   ground.
+7. Render all content — including section headings — in the language chosen in
    STEP 0; file names, placeholders and structure stay in English.
 
 ### STEP 4: Review with the owner
@@ -175,6 +246,12 @@ business-init-[business-slug]/
   *inform* work but is never *copied* into anything a third party will see.
 - **Confirm, don't interrogate:** research the website first; turn questions into
   confirmations. Never re-ask what's already known.
+- **Mine before you ask:** facts that already exist in an artifact are extracted,
+  not asked for. The interview spends its budget on judgements — rules,
+  confidentiality, tone — never on data entry.
+- **Provenance or it didn't happen:** every mined fact carries its path, its date
+  and its confidence. No source = `inferred` = must be confirmed by the owner; an
+  `inferred` fact nobody can confirm becomes `[TO BE DEFINED]`.
 - **Accuracy over completeness:** record what you don't know as `[TO BE DEFINED]`
   rather than inventing — especially prices, dates, and policies.
 - **Generous triggers:** the generated description includes the brand, legal

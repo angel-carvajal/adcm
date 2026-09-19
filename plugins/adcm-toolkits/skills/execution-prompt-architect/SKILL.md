@@ -53,8 +53,18 @@ Auto-detect the user's language from their messages (Spanish or English) and use
 for ALL interaction and ALL generated documents. The templates are written in English;
 translate headings and boilerplate when generating in Spanish (keep the canonical
 section names `GOAL / TASKS / SCOPE / LOOP / VISUAL CHECK / WORKFLOW / GUARDRAILS &
-CLOSE` in English — they are protocol keywords, and the generated document FILENAMES
-are always the English ones above).
+CLOSE` in English — they are protocol keywords).
+
+Generated document FILENAMES follow the venture's working language
+(`references/project-structure.md` rule 9), not the interaction language alone: a
+Spanish-speaking venture's run deploys the Spanish set (`propuesta-ejecutiva.md,
+plan-maestro.md, plan-detallado.md, plan-timeframe.md, plans.html, prompts.html`); an
+English-speaking venture's run deploys the English set (`executive-proposal.md,
+master-plan.md, detailed-plan.md, timeframe-plan.md, plans.html, prompts.html`) —
+`task.md` and `execute.md` NEVER translate, in either set. Pick the set ONCE per
+container, record it in `ai-brain/README.md` and in `artifacts.json.close_markers`
+(the real third document's name), and use it consistently in every cross-link, every
+`# SCOPE` reference and every §7 prompt — never mix sets inside one container.
 
 ## Agent roles (the tiered protocol)
 
@@ -64,7 +74,7 @@ code-simplifier — see Accounting). They are fixed by protocol, not chosen per 
 
 | Role | Model | Does | Never does |
 |---|---|---|---|
-| **Orchestrator** | the main session (Fable; ultracode or max by complexity) | Decides design and scope — the reuse verdict included: it audits every deliverable for duplication (does this logic already exist? do two or more components need it? should it be extracted?) before a line of code exists. Audits the *deliverables* Opus returns (solution, files, considerations) against the project context. Writes the **executor brief** per task. Runs the DoD-auto itself. Checkpoint-commits and launches the wave's `code-simplifier` pass over the integrated diff, then re-runs the DoD after it. Integrates parallel executors. Last rung of the escalation ladder; tiny fixes (≤~20 lines) when a brief would cost more than the change. | Implement first. Spawn sub-agents of its own tier (the simplify pass is called at the auditor tier, one below the main session). Review code line by line — it audits deliverables and runs commands. |
+| **Orchestrator** | the main session (Fable; ultracode or max by complexity) | Decides design and scope — the reuse verdict included: it audits every deliverable for duplication (does this logic already exist? do two or more components need it? should it be extracted?) before a line of code exists. Audits the *deliverables* Opus returns (solution, files, considerations) against the project context. Writes the **executor brief** per task. Runs the DoD-auto itself. Checkpoint-commits and launches the wave's `code-simplifier` pass over the integrated diff, then re-runs the DoD after it. Integrates parallel executors. Last rung of the escalation ladder; tiny fixes (≤~20 lines) when a brief would cost more than the change. Every such direct fix is LOGGED in the `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an unlogged orchestrator edit is a protocol violation, not a shortcut. | Implement first. Spawn sub-agents of its own tier (the simplify pass is called at the auditor tier, one below the main session). Review code line by line — it audits deliverables and runs commands. |
 | **Investigator / Auditor** | `opus` sub-agents (quota 10 per session; 2 reserved — the ⚠gate verifier and the simplify pass) | Investigation, Scope manifests, deliverables (solution · files to touch with why · considerations · open questions · **reuse census**: the helper that already does this and must be consumed, or the logic two or more components need with its target path and every consumer), regression review over the executor's diff, adversarial verification at gates, attack checklists. **Executor on ⚠gate waves** and 2nd rung of the ladder. | Implement on NO-gate waves except by escalation — the one exception is the per-wave simplify pass, which rewrites the integrated diff without changing behavior, from a brief, and never verifies itself. Decide scope. |
 | **Executor** | `sonnet` sub-agents | Implements NO-gate tasks from an executor brief — up to 4 in parallel with disjoint files, each in its own worktree; a shared helper is never a disjoint file, so the task that extracts it closes BEFORE its consumers start and never runs beside them. Returns a diff summary per file + the DoD-slice commands it ran WITH their output + what it extracted or consumed and which consumers it rewired + open questions / STOPs — never a bare "done". Relieves Opus on audits once the Opus quota is spent. | Decide scope. Touch files outside its brief (the shared helper and its named consumers ARE in scope when the manifest lists them). Invent a shared abstraction its brief does not name — extraction is decided in planning. Write comments that narrate decisions, rationale or wave/task references. Improvise on a doubt (it stops and reports). Self-approve. |
 
@@ -220,7 +230,13 @@ documented in `ai/ai-brain/README.md` (generate it too). Confirm with the user o
 when their existing layout visibly differs. ⚠ Because `ai-brain/` is NESTED, the harness/environment header reports the
 container cwd as "not a git repo" — that is the container, not `ai-brain/`: sessions
 must verify with `git -C ai-brain status` and every doc-sync ends with commit+push
-(execute.md template §2b step 9).
+(execute.md template §2b step 9). The container itself is `~/<venture>/` for own
+ventures and `~/clientes_projects/<client>/` for client work; the brain is
+`ai/ai-brain/` canonically, with `<container>/ai-brain/` and `docs/ai-brain` +
+`ai/ai-brain -> ../docs/ai-brain` as supported alternates — the symlink REQUIRED in
+the third case because the artifact guard only discovers `ai/ai-brain/artifacts.json`
+or `ai-brain/artifacts.json` (see `references/project-structure.md` → "Where ai-brain
+may live").
 
 ### Step 3 — Code analysis (fan-out)
 
@@ -373,6 +389,12 @@ the absolute code-repo path to start the session in). Use the templates in `temp
 | `task.md` | `templates/task.md.tmpl` | STATE: wave map table (wave, tasks, gate ⚠, skills to load, base branch, depends on) + weekly burn + logbook |
 | `execute.md` | `templates/execute.md.tmpl` | HOW: §1 principles (incl. §1.9 REUSE, §1.10 COMMENTS, §1.11 SIMPLIFY) · §2 canonical prompt template · §2b doc-sync at close (logbook — `Reuse:` and `Simplifier:` included — + status flips + later-wave manifest refresh + artifact republish to the same URL + links-block delivery message + delta refresh of the project context skill) · §3 merge/delivery policy · §4 checkpoint/resume · §5 wave map · §6 attack checklists per gate · §7 instantiated copy-paste prompts per wave |
 
+> Filenames above are the English set. On a Spanish-speaking venture's run, use the
+> Spanish set from rule 9 instead (`propuesta-ejecutiva.md, plan-maestro.md,
+> plan-detallado.md, plan-timeframe.md` — `task.md` and `execute.md` unchanged) and
+> keep every cross-link — the table above, the §2b doc-sync, `artifacts.json` — using
+> that same set consistently.
+
 Cross-link them: executive-proposal → master-plan → detailed-plan →
 timeframe-plan → task.md → execute.md. Every fact in
 the prompts must trace back to the analysis — never invent commands, paths or repo
@@ -447,21 +469,37 @@ Non-negotiable rules:
    i18n. `grep`/`build` never catch real width, wrong-language text, or overlap. The wave-prompt emits a
    `# VISUAL CHECK` section for these waves; if the project has no screenshot helper, the first UI task creates one.
 
-### Step 7 — Optional HTML version of the plans
+### Step 7 — The visual artifacts (plans.html + prompts.html)
 
-After writing the six documents, ask (AskUserQuestion): generate a visual HTML
-version of `executive-proposal.md` + `master-plan.md` + `detailed-plan.md` +
-`timeframe-plan.md` for presenting?
+After writing the six documents, ask (AskUserQuestion) whether to generate the HTML
+pair for this initiative.
 
-If yes, generate ONE self-contained file (`plans.html`) from
-`templates/plans-html.tmpl`: doc-nav to switch between the four tabs — the
-**executive proposal is tab 1, active by default** (it's what stakeholders see
-first) — hero header, sidebar TOC, light/dark toggle, wave/task tables as styled
-tables, ⚠ gates as badges, and a **Timeline** tab that renders `timeframe-plan.md`
-as a lightweight pure-CSS Gantt (one bar per wave positioned by week on a CSS grid,
-stream colors, today marker, milestone diamonds, legend) with the week-by-week
-table below. Fill the content placeholders from the four markdown documents, using
-the Step 1 project name as `{{project_name}}`.
+If yes, generate both:
+
+- **`plans.html`** from `templates/plans-html.tmpl`: doc-nav to switch between the
+  four planning-doc tabs — the **executive proposal is tab 1, active by default**
+  (it's what stakeholders see first) — hero header, sidebar TOC, light/dark toggle,
+  wave/task tables as styled tables, ⚠ gates as badges, and a **Timeline** tab that
+  renders `timeframe-plan.md` as a lightweight pure-CSS Gantt (one bar per wave
+  positioned by week on a CSS grid, stream colors, today marker, milestone diamonds,
+  legend) with the week-by-week table below. Fill the content placeholders from the
+  four markdown documents, using the Step 1 project name as `{{project_name}}`.
+  Audience: stakeholders.
+- **`prompts.html`**: the §7 wave prompts rendered as copy-paste cards, with a status
+  badge per wave and a nav to jump between waves. Audience: the operator, reading on
+  a phone. Its state has exactly ONE source of truth — the `### Wave <ID>` headers of
+  `execute.md` §7 (the `✅ DONE (date)` / `🔄 IN PROGRESS` / `⛔ BLOCKED` / `☐`
+  markers) — both the nav mark and the card badge derive from that same header, so
+  `prompts.html` is REGENERATED by script and NEVER hand-edited. Regenerate it with
+  `templates/prompts-regen.py` (`python3 prompts-regen.py --brain <docs_dir> [--lang
+  es|en] <comma-list-of-wave-ids> <out>`), whose HTML shell is
+  `templates/prompts-html.tmpl`; the script is COPIED into `{{docs_dir}}/scripts/` at
+  first generation so later sessions can regenerate it without the plugin installed.
+
+Both are registered in `{{docs_dir}}/artifacts.json` and republished to their SAME
+URL whenever their source changes: `plans.html` at every wave close (its four source
+docs change at close), `prompts.html` whenever a §7 prompt is regenerated or a wave
+status flips — which is practically every close too.
 
 **Published artifacts registry + guard (whenever any generated HTML — `plans.html`,
 `prompts.html`, mockups — gets published as a claude.ai Artifact).** Record every
@@ -479,7 +517,10 @@ it as a `Stop` hook in the profile's `settings.json` (`{"hooks": {"Stop": [{"mat
 "timeout": 20}]}]}}`). The hook walks up from cwd looking for `ai-brain/artifacts.json`
 or `ai/ai-brain/artifacts.json` (never above the user's home dir) — the registry only
 enforces when the docs dir carries one of those names; any other layout leaves the
-hook as a silent no-op. It blocks the
+hook as a silent no-op. The brain MUST therefore sit at one of the two discoverable
+positions (`ai/ai-brain/` or a container-root `ai-brain/`) or the guard never fires —
+a `docs/ai-brain` layout needs `ln -s ../docs/ai-brain ai/ai-brain` to become visible
+to it (`references/project-structure.md` → "Where ai-brain may live"). It blocks the
 close while a registered artifact changed on disk without a later republish, and
 blocks it when the final message lacks the module's links after a doc-sync. No
 registry ⇒ the hook is a no-op, so it is safe profile-wide. A manual step that must
@@ -546,5 +587,5 @@ happen every session is not a note — it is a hook.
   may flag indentation hell, leftover duplication and comment noise as maintainability
   findings. Every wave closes with ONE `code-simplifier` pass over its integrated diff
   before the final DoD-auto run.
-- **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; it is republished to that SAME URL whenever it changes, and every close message ends with the links block (§2b steps 5/7). Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered.
+- **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; it is republished to that SAME URL whenever it changes, and every close message ends with the links block (§2b steps 5/7). Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered — and make sure the brain is reachable as `ai/ai-brain/` or `ai-brain/` from the code repos, or the hook never fires.
 - **Closes are read on a phone.** Links in the close are plain Markdown bullets `- [emoji Title](url)` — never inside code fences, backticks, or 4-space indentation (that renders as dead, non-tappable text on mobile; the raw URL inside the Markdown link keeps Claude Code's footer quick-access badges working). Media proof (screenshots/photos/videos via SendUserFile) goes at the very END of the close: narrative first, then the files, then a short final message that is just the links block — the owner must see media + links without scrolling back up.

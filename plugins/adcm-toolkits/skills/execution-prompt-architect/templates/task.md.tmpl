@@ -2,7 +2,8 @@
 Template: task.md — the STATE: wave map + burn + logbook.
 This is the only document that mutates during execution. Wave prompts append to the
 logbook at close. Never hardcode dates — entries use the date of the day they run.
-Generate in the user's language; keep the document name task.md.
+Generate in the user's language; keep the document name task.md — it never
+translates (tooling addresses it).
 -->
 # {{project_name}} — Task tracker: {{initiative_title}}
 
@@ -46,6 +47,9 @@ Append one entry per wave session (including `[PARTIAL]` ones — see `execute.m
 - **Simplifier:** {{carrier: packaged `code-simplifier:code-simplifier` | fallback
   sub-agent at the auditor tier · ran over `{{checkpoint_sha}}..HEAD` · files touched ·
   DoD re-verified | reverted to the checkpoint (why) | not run (why)}}
+- **Orchestrator fix:** {{none | `<file>` — <why a brief would have cost more than the
+  change> (≤~20 lines, execute.md §1.7); an unlogged orchestrator edit is a protocol
+  violation}}
 - **Agents used:** {{n}}/20 (opus {{a}} · sonnet {{b}}) — {{one line per sub-agent:
   model + role (investigate / execute / review / simplify / verify) + scope; the
   `simplify` line is the wave's code-simplifier pass and costs 1 agent + 1 of the Opus

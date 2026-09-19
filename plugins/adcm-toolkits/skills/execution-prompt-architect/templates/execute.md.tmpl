@@ -4,8 +4,9 @@ Template: execute.md — the HOW: execution protocol + instantiated wave prompts
 real task IDs, commands and paths found during analysis. If a task spec changes in
 detailed-plan.md, regenerate the affected wave prompt.
 Generate in the user's language; keep GOAL/TASKS/SCOPE/LOOP/VISUAL CHECK/WORKFLOW/
-GUARDRAILS & CLOSE in English — they are protocol keywords. Keep the document name
-execute.md.
+GUARDRAILS & CLOSE in English — they are protocol keywords. Keep the document names
+of the container's chosen set (project-structure.md rule 9); `execute.md` and
+`task.md` never translate.
 -->
 # {{project_name}} — Execution protocol ({{initiative_title}})
 
@@ -66,7 +67,10 @@ execute.md.
    logbook records `agents used: n/20 (opus a · sonnet b)` with each agent's role
    (investigate / execute / review / simplify / verify) and every escalation. `model`
    always explicit includes packaged agents: the call names it, the plugin's
-   frontmatter is irrelevant.
+   frontmatter is irrelevant. On the orchestrator's own last-rung fixes (≤~20 lines,
+   when a brief would cost more than the change): every one is LOGGED in the
+   `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an
+   unlogged orchestrator edit is a protocol violation, not a shortcut.
 8. **Executor brief.** What the orchestrator hands to an executor, ≤40 lines:
    `TASK · FILES (from the Scope manifest — the shared helper and EVERY consumer to
    rewire included when the manifest says so) · DELIVERABLE (Opus's audited deliverable
@@ -275,15 +279,21 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    bump their `last_scanned`. Use the generator's incremental mode
    (`scan_project.py --update <paths>`) when available. Every closed wave leaves the
    brain AND the code map fresh — freshness never depends on manual re-scans.
-7. **{{master-plan.md execution-state block / plans.html / prompts.html}} — regenerate
-   AND REPUBLISH**: flip the row/badge in the file, then, in the SAME session,
-   republish every HTML registered in `{{docs_dir}}/artifacts.json` that changed on
-   disk to its SAME URL (Artifact tool with `url`; read the live version first — the
-   publish requires it). A badge flipped on disk without a republish leaves the
-   shared link stale (lesson learned: a wave closed with the published plan still
-   showing "pending"). New artifact ⇒ new row in `artifacts.json` in the same
-   session. The `artifact-guard` Stop hook blocks the close while a registered
-   artifact is stale.
+7. **`master-plan.md` execution-state block, `plans.html` and `prompts.html` —
+   REGENERATE AND REPUBLISH**: flip the row/badge in master-plan's execution-state
+   block; regenerate `plans.html` from its four source docs when any of them changed;
+   regenerate `prompts.html` from `execute.md` §7 (`python3
+   {{docs_dir}}/scripts/prompts-regen.py --brain {{docs_dir}} {{wave_ids}}
+   {{docs_dir}}/prompts.html`) — never hand-edit it, its only source of truth is the
+   `### Wave <ID>` headers in §7. Then, in the SAME session, republish EVERY HTML
+   registered in `{{docs_dir}}/artifacts.json` that changed on disk to its SAME URL
+   (Artifact tool with `url`; read the live version first — the publish requires it).
+   `prompts.html` changes whenever a §7 header flips or a prompt is regenerated, so
+   BOTH `plans.html` and `prompts.html` are republished at practically every close. A
+   badge flipped on disk without a republish leaves the shared link stale (lesson
+   learned: a wave closed with the published plan still showing "pending"). New
+   artifact ⇒ new row in `artifacts.json` in the same session. The `artifact-guard`
+   Stop hook blocks the close while a registered artifact is stale.
 8. {{If this plan family coexists with an INCUMBENT protocol (the project already
    keeps its own live TASKS/EXECUTION docs): state explicitly which docs THIS family
    owns and which belong to the incumbent — never write to the incumbent's docs from

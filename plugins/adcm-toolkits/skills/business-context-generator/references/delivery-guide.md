@@ -71,5 +71,7 @@ For users without a marketplace, or to install on claude.ai:
       the generous triggers (brand, entity, domain, nicknames, disambiguation).
 - [ ] `[TO BE DEFINED]` items are listed under "Pending context" in
       `objectives.md`.
+- [ ] Every mined fact carries its `src` comment; the fact sheet is in
+      `INTERNAL.md`; no CONFIDENTIAL-class fact leaked into a public-safe file.
 - [ ] The user knows the skill is a living document: re-running this generator on
       it (update mode) refreshes it without losing anything.
