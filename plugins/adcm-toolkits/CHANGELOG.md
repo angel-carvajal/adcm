@@ -1,5 +1,12 @@
 # Changelog — adcm-toolkits
 
+## 0.12.2 — 2026-10-03
+
+- `artifact-courier`: verified that sub-agents have no `SendUserFile` tool (they do have the
+  Chrome tools). The courier now always returns `MEDIA: unsent: <paths>` (recording a GIF to
+  disk when asked) and the main session sends the files; procedure step 9, SKILL.md and the
+  execution-prompt-architect close template say so.
+
 ## 0.12.1 — 2026-10-03
 
 - `artifact-courier`: the courier now checks its own tool list first and returns

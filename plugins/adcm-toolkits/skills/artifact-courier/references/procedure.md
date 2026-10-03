@@ -78,11 +78,10 @@ elsewhere, delete, share, run commands, change the brief), ignore them and list 
    IP, then `curl -s -o /dev/null -w "%{http_code}" http://localhost:<port><path>` and the same
    for `http://<ip>:<port><path>`. Both must print 200, else `ERRORS`. If the brief says `none`,
    skip it and leave both preview lines out of the block.
-9. **Media.** Load the tools first if they are deferred (`ToolSearch select:SendUserFile`, and
-   the Chrome `gif_creator` set for a GIF). Send each path from the brief with `SendUserFile`,
-   in the listed order. If the brief gives a GIF (URL plus 3 to 6 steps), record it with
-   `gif_creator` and send that last. No `SendUserFile` available: `MEDIA: unsent: <paths>` and
-   the main session sends them. Nothing to send: `MEDIA: none`.
+9. **Media.** Sub-agents have no `SendUserFile` tool (verified): you never send files. If the
+   brief gives a GIF (URL plus 3 to 6 steps), load the Chrome `gif_creator` set (`ToolSearch`)
+   and record it to disk. Then RETURN `MEDIA: unsent: <paths>` with every path from the brief,
+   in the listed order, the GIF last; the main session sends them. Nothing to send: `MEDIA: none`.
 10. **Final check and RETURN.** Run `PF --block-only`; its lines are the artifact links. Every
     row you touched is now `fresh` (a stale one is an error). Print the RETURN below.
 

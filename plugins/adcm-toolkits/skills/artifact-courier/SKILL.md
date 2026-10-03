@@ -29,7 +29,8 @@ to 1 MB) lands in the main context. The courier does that in a cheap, disposable
 3. Fill `{{skill_dir}}/templates/courier-brief.md`, one brief per batch (`--batches`), run in turn.
    Preview and Media only in the LAST brief (others: none); REGEN only in the first, COMMIT only in the last.
 4. `Agent(subagent_type: "general-purpose", model: "sonnet", prompt: <brief>)`, in every tier.
-5. RETURN `MEDIA: unsent: <paths>`: `SendUserFile` them BEFORE the final message. Paste all after
+5. The courier cannot send files (sub-agents have no `SendUserFile`): take its `MEDIA: unsent:
+   <paths>` and `SendUserFile` them BEFORE the final message. Paste all after
    `=== LINKS ===` of the last RETURN verbatim as the LAST lines; above it narrative, hashes, human DoD.
 6. `ERRORS` other than `none`: `SendMessage` the same courier, never publish yourself. `prompts.html:
    blocked: needs wave ids`: set the regen yourself, `courier_preflight.py <docs_dir> --set-regen
