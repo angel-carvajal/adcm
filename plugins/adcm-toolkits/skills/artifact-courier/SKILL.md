@@ -34,7 +34,8 @@ to 1 MB) lands in the main context. The courier does that in a cheap, disposable
 6. `ERRORS` other than `none`: `SendMessage` the same courier, never publish yourself. `prompts.html:
    blocked: needs wave ids`: set the regen yourself, `courier_preflight.py <docs_dir> --set-regen
    prompts.html "python3 scripts/prompts-regen.py --brain . --lang <lang> --init <wave ids> prompts.html"`,
-   re-run the courier. Never call Artifact or open brain HTML.
+   re-run the courier. `blocked: no Artifact tool in this session` (headless runs): report that the
+   close must run from an interactive session; do not investigate. Never call Artifact or open brain HTML.
 
 ## If you are the courier
 

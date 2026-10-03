@@ -163,6 +163,8 @@ def now_stamp():
 
 def regen_cmd(a):
     r = a.get("regen")
+    if isinstance(r, str) and r.strip().lower() == "none":  # hand-maintained HTML: never regenerate
+        return ""
     if not isinstance(r, str) or not r.strip():
         return None
     r = r.strip()
@@ -268,13 +270,14 @@ def analyse(reg_dir, data, threshold_kb):
                     break
             except OSError:
                 continue
-        needs_regen = src_newer and not regen
+        hand = str(a.get("regen", "")).strip().lower() == "none"  # hand-maintained: sources ignored
+        needs_regen = src_newer and not regen and not hand
         regen_due = src_newer and bool(regen)
-        if src_newer and state == "fresh":
-            state = "regen-due"  # never "fresh": the page predates its sources
+        if src_newer and state == "fresh" and not hand:
+            state = "regen-due"  # never "fresh": the page predates its sources (hand-maintained rows exempt)
         rows.append({
             "a": a, "file": a["file"], "abs": absf, "exists": exists, "size": size,
-            "mtime": mtime, "url": url, "state": state, "regen": regen,
+            "mtime": mtime, "url": url, "state": state, "regen": regen, "hand": hand,
             "needs_regen": needs_regen, "regen_due": regen_due,
             "live": pb if pb else size,
             "module": real(module_root(reg_dir, a["file"], markers)),
@@ -425,7 +428,9 @@ def report(args):
     print()
     body = []
     for r in work_rows:
-        if r["regen"]:
+        if r.get("hand"):
+            rg = "none (hand-maintained)"
+        elif r["regen"]:
             rg = ("regen (due): " if r["regen_due"] else "regen: ") + r["regen"]
         elif r["needs_regen"]:
             rg = "needs-regen: " + needs_regen_text(r["file"], r["abs"])

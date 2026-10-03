@@ -45,6 +45,8 @@ is transient: it is removed after every write (also a failed one), never committ
 
 Unknown row and top-level keys (`$doc`, `what`, `note`, ...) are preserved and never an error.
 
+`regen: none` marks hand-maintained HTML: the courier never regenerates it, its sources are ignored and the REGEN column reads `none (hand-maintained)` (set it with `--set-regen <file> none`).
+
 Optional `sources`: list of paths (relative to `<docs_dir>`) the HTML is rendered from. Without
 it, a row named `prompts.html` uses `execute.md` and `task.md` beside it (plus `prompts-titles.json` when present), and a row named `plans.html`
 uses `task.md` and the four plan documents found beside it, in either language set: `propuesta-ejecutiva` / `executive-proposal`, `plan-maestro` /

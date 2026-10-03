@@ -1,5 +1,19 @@
 # Changelog — adcm-toolkits
 
+## 0.12.1 — 2026-10-03
+
+- `artifact-courier`: the courier now checks its own tool list first and returns
+  `blocked: no Artifact tool in this session` when the Artifact tool is absent (headless
+  `-p` runs expose none to any agent), so the main session reports instead of
+  investigating. Found in the first end-to-end run.
+- `artifact-courier`: `regen: none` marks a hand-maintained HTML (mockups, one-off pages);
+  the preflight stops flagging it `needs-regen` and the courier publishes the file as it is.
+  Set it with `courier_preflight.py <docs_dir> --set-regen <file> none`. A stamped
+  hand-maintained row whose source docs are newer than the HTML is `fresh`, not `regen-due`
+  (found in the first end-to-end run: two rows stayed stale after a successful publish).
+- `artifact-courier`: procedure step 7 and the brief say where the commit runs — inside the
+  repository that contains the registry, which is often nested in a container that is not a repo.
+
 ## 0.12.0 — 2026-10-03
 
 - New skill `artifact-courier`: the delivery close of a session runs in one Sonnet

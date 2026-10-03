@@ -10,7 +10,7 @@ TASK: Delivery close for {{docs_dir}}. Follow {{skill_dir}}/references/procedure
   Media in order: {{none | /abs/shot1.png, /abs/shot2.png}}
   GIF: {{none | <url> + 3-6 steps}}
   Label: {{short publish label, 60 chars max}}
-  COMMIT: {{yes | no}}
+  COMMIT: {{yes | no}}   Repo: {{output of `git -C <docs_dir> rev-parse --show-toplevel` | none}}
   REGEN: {{yes | no}}
   REISSUE ON 2ND REFUSAL: {{no | yes}}
 
