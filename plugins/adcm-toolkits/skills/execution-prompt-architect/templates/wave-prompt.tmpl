@@ -15,10 +15,11 @@ Rules when instantiating:
   WORKFLOW where the main session implements first, where an executor
   self-approves, where the diff is audited by the executor's own tier, or whose
   agents add up to more than 20 (investigators + executors + reviewers + the simplify
-  pass + verifier).
+  pass + verifier + the delivery courier(s) + the visual-check capture agent).
   Executors are `sonnet` on NO-gate waves and `opus` on ⚠gate waves; auditors are
   `opus` until the quota of 10 (2 reserved: the gate verifier and the simplify pass),
-  then `sonnet`; `model` always explicit, packaged agents included.
+  then `sonnet`; `model` always explicit, packaged agents included; the delivery
+  `courier` is `sonnet` ALWAYS (normally 1; each extra batch = 1 more of the 20, 0 quota), whatever the main session's tier.
 - The `- Reuse:` line in SCOPE is COPIED from the task's card in detailed-plan.md,
   never derived here; the executor brief repeats the comment ban in ONE line (the full
   policy lives in detailed-plan §0); WORKFLOW carries the simplify step, and that pass
@@ -107,14 +108,17 @@ count as failures, when to stop early and leave DoD-human.}}
 
 # VISUAL CHECK (mandatory if the wave touches UI: .pug/.html/.scss/.css/components)
 grep + build only prove the code is THERE, not that it LOOKS right — they never catch real width,
-wrong-language text, or overflow/overlap. Before marking a UI task completed, render the page in headless
-Chrome and review the screenshot YOURSELF:
-- Render against a local server (full env) or, if it can't boot, the deployed URL.
-- Screenshot with a headless-Chrome helper (Playwright/Puppeteer + the system browser, e.g.
+wrong-language text, or overflow/overlap. Before marking a UI task completed, DELEGATE the capture to a
+`sonnet` sub-agent (1 of the 20, 0 Opus quota; the main session does not render or screenshot) that renders the
+page in headless Chrome and RETURNS the PNG paths plus its findings:
+- It renders against a local server (full env) or, if it can't boot, the deployed URL.
+- It screenshots with a headless-Chrome helper (Playwright/Puppeteer + the system browser, e.g.
   `node {{repo}}/scripts/shot.{{cjs|mjs — match the repo's module system}} <url> <out.png> [lang] [width]`). Capture desktop (≥1280) AND mobile (375);
   both languages if the app is i18n. {{If the project has no screenshot helper, the FIRST UI task creates one.}}
-- Read the PNG and verify: width/responsive (not "compacted"), i18n correct, no overlaps, design-system
-  fonts/colors. Only then mark the UI task completed.
+- It checks width/responsive (not "compacted"), i18n correct, no overlaps, design-system
+  fonts/colors and reports each finding. You (the orchestrator) MAY open those PNGs to judge —
+  reviewing sub-agent output is allowed. Only then mark the UI task completed; the courier later sends
+  those same PNGs as media.
 
 # WORKFLOW (fan-out)
 AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL, one counter starting
@@ -135,12 +139,19 @@ never a bare "done". ONE simplify pass per wave: the packaged agent
 `code-simplifier:code-simplifier` called with an explicit `model: {{opus | the auditor tier of this session when the main session is not Fable}}` and the
 `## Simplifier brief` below — it costs 1 of the 20 and 1 of the Opus quota, it EDITS
 code so it never self-approves (YOU re-run the FULL DoD-auto after it), and on ⚠gate
-waves it runs BEFORE the reserved verifier. Follow-ups
-to a live agent (SendMessage) cost 0; a new agent costs 1. In ultracode: Workflow
+waves it runs BEFORE the reserved verifier. At close one delivery `courier` per batch
+(`adcm-toolkits:artifact-courier`; normally 1, each extra batch = 1 more of the 20) is spawned with
+`model: sonnet` ALWAYS — even under Fable —, 0 of the Opus quota (see GUARDRAILS & CLOSE).
+Follow-ups to a live agent (SendMessage) cost 0; a new agent costs 1. In ultracode: Workflow
 scripts per phase (investigate → implement → review) with ≤20 agent() calls in
 total, `isolation: 'worktree'` on parallel executors, no unbounded loops or panels.
 The 21st agent is a protocol violation — stop and ask. Log `agents used: n/20 (opus
-a · sonnet b) · escalations` at close.
+a · sonnet b) · escalations` at close. You are a PURE orchestrator
+(`references/orchestrator-rule.md` of the skill `execution-prompt-architect`): you do
+not read files in bulk, edit at scale, render, browse or publish — only the ≤~20-line
+logged fixes — and every `Agent`/`Workflow` call, Plan and Explore agents included,
+names its `model`. The user's `sin tanto lío` (that task) or `modo directo` (until
+`modo orquestador`) switches it off.
 {{ALWAYS spell out the cycle with real IDs and scopes, e.g.:
 1. Investigate: launch {{k}} `opus` sub-agents IN PARALLEL, one per {{scope}}, each
    returning solution · files to touch (with why) · considerations · open questions
@@ -234,8 +245,8 @@ the SCOPE manifest, so the shared helper and its named consumers ARE inside it w
 the manifest lists them. No secrets in
 code/commits/logs. Agent budget 20 with fixed roles — you orchestrate and verify,
 opus investigates/audits (quota 10, 2 reserved: gate verifier + simplify pass), sonnet
-implements from briefs, ONE code-simplifier pass per wave, ladder sonnet →
-opus → you — is a hard limit of this session (see WORKFLOW).
+implements from briefs, ONE code-simplifier pass per wave, one sonnet delivery courier
+per batch (normally 1; each extra batch = 1 more of the 20, 0 Opus quota), ladder sonnet → opus → you — is a hard limit of this session (see WORKFLOW).
 {{Wave-specific hard limits: "do NOT upgrade dependency X", "do NOT
 touch folder Y (Wave 3's scope)", inviolable decisions from master-plan §8 that this
 wave could violate.}} When the simplify pass has run and the FULL DoD-auto is green
@@ -250,7 +261,7 @@ follow-up | none) + **simplifier** (carrier: packaged | fallback sub-agent · ra
 (none, or `<file>` — <why a brief would have cost more than the change>, ≤~20 lines —
 an unlogged one is a protocol violation) + **agents used n/20 (opus a · sonnet
 b)**, one line per agent with its model, role (investigate / execute / review /
-simplify / verify) and scope + **escalations** (none, or
+simplify / verify / capture / courier — with the NUMBER of couriers) and scope + **escalations** (none, or
 ID: tier → tier with the reason)), status flip in task.md's wave map AND this
 prompt's `execute.md §7` header (✅ / ⛔ if blocked on a DoD-human), mark {{IDs}} ✅ in
 `detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
@@ -260,25 +271,31 @@ files touched. The doc-sync ENDS with `git -C {{docs_dir}} add -A && git commit 
 "docs({{wave}}): …" && git push` — `{{docs_dir}}` is its own NESTED git repo (the
 harness reports the container as "not a git repo": don't believe it); an unpushed
 logbook does not exist for the next session.
-END the delivery message with a LINKS BLOCK, no filler — in this order: (a) the
-wave's viewable result if it renders, ALWAYS AS TWO LINES: `localhost` FIRST
-({{owner}} validates from iTerm on the Mac) and the LAN IP after it (so it also opens
-from a phone). Never one without the other — the LAN IP changes with the network and
-arrives dead, `localhost` does not. Read the IP at close time, bind to `0.0.0.0` and
-`curl` both before handing them over; start the preview server yourself if none runs,
-with HTTP Range support or mobile video dies; served PDF; report); (b) ALWAYS the
-project's canonical artifacts from `{{docs_dir}}/artifacts.json` — republished to
-their SAME URL first if their HTML changed (for `prompts.html` that means
-REGENERATING it from §7 first with `prompts-regen.py`, never hand-editing the HTML)
-via the Artifact tool with `url`, read the live
-version before publishing; a flipped badge without a republish is a stale link;
-(c) repo paths and commit hashes, one line each — reference, not delivery.
+DELIVERY — the doc-sync is committed and pushed first (a project pre-commit may
+regenerate HTML when it commits the `.md`); THEN load `adcm-toolkits:artifact-courier`
+and spawn one courier per batch (normally 1; `Agent`, `model: sonnet`, brief from the skill's
+`templates/courier-brief.md`: registry, preview URL `localhost` — start the preview
+server yourself if none runs, bound to `0.0.0.0` with HTTP Range support or mobile
+video dies —, the VISUAL CHECK screenshots in order, a GIF when the feature spans
+several screens). It runs each registry row's `regen` (`plans-regen.py`,
+`prompts-regen.py`), republishes or re-issues every stale artifact, stamps and commits
+`artifacts.json`, sends the media, `curl`s localhost and the LAN IP, and returns a table
+plus a `=== LINKS ===` block. You never open or edit the HTML, never call the Artifact
+tool and never assemble the links yourself; if its RETURN has `ERRORS`, one
+`SendMessage` to the SAME courier (cost 0) and report — never publish yourself.
+CLOSE MESSAGE, in this order: (1) the narrative, with repo paths and commit hashes,
+one line each — reference, not delivery; (2) the media, sent by the courier (a short
+final message follows it, so {{owner}} sees files + links on a phone without
+scrolling back up); (3) the FINAL message: the pending DoD-human lines marking those
+tasks blocked until {{owner}} confirms —
+- {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}
+— and then, as its LAST lines, everything after `=== LINKS ===` in the courier's
+RETURN, pasted verbatim: `localhost` FIRST ({{owner}} validates from iTerm on the Mac),
+the LAN IP after it (never one without the other — the LAN IP changes with the network
+and arrives dead, `localhost` does not), then the canonical artifacts. Paths, hashes
+and DoD-human go ABOVE the block, never after it: the `artifact-guard` Stop hook
+rejects any text after the last link, and a block missing from the close.
 FORMAT: every link is a plain Markdown bullet `- [emoji Title](url)` — never inside
 a code fence, backticks, or 4-space indentation ({{owner}} taps these on a phone;
-code-formatted links are dead text). The raw URL inside the Markdown link keeps
-Claude Code's quick-access footer badges working too. MEDIA AT THE END: send
-screenshots/photos/videos (SendUserFile) at the very end of the close — narrative
-first, then the files, then a SHORT final message that is just the links block, so
-{{owner}} sees media + links on a phone without scrolling back up. Then
-list the pending DoD-human marking those tasks blocked until {{owner}} confirms:
-- {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}
+code-formatted links are dead text); no headings or text inside the block. The raw URL
+inside the Markdown link keeps Claude Code's quick-access footer badges working too.

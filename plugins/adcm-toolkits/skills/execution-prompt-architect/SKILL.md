@@ -69,14 +69,19 @@ container, record it in `ai-brain/README.md` and in `artifacts.json.close_marker
 ## Agent roles (the tiered protocol)
 
 Every phase of this skill — and every wave prompt it generates — runs on the same
-three roles, plus ONE packaged agent the orchestrator calls once per wave (the
-code-simplifier — see Accounting). They are fixed by protocol, not chosen per run:
+three roles, plus single-shot agents the orchestrator calls once per wave: the
+code-simplifier, the delivery courier and, on UI waves, the visual-check capture (see Accounting). They are fixed by protocol,
+not chosen per run. The full orchestrator rule — what the main session never does,
+the brief format, the tiers and the escape hatch — lives in
+`references/orchestrator-rule.md`:
 
 | Role | Model | Does | Never does |
 |---|---|---|---|
-| **Orchestrator** | the main session (Fable; ultracode or max by complexity) | Decides design and scope — the reuse verdict included: it audits every deliverable for duplication (does this logic already exist? do two or more components need it? should it be extracted?) before a line of code exists. Audits the *deliverables* Opus returns (solution, files, considerations) against the project context. Writes the **executor brief** per task. Runs the DoD-auto itself. Checkpoint-commits and launches the wave's `code-simplifier` pass over the integrated diff, then re-runs the DoD after it. Integrates parallel executors. Last rung of the escalation ladder; tiny fixes (≤~20 lines) when a brief would cost more than the change. Every such direct fix is LOGGED in the `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an unlogged orchestrator edit is a protocol violation, not a shortcut. | Implement first. Spawn sub-agents of its own tier (the simplify pass is called at the auditor tier, one below the main session). Review code line by line — it audits deliverables and runs commands. |
+| **Orchestrator** | the main session (Fable; ultracode or max by complexity) | Decides design and scope — the reuse verdict included: it audits every deliverable for duplication (does this logic already exist? do two or more components need it? should it be extracted?) before a line of code exists. Audits the *deliverables* Opus returns (solution, files, considerations) against the project context. Writes the **executor brief** per task. Runs the DoD-auto itself. Checkpoint-commits and launches the wave's `code-simplifier` pass over the integrated diff, then re-runs the DoD after it. Integrates parallel executors. Last rung of the escalation ladder; tiny fixes (≤~20 lines) when a brief would cost more than the change. Every such direct fix is LOGGED in the `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an unlogged orchestrator edit is a protocol violation, not a shortcut. A pure orchestrator: it never reads bulk files, never edits beyond that ≤20-line shortcut, never renders, publishes or browses — the user's phrases `sin tanto lío` (one task) and `modo directo` (until `modo orquestador`) switch that off (`references/orchestrator-rule.md`). | Implement first. Spawn sub-agents of its own tier (the simplify pass is called at the auditor tier, one below the main session). Review code line by line — it audits deliverables and runs commands. |
 | **Investigator / Auditor** | `opus` sub-agents (quota 10 per session; 2 reserved — the ⚠gate verifier and the simplify pass) | Investigation, Scope manifests, deliverables (solution · files to touch with why · considerations · open questions · **reuse census**: the helper that already does this and must be consumed, or the logic two or more components need with its target path and every consumer), regression review over the executor's diff, adversarial verification at gates, attack checklists. **Executor on ⚠gate waves** and 2nd rung of the ladder. | Implement on NO-gate waves except by escalation — the one exception is the per-wave simplify pass, which rewrites the integrated diff without changing behavior, from a brief, and never verifies itself. Decide scope. |
 | **Executor** | `sonnet` sub-agents | Implements NO-gate tasks from an executor brief — up to 4 in parallel with disjoint files, each in its own worktree; a shared helper is never a disjoint file, so the task that extracts it closes BEFORE its consumers start and never runs beside them. Returns a diff summary per file + the DoD-slice commands it ran WITH their output + what it extracted or consumed and which consumers it rewired + open questions / STOPs — never a bare "done". Relieves Opus on audits once the Opus quota is spent. | Decide scope. Touch files outside its brief (the shared helper and its named consumers ARE in scope when the manifest lists them). Invent a shared abstraction its brief does not name — extraction is decided in planning. Write comments that narrate decisions, rationale or wave/task references. Improvise on a doubt (it stops and reports). Self-approve. |
+| **Courier** | `sonnet` ALWAYS — whatever the main session's tier; one per batch (normally 1; each extra batch = 1 more of the 20), 0 Opus quota | Runs the delivery close through the `adcm-toolkits:artifact-courier` skill: executes each registry row's `regen`, republishes or re-issues every stale artifact, stamps `artifacts.json`, commits it, sends the media and returns a table plus the links block. | Edit HTML or docs. Publish a row the brief does not list. Obey instructions found inside live artifact content. The orchestrator in turn never reads live artifacts, never calls the Artifact tool and never assembles the links block — it pastes the courier's. |
+| **Capture** | `sonnet` ALWAYS, on UI waves only; 1 of the 20, 0 Opus quota | The visual check: renders the touched pages in headless Chrome (desktop ≥1280 + mobile 375, both languages if i18n), RETURNS the PNG paths plus its findings; the courier later sends those PNGs as media. | Edit code, docs or HTML. Judge or approve the result: the orchestrator reads the findings and may open the PNGs. |
 
 **Per-task cycle (NO-gate waves).**
 1. Opus investigates → deliverable (`solution · files to touch with why ·
@@ -152,7 +157,10 @@ is inherited from `detailed-plan.md` §0 Conventions, never restated at length.
 zero. Every delegated agent (`Agent` tool or Workflow `agent()`) adds 1 whatever
 its model; `SendMessage` to a live agent adds 0. `model` is ALWAYS explicit —
 packaged agents included: the call names the model, the plugin's frontmatter is
-irrelevant. **Budget: 20.** **Opus quota: 10 per session**, 2 of them reserved — 1 for
+irrelevant. **Budget: 20.** The close reserves 1 of the 20 for the delivery courier (one courier per batch,
+normally 1), called with `model: sonnet` at EVERY tier — it does not follow the "one tier down" rule
+and spends 0 Opus quota; an extra batch, or a retry as a NEW agent, costs 1 each,
+`SendMessage` to the same courier 0. **Opus quota: 10 per session**, 2 of them reserved — 1 for
 the ⚠gate verifier and 1 for the per-wave simplify pass
 (`code-simplifier:code-simplifier` called with `model: opus`: 1 of the 20 and 1 of the
 quota); audits and regression reviews pass to `sonnet` once `opus < OPUS_QUOTA - 2` no
@@ -387,7 +395,7 @@ the absolute code-repo path to start the session in). Use the templates in `temp
 | `detailed-plan.md` | `templates/detailed-plan.md.tmpl` | WHAT: conventions + base DoD, then every task — ID `T-<WAVE>-<n>`, title, repo(s), owner, technical description, **Scope manifest (the Step 3 investigation, structured: Modify/Create with why, Read-first, Impact census, Reuse/extraction plan, Census freshness check, Symbol notes)**, DoD checkboxes, depends-on/blocks |
 | `timeframe-plan.md` | `templates/timeframe-plan.md.tmpl` | WHEN: schedule summary (start/target/dedication/buffer/estimated close), per-wave schedule table (sessions, calendar days, depends on, parallel with, estimated week), critical path, calendarized milestones + DoD-human, week-by-week table, calendar assumptions & risks — built from Step 3's estimates + Step 4's answers |
 | `task.md` | `templates/task.md.tmpl` | STATE: wave map table (wave, tasks, gate ⚠, skills to load, base branch, depends on) + weekly burn + logbook |
-| `execute.md` | `templates/execute.md.tmpl` | HOW: §1 principles (incl. §1.9 REUSE, §1.10 COMMENTS, §1.11 SIMPLIFY) · §2 canonical prompt template · §2b doc-sync at close (logbook — `Reuse:` and `Simplifier:` included — + status flips + later-wave manifest refresh + artifact republish to the same URL + links-block delivery message + delta refresh of the project context skill) · §3 merge/delivery policy · §4 checkpoint/resume · §5 wave map · §6 attack checklists per gate · §7 instantiated copy-paste prompts per wave |
+| `execute.md` | `templates/execute.md.tmpl` | HOW: §1 principles (incl. §1.9 REUSE, §1.10 COMMENTS, §1.11 SIMPLIFY) · §2 canonical prompt template · §2b doc-sync at close (logbook — `Reuse:` and `Simplifier:` included — + status flips + later-wave manifest refresh + artifact delivery by the courier (regen + republish + links block) + final message + delta refresh of the project context skill) · §3 merge/delivery policy · §4 checkpoint/resume · §5 wave map · §6 attack checklists per gate · §7 instantiated copy-paste prompts per wave |
 
 > Filenames above are the English set. On a Spanish-speaking venture's run, use the
 > Spanish set from rule 9 instead (`propuesta-ejecutiva.md, plan-maestro.md,
@@ -464,17 +472,23 @@ Non-negotiable rules:
    the detailed-plan card. Census tolerance: exact/±1 for small counts (<10), ±X%
    only for large censuses. SCOPE is the positive scope; GUARDRAILS stays the negative.
 8. **UI waves require a VISUAL CHECK.** Any wave touching `.pug`/`.html`/`.scss`/`.css`/components must,
-   before marking a UI task done, render the page in headless Chrome (Playwright/Puppeteer + the system
-   browser) and have the agent REVIEW the screenshot — desktop (≥1280) + mobile (375), both languages if
-   i18n. `grep`/`build` never catch real width, wrong-language text, or overlap. The wave-prompt emits a
-   `# VISUAL CHECK` section for these waves; if the project has no screenshot helper, the first UI task creates one.
+   before marking a UI task done, have the capture DELEGATED to a `sonnet` sub-agent (1 of the 20, 0 Opus
+   quota; the main session never renders or screenshots) that renders the page in headless Chrome
+   (Playwright/Puppeteer + the system browser) — desktop (≥1280) + mobile (375), both languages if i18n — and
+   RETURNS the PNG paths plus its findings. The orchestrator MAY open those PNGs to judge: reviewing sub-agent
+   output is allowed. The courier later sends those same PNGs as media. `grep`/`build` never catch real width,
+   wrong-language text, or overlap. The wave-prompt emits a `# VISUAL CHECK` section for these waves; if the
+   project has no screenshot helper, the first UI task creates one.
 
 ### Step 7 — The visual artifacts (plans.html + prompts.html)
 
 After writing the six documents, ask (AskUserQuestion) whether to generate the HTML
 pair for this initiative.
 
-If yes, generate both:
+If yes, generate both — the main session never writes either HTML: it writes the four
+`.md` documents, and both pages come out of generator scripts (below), run by the
+delivery courier. It never opens or edits brain HTML either, in the planning run or
+at any close.
 
 - **`plans.html`** from `templates/plans-html.tmpl`: doc-nav to switch between the
   four planning-doc tabs — the **executive proposal is tab 1, active by default**
@@ -482,9 +496,14 @@ If yes, generate both:
   wave/task tables as styled tables, ⚠ gates as badges, and a **Timeline** tab that
   renders `timeframe-plan.md` as a lightweight pure-CSS Gantt (one bar per wave
   positioned by week on a CSS grid, stream colors, today marker, milestone diamonds,
-  legend) with the week-by-week table below. Fill the content placeholders from the
-  four markdown documents, using the Step 1 project name as `{{project_name}}`.
-  Audience: stakeholders.
+  legend) with the week-by-week table below. The content comes from the four
+  markdown documents, with the Step 1 project name as `{{project_name}}`.
+  Audience: stakeholders. It is GENERATED, never rendered by hand, by
+  `templates/plans-regen.py` (`python3 plans-regen.py --brain <docs_dir> <out>
+  [--lang es|en] [--project NAME] [--init] [--check]`): `--init` instantiates the
+  shell from `templates/plans-html.tmpl` (kept next to the script); later runs
+  patch only the four document articles, so head, styles, theme and
+  scripts stay byte-identical, and wave statuses derive from the `task.md` wave map.
 - **`prompts.html`**: the §7 wave prompts rendered as copy-paste cards, with a status
   badge per wave and a nav to jump between waves. Audience: the operator, reading on
   a phone. Its state has exactly ONE source of truth — the `### Wave <ID>` headers of
@@ -493,25 +512,49 @@ If yes, generate both:
   `prompts.html` is REGENERATED by script and NEVER hand-edited. Regenerate it with
   `templates/prompts-regen.py` (`python3 prompts-regen.py --brain <docs_dir> [--lang
   es|en] <comma-list-of-wave-ids> <out>`), whose HTML shell is
-  `templates/prompts-html.tmpl`; the script is COPIED into `{{docs_dir}}/scripts/` at
-  first generation so later sessions can regenerate it without the plugin installed.
+  `templates/prompts-html.tmpl`.
 
-Both are registered in `{{docs_dir}}/artifacts.json` and republished to their SAME
-URL whenever their source changes: `plans.html` at every wave close (its four source
-docs change at close), `prompts.html` whenever a §7 prompt is regenerated or a wave
-status flips — which is practically every close too.
+**Both generators are COPIED into `{{docs_dir}}/scripts/` at first generation, each
+with its template** — `plans-regen.py` + `plans-html.tmpl` and `prompts-regen.py` +
+`prompts-html.tmpl` (a script's `--init` looks for its `.tmpl` beside itself, so a
+script copied alone breaks) — so later sessions regenerate without the plugin
+installed. The exact command goes into the `regen` field of the artifact's row in
+`artifacts.json`: for `plans.html` it is `python3 scripts/plans-regen.py --brain . --lang <lang> plans.html`
+WITHOUT `--init` (`plans-regen.py` auto-initializes the shell when the output file is missing);
+for `prompts.html` the stored command MUST include `--init`, `--lang <plan language>` and the
+comma-list of wave ids (`prompts-regen.py` needs them; update the list when waves are added;
+`--init` only materializes the shell when the output is missing and is a no-op once it exists);
+the courier runs it, the main session never does. A project that
+already has its own builder keeps it: `regen` points at whichever one it uses.
+
+Both are registered in `{{docs_dir}}/artifacts.json` and republished whenever their
+source changes: `plans.html` at every wave close (its four source docs change at
+close), `prompts.html` whenever a §7 prompt is regenerated or a wave status flips —
+practically every close too. The publishing is done by the `artifact-courier`
+sub-agent (`adcm-toolkits:artifact-courier`), never by the main session — the first
+publish included (a row without `url` is a `new` row for the courier). The planning
+run only writes the rows (with the `regen` commands above); the courier runs each `regen` —
+`plans-regen.py` initializes the shell by itself when `plans.html` does not exist yet, and the first
+`prompts.html` is created by the courier too, because the stored `prompts-regen.py` command includes `--init` — and publishes.
 
 **Published artifacts registry + guard (whenever any generated HTML — `plans.html`,
 `prompts.html`, mockups — gets published as a claude.ai Artifact).** Record every
 published file in `{{docs_dir}}/artifacts.json` (`{"close_markers": ["task.md",
 "execute.md", "detailed-plan.md"], "artifacts": [{"file": "<path relative to docs
 dir>", "url": "<canonical artifact URL>", "title": …, "favicon": …, "in_close_block":
-true}]}`; `in_close_block` is optional — set it `false` to keep an artifact out of the
-mandatory links block): it is the
-single source of truth for the URLs — sessions republish to the SAME URL when the
-HTML changes and every close message ends with these links (execute.md §2b steps 5
-and 7). Then install the deterministic guard: copy `templates/artifact-guard.py` to
-the owner's Claude profile (e.g. `~/.claude/hooks/artifact-guard.py`) and register
+true, "regen": "python3 scripts/plans-regen.py --brain . --lang <lang> plans.html"}]}` (for `prompts.html` the
+`regen` carries `--init`, the language and the wave ids: `python3 scripts/prompts-regen.py --brain . --lang <lang> --init W0,W1,W2 prompts.html`, with
+the plan's real ids);
+`in_close_block` is optional — set it `false` to keep an artifact out of the
+mandatory links block; `regen` is the command the courier runs from the docs dir
+before publishing): it is the
+single source of truth for the URLs, and the courier alone writes its publish stamps
+(`published_at`, `version`, `sha256`, `published_bytes`, and `previous_url` /
+`reissued` when an artifact is re-issued). The courier republishes to the SAME URL
+when the HTML changes — and re-issues an artifact above ~300 KB as a NEW artifact,
+keeping the old URL in `previous_url` — and every close message ends with the links
+block it returns (execute.md §2b steps 5 and 7). Then install the deterministic
+guard: copy `templates/artifact-guard.py` to the owner's Claude profile (e.g. `~/.claude/hooks/artifact-guard.py`) and register
 it as a `Stop` hook in the profile's `settings.json` (`{"hooks": {"Stop": [{"matcher":
 "", "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/artifact-guard.py",
 "timeout": 20}]}]}}`). The hook walks up from cwd looking for `ai-brain/artifacts.json`
@@ -521,8 +564,11 @@ hook as a silent no-op. The brain MUST therefore sit at one of the two discovera
 positions (`ai/ai-brain/` or a container-root `ai-brain/`) or the guard never fires —
 a `docs/ai-brain` layout needs `ln -s ../docs/ai-brain ai/ai-brain` to become visible
 to it (`references/project-structure.md` → "Where ai-brain may live"). It blocks the
-close while a registered artifact changed on disk without a later republish, and
-blocks it when the final message lacks the module's links after a doc-sync. No
+close while a registered artifact changed on disk without evidence of a later
+publish — a publish in the transcript, or the courier's stamp (`published_at` newer
+than the file, or an identical `sha256`) — and blocks it when the final message
+lacks the links after a doc-sync: ONE block evaluated over the union of every
+module that closes in the turn. No
 registry ⇒ the hook is a no-op, so it is safe profile-wide. A manual step that must
 happen every session is not a note — it is a hook.
 
@@ -553,13 +599,14 @@ happen every session is not a note — it is a hook.
   NO-gate tasks from briefs (≤4 in parallel, own worktrees) and never self-approves;
   ONE packaged `code-simplifier:code-simplifier` pass per wave, called with an explicit
   `model: opus`, costs 1 of the 20 and 1 of the quota and never verifies its own edits;
+  one delivery `courier` per batch (normally 1; each extra batch = 1 more of the 20), always `sonnet`, 0 Opus quota;
   escalation Sonnet →
   Opus → orchestrator on the 2nd failure of the same DoD line; every call names
   its model. This holds in EVERY effort level — ultracode changes the orchestration
   (Workflow per phase + adversarial cross-check), never the roles or the count.
   Exceeding 20 is a protocol violation; it may only be raised by the user's
   explicit authorization for that single run, and the logbook records `agents
-  used: n/20 (opus a · sonnet b) · escalations` with `simplify` among the agent roles. Depth comes from six documents +
+  used: n/20 (opus a · sonnet b) · escalations` with `simplify`, `courier` and (UI waves) `capture` among the agent roles. Depth comes from six documents +
   one self-contained prompt per wave + cheap tiers doing the volume (implementation
   and exhaustive reviews) while the orchestrator's context stays lean. Do not
   silently cut corners either; if the user wants cheap, they pick a lighter effort
@@ -587,5 +634,6 @@ happen every session is not a note — it is a hook.
   may flag indentation hell, leftover duplication and comment noise as maintainability
   findings. Every wave closes with ONE `code-simplifier` pass over its integrated diff
   before the final DoD-auto run.
-- **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; it is republished to that SAME URL whenever it changes, and every close message ends with the links block (§2b steps 5/7). Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered — and make sure the brain is reachable as `ai/ai-brain/` or `ai-brain/` from the code repos, or the hook never fires.
-- **Closes are read on a phone.** Links in the close are plain Markdown bullets `- [emoji Title](url)` — never inside code fences, backticks, or 4-space indentation (that renders as dead, non-tappable text on mobile; the raw URL inside the Markdown link keeps Claude Code's footer quick-access badges working). Media proof (screenshots/photos/videos via SendUserFile) goes at the very END of the close: narrative first, then the files, then a short final message that is just the links block — the owner must see media + links without scrolling back up.
+- **The orchestrator is pure.** In any substantive task the main session analyzes, writes briefs, launches sub-agents with an explicit `model` (Plan and Explore agents included — without it a Plan agent inherits the main session's model), reads their short RETURNs and decides; it does not read files in bulk, edit at scale, browse, render or publish. Two exceptions only: the ≤20-line shortcut already above (logged), and the user's escape hatch — `sin tanto lío` for that one task, `modo directo` until the user says `modo orquestador`. Full rule, brief format and tier table: `references/orchestrator-rule.md`.
+- **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; the `artifact-courier` sub-agent (`adcm-toolkits:artifact-courier`, `model: sonnet` always) runs each row's `regen`, republishes it to that SAME URL (re-issuing above ~300 KB), stamps the row and returns the links block — the main session never calls the Artifact tool, never reads or edits brain HTML (`plans.html`, `prompts.html`) and never assembles the block; it pastes the courier's block verbatim. Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered — and make sure the brain is reachable as `ai/ai-brain/` or `ai-brain/` from the code repos, or the hook never fires.
+- **Closes are read on a phone.** Links in the close are plain Markdown bullets `- [emoji Title](url)` — never inside code fences, backticks, or 4-space indentation (that renders as dead, non-tappable text on mobile; the raw URL inside the Markdown link keeps Claude Code's footer quick-access badges working). The order of the close: narrative with repo paths and commit hashes → media (the courier sends the VISUAL CHECK screenshots, a GIF when the feature spans several screens) → ONE short final message made of the pending DoD-human lines and then the courier's block (localhost, LAN, artifacts) as the LAST lines — no headings, no text inside the block and nothing after it. Paths, hashes and DoD-human go ABOVE the block, never after it: the guard rejects any text after the last link, and the owner must see media + links without scrolling back up.

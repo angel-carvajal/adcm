@@ -7,7 +7,8 @@ recommendation and asking "good?" produces agreement, not a decision.
 
 Show exactly **5 finalists** as one **contact-sheet artifact** — a single
 phone-first page, not a screenshot pasted into chat. Read `artifact-design`
-before building it.
+before building it. The page is built into `.design/preview/contact-sheet.html`
+and published by the `artifact-courier` sub-agent, never by the main session.
 
 Build rules:
 
@@ -31,8 +32,9 @@ If STEP 3b ran, keep the commercial finalists as a **second contact sheet**
 on the same page, clearly separated: "these five set the look; these three
 set how the product section sells."
 
-The artifact closes with the link block — **REVIEW** and **REFERENCES**
-groups only. No **PACK** entry yet; nothing has been chosen.
+The message closes with the REVIEW/REFERENCES bullets built per SKILL.md rule 10, not the
+courier's block as-is — plain bullets, **REVIEW** and **REFERENCES** label prefixes only.
+No **PACK** entry yet; nothing has been chosen.
 
 ## Getting the capture into refs/
 

@@ -38,6 +38,16 @@ Solve the problem of "starting work on a project without having to explain to Cl
 
 ## Workflow
 
+**Hard rule: the main session is a pure orchestrator.** It does not read the project and does not write the context files itself. Every delegated call names its `model`:
+
+- **STEP 2 scan** — the scanner script is run by a `sonnet` sub-agent, which returns the short scan summary (stack, entry points, folder map), not the raw JSON.
+- **STEP 3.5 semantic sections** (`business-flows.md`, `security.md`, `tech-debt.md`) — one `opus` sub-agent per section, with a brief and a bounded list of files to read.
+- **STEP 4 template filling** — one `sonnet` sub-agent per file family.
+- **STEP 4.5 delta refresh** — a `sonnet` sub-agent.
+- **Main session** — interviews the user (STEP 1 and STEP 3), audits every RETURN against the DoD of its brief, and assembles the index `SKILL.md`.
+
+Escape hatch, in the user's own words: `sin tanto lío` (direct mode for that one task) or `modo directo` (stays on until `modo orquestador`). Canonical rule, brief format and tiers: `../execution-prompt-architect/references/orchestrator-rule.md`.
+
 ### STEP 0: Get the project path
 
 The skill needs the absolute path of the project. Strategy:
@@ -153,9 +163,9 @@ Ask what the scanner cannot know:
 
 ### STEP 3.5: Author the semantic sections (hybrid)
 
-The scanner gives you the auto/structural sections for free. The high-value **semantic** sections (`business-flows.md`, `security.md`, `tech-debt.md`) cannot be scanned — **you author them** by reading the code the scan pointed at. This is the hybrid model: scanner for structure, Claude for judgment.
+The scanner gives you the auto/structural sections for free. The high-value **semantic** sections (`business-flows.md`, `security.md`, `tech-debt.md`) cannot be scanned — **the `opus` sub-agent authors them** by reading the code the scan pointed at (the main session audits the RETURN, it does not write them). This is the hybrid model: scanner for structure, Claude for judgment.
 
-For each, read the relevant evidence and write substance (not placeholders):
+For each, the `opus` sub-agent reads the relevant evidence and writes substance (not placeholders):
 
 - **`business-flows.md`** — read the entry points, the route files (`api_surface.source`), and the top services/controllers. Describe the 3–7 critical end-to-end journeys (trigger → participants → steps → side effects). Document the *why* (business rule), optionally with a Mermaid `sequenceDiagram`/`stateDiagram`.
 - **`security.md`** — read the auth middleware/guards, the user/role model, the validation layer, and the `config_env` var names. Fill: authentication & authorization model, sensitive-data/PII classification, input validation, **known gaps** (be honest), and **human-first zones** (auth, payments, crypto, PII).

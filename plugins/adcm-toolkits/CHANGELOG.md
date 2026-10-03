@@ -1,5 +1,37 @@
 # Changelog — adcm-toolkits
 
+## 0.12.0 — 2026-10-03
+
+- New skill `artifact-courier`: the delivery close of a session runs in one Sonnet
+  sub-agent per batch (normally one), never in the main session. `scripts/courier_preflight.py` classifies every
+  row of `artifacts.json` (fresh / stale-inplace / stale-reissue above ~300 KB / new /
+  missing / needs-regen), runs each row's `regen`, pages the live version the Artifact
+  tool requires before an in-place republish, applies the identical-content retry rule,
+  re-issues oversized artifacts keeping `previous_url`/`reissued`, stamps `published_at`,
+  `version` and `sha256` atomically, sends the visual-check media and returns a status
+  table plus the phone-tappable links block the main session pastes verbatim
+  (`templates/courier-brief.md`, ≤40 lines).
+- `execution-prompt-architect`: `templates/plans-regen.py` — `plans.html` is now generated
+  by script from the four plan documents (`--init`, `--check`, ES/EN name sets, wave
+  statuses from `task.md`, CSS Gantt from the timeframe) and never hand-rendered; both
+  generators and both `.tmpl` shells are copied next to each other into the brain's
+  `scripts/` and the exact command lives in the row's `regen`. New `courier` role (Sonnet
+  always, one per batch — 1 of the 20 reserved, no Opus quota) and a `capture` role
+  for the visual check; closes delegate to it; repo paths, hashes
+  and pending DoD-human now sit ABOVE the links block, which is always the last lines.
+- `artifact-guard.py` v5: trusts registry stamps (`published_at` ≥ mtime or an equal
+  `sha256`) as publish evidence, evaluates the links block once over the union of modules
+  closing in the turn, and its stale message points to the courier instead of asking the
+  main session to read the live version; still fail-open. Ships
+  `artifact-guard-selftest.py` (stdlib, RED→GREEN cases).
+- `design-direction-architect`: the contact sheet and the variants page are published by
+  the courier; the closing block becomes plain Markdown bullets grouped by label prefix.
+- Pure-orchestrator hard rule across the six skills
+  (`execution-prompt-architect/references/orchestrator-rule.md`): the main session briefs
+  sub-agents with an explicit model, reads their returns and decides; Sonnet executes and
+  publishes, Opus investigates and audits; the owner's phrases `sin tanto lío` (one task)
+  and `modo directo` (until `modo orquestador`) switch the rule off.
+
 ## 0.11.0 — 2026-09-19
 
 - `business-context-generator`: mines EXISTING sources before interviewing — sales

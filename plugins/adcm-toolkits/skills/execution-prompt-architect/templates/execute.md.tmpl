@@ -58,19 +58,28 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
    never self-approve. ONE packaged `code-simplifier:code-simplifier` pass per wave,
    called with an explicit `model: opus` (one tier down with the roles when the main
    session is not Fable), costs 1 of the 20 and 1 of the Opus quota and is verified by
-   the orchestrator, never by itself.
+   the orchestrator, never by itself. One delivery `courier` per batch (normally 1; each
+   extra batch = 1 more of the 20, 0 Opus quota) — `sonnet` ALWAYS, even when the main
+   session is not Fable — costs 1 of the 20 (the first is reserved, like the gate
+   verifier) and 0 Opus quota (§2b step 7).
    **Escalation ladder** Sonnet → Opus → orchestrator: the 2nd failure of the SAME
    DoD line moves the task one tier up as a new agent carrying the attempt log.
    One counter per session, `model` always explicit, `SendMessage` to a live agent
    costs 0. Ultracode changes the orchestration (Workflow per phase + adversarial
    cross-check), never roles or count. Exceeding 20 is a protocol violation; the
    logbook records `agents used: n/20 (opus a · sonnet b)` with each agent's role
-   (investigate / execute / review / simplify / verify) and every escalation. `model`
-   always explicit includes packaged agents: the call names it, the plugin's
+   (investigate / execute / review / simplify / verify / capture / courier) and every escalation.
+   `model` always explicit includes packaged agents: the call names it, the plugin's
    frontmatter is irrelevant. On the orchestrator's own last-rung fixes (≤~20 lines,
    when a brief would cost more than the change): every one is LOGGED in the
    `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an
-   unlogged orchestrator edit is a protocol violation, not a shortcut.
+   unlogged orchestrator edit is a protocol violation, not a shortcut. The orchestrator
+   is otherwise PURE: it never reads files in bulk, never edits at scale, never renders,
+   browses or publishes, and every `Agent`/`Workflow` call names its `model` (Plan and
+   Explore agents included). The user's phrase `sin tanto lío` (that one task) or
+   `modo directo` (until `modo orquestador`) switches this off and the main session
+   does the work itself — rule and tier table in the skill's
+   `references/orchestrator-rule.md`.
 8. **Executor brief.** What the orchestrator hands to an executor, ≤40 lines:
    `TASK · FILES (from the Scope manifest — the shared helper and EVERY consumer to
    rewire included when the manifest says so) · DELIVERABLE (Opus's audited deliverable
@@ -183,10 +192,12 @@ to the same simplifier, then a revert to the checkpoint commit.
 
 # VISUAL CHECK (MANDATORY if the wave touches UI: .pug/.html/.scss/.css/components)
 grep + build only prove the code is THERE, not that it LOOKS right (they never catch real width,
-wrong-language text, overflow/overlap). Before marking a UI task completed: render the page in headless
-Chrome and review the screenshot YOURSELF — local server (full env) or the deployed URL. Use a screenshot
-helper (Playwright/Puppeteer + the system browser); capture desktop (≥1280) AND mobile (375), both languages
-if i18n. Verify width/responsive (not "compacted"), i18n, no overlaps, design-system fonts/colors.
+wrong-language text, overflow/overlap). Before marking a UI task completed: delegate the capture to a `sonnet`
+sub-agent (1 of the 20, 0 Opus quota; the main session does not render or screenshot): it renders the page in headless Chrome — local
+server (full env) or the deployed URL — with a screenshot helper (Playwright/Puppeteer + the system browser),
+captures desktop (≥1280) AND mobile (375), both languages if i18n, and RETURNS the PNG paths plus its findings
+(width/responsive (not "compacted"), i18n, no overlaps, design-system fonts/colors). You (the orchestrator) MAY
+open those PNGs to judge — reviewing sub-agent output is allowed. The courier later sends those same PNGs as media.
 
 # WORKFLOW (fan-out)
 AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL; YOU orchestrate —
@@ -198,7 +209,10 @@ implements ⚠gate waves; `sonnet` implements NO-gate tasks from briefs (≤4 pa
 disjoint files, own worktrees; an extraction task runs before its consumers, never
 beside them), never self-approves. ONE `code-simplifier:code-simplifier` pass per wave
 with an explicit `model: opus` (1 of the 20, 1 of the quota, never self-approving).
-Ladder sonnet → opus → you.
+One delivery `courier` per batch (normally 1; each extra batch = 1 more of the 20, 0 Opus
+quota), `model: sonnet` always.
+Ladder sonnet → opus → you. Pure orchestrator, `references/orchestrator-rule.md`:
+`sin tanto lío` / `modo directo` switch it off.
 Model always explicit; SendMessage follow-ups cost 0. In ultracode: Workflow per
 phase, ≤20 agent() calls in total, isolation: 'worktree' on parallel executors.
 <the per-task cycle with real IDs: investigate → audit deliverable → brief →
@@ -222,8 +236,9 @@ Touch nothing outside the tasks' scope — the scope IS the Scope manifest, so t
 shared helper and its named consumers ARE in scope when the manifest lists them. No
 secrets in code/commits. When the simplify pass has run and the DoD-auto is green
 AFTER it: <delivery per §3>, then run the FULL doc-sync at close (§2b — "append the
-logbook" means ALL of it), and list any pending DoD-human marking those tasks
-blocked.
+logbook" means ALL of it) and COMMIT AND PUSH it; only then delegate the delivery
+close to one `artifact-courier` per batch (normally 1; `model: sonnet`, §2b step 7) and finish with the
+pending DoD-human lines and, AS THE LAST LINES, the courier's links block.
 ```
 
 ## 2b. Doc-sync at close (mandatory — "append the logbook" means ALL of this)
@@ -237,7 +252,8 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    before → after · unplanned duplication found → follow-up | none) · **simplifier**
    (carrier: packaged | fallback sub-agent · ran over `{{checkpoint_sha}}..HEAD` · files
    touched · DoD re-verified | reverted (why) | not run (why)) · **agents used n/20 (opus a · sonnet b)** with roles investigate /
-   execute / review / simplify / verify · **escalations**) AND the
+   execute / review / simplify / verify / capture / courier (record the NUMBER of couriers: 1, or more
+   when the delivery ran in several batches) · **escalations**) AND the
    wave-map status flip.
 2. **`execute.md` §7** — this wave's prompt header flip (`☐` → `✅ DONE (date)` /
    `🔄` / `⛔`).
@@ -249,29 +265,35 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    duplicating it again.
 4. **`execute.md` §7** — regenerate the prompt of any later wave whose manifest
    changed in (3): its `# SCOPE` must match detailed-plan.
-5. **Delivery message — ENDS with a links block, no filler**: the last paragraph of
-   the close message to {{owner}} is a compact links block, in this order: (a) the
-   wave's viewable result when it renders, ALWAYS AS TWO LINES: the `localhost` URL
-   FIRST ({{owner}} validates from iTerm on the Mac) and the LAN-IP URL after it (so
-   it also opens from a phone). Never one without the other, and never the LAN IP
-   alone: it changes with the network, so a link handed over yesterday arrives dead
-   while `localhost` keeps working. Read the IP at close time (`ipconfig getifaddr
-   en0`), bind the server to `0.0.0.0`, and `curl` BOTH URLs before handing them
-   over. Start the preview server yourself if none runs, with HTTP Range support or
-   video is dead on iOS; same for a served PDF or report; (b) ALWAYS the project's canonical artifacts from
-   `{{docs_dir}}/artifacts.json` (plans, prompts, mockups…) — even when this wave
-   rendered nothing new; (c) repo paths and commit hashes, one line each —
-   reference, not delivery.
+5. **Delivery message — ENDS with the courier's links block, no filler.** The links
+   come from the `artifact-courier` (step 7), never from the main session: its returned
+   block holds (a) the wave's viewable result when it renders, ALWAYS AS TWO LINES —
+   the `localhost` URL FIRST ({{owner}} validates from iTerm on the Mac) and the
+   LAN-IP URL after it (so it also opens from a phone); never one without the other,
+   and never the LAN IP alone: it changes with the network, so a link handed over
+   yesterday arrives dead while `localhost` keeps working — and (b) ALWAYS the
+   project's canonical artifacts from `{{docs_dir}}/artifacts.json` (plans, prompts,
+   mockups…), even when this wave rendered nothing new. The orchestrator only starts
+   the preview server if none runs (bound to `0.0.0.0`, with HTTP Range support or video
+   is dead on iOS; same for a served PDF or report) and passes the localhost URL in the
+   courier's brief; the courier reads the LAN IP (`ipconfig getifaddr en0`) and `curl`s
+   both URLs before returning them.
+   **Order of the final message**: repo paths and commit hashes (one line each —
+   reference, not delivery) and the pending DoD-human lines go ABOVE the links block,
+   never after it: the guard rejects any text after the last link. The block itself is
+   the courier's `=== LINKS ===` tail pasted verbatim as the LAST lines — no headings,
+   no text inside it.
    **Format — links must be TAPPABLE on a phone**: each link is a plain Markdown
    bullet `- [emoji Title](url)` — NEVER inside a code fence, inline backticks, or
    4-space indentation ({{owner}} reads closes on a phone, where code-formatted
    links render as dead text). The raw URL living inside the Markdown link also
    keeps Claude Code's quick-access footer badges (below the mode indicator)
    working — both surfaces, one format.
-   **Media at the END**: screenshots/photos/videos of the result (SendUserFile) are
-   presented at the very end of the close — long narrative first, then the files,
-   then a SHORT final message that is just the links block (+ pending DoD-human).
-   On a phone {{owner}} must see the media and links without scrolling back up.
+   **Media before the final message**: the courier sends the screenshots of the VISUAL
+   CHECK (a GIF when the feature spans several screens) with SendUserFile; the
+   narrative comes first, then the files, then a SHORT final message — the pending
+   DoD-human lines and then the block — so on a phone {{owner}} sees the media and
+   links without scrolling back up; nothing follows the block.
    The `artifact-guard` Stop hook blocks the close when the block is missing.
 6. **Project context skill — DELTA refresh**: with the logbook's files-touched list,
    update only the affected references of `{{project_context_skill}}` (usage-map
@@ -280,20 +302,27 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    (`scan_project.py --update <paths>`) when available. Every closed wave leaves the
    brain AND the code map fresh — freshness never depends on manual re-scans.
 7. **`master-plan.md` execution-state block, `plans.html` and `prompts.html` —
-   REGENERATE AND REPUBLISH**: flip the row/badge in master-plan's execution-state
-   block; regenerate `plans.html` from its four source docs when any of them changed;
-   regenerate `prompts.html` from `execute.md` §7 (`python3
-   {{docs_dir}}/scripts/prompts-regen.py --brain {{docs_dir}} {{wave_ids}}
-   {{docs_dir}}/prompts.html`) — never hand-edit it, its only source of truth is the
-   `### Wave <ID>` headers in §7. Then, in the SAME session, republish EVERY HTML
-   registered in `{{docs_dir}}/artifacts.json` that changed on disk to its SAME URL
-   (Artifact tool with `url`; read the live version first — the publish requires it).
-   `prompts.html` changes whenever a §7 header flips or a prompt is regenerated, so
-   BOTH `plans.html` and `prompts.html` are republished at practically every close. A
-   badge flipped on disk without a republish leaves the shared link stale (lesson
-   learned: a wave closed with the published plan still showing "pending"). New
-   artifact ⇒ new row in `artifacts.json` in the same session. The `artifact-guard`
-   Stop hook blocks the close while a registered artifact is stale.
+   REGENERATE AND REPUBLISH, by the courier**: flip the row/badge in master-plan's
+   execution-state block and finish the doc-sync of steps 1–4 and 9 — commit and push
+   it FIRST (a project pre-commit may regenerate HTML when it commits the `.md`). The
+   main session never opens, renders or edits brain HTML and never calls the Artifact
+   tool: it delegates the delivery to one `artifact-courier` per batch (skill
+   `adcm-toolkits:artifact-courier`; brief from its `templates/courier-brief.md`,
+   `model: sonnet` always; normally 1 courier, each extra batch = 1 more of the 20, 0 Opus quota). The courier runs each registry
+   row's `regen` (`plans-regen.py` for `plans.html`, `prompts-regen.py` for
+   `prompts.html`, both copied with their `.tmpl` to `{{docs_dir}}/scripts/`), republishes
+   every stale artifact to its SAME URL — or re-issues it as a new one above ~300 KB —
+   stamps `published_at`/`version`/`sha256` in `{{docs_dir}}/artifacts.json`, commits
+   that file, sends the media and returns a table plus the links block. `prompts.html`
+   changes whenever a §7 header flips or a prompt is regenerated, so BOTH pages are
+   republished at practically every close; its only source of truth is the
+   `### Wave <ID>` headers in §7. A badge flipped on disk without a republish leaves
+   the shared link stale (lesson learned: a wave closed with the published plan still
+   showing "pending"). New artifact ⇒ new row in `artifacts.json` (without `url`) in
+   the same session: the courier publishes it. If the courier's RETURN carries
+   `ERRORS`, send ONE `SendMessage` to the SAME courier (cost 0) and report; never
+   publish yourself. The `artifact-guard` Stop hook blocks the close while a registered
+   artifact is stale — it trusts the courier's stamps.
 8. {{If this plan family coexists with an INCUMBENT protocol (the project already
    keeps its own live TASKS/EXECUTION docs): state explicitly which docs THIS family
    owns and which belong to the incumbent — never write to the incumbent's docs from

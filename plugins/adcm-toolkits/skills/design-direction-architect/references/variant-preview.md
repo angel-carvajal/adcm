@@ -79,7 +79,8 @@ then build the call with technique 1 or 2.
 
 ## The review page
 
-Publish **one** page that holds all three, as an Artifact so it opens on a phone from a link:
+Build **one** page that holds all three, published by the `artifact-courier` (never by the
+main session) as an Artifact so it opens on a phone from a link:
 
 - a **viewport toggle** that switches all three between 390px and 1440px at once — mobile
   view sits them side by side, desktop stacks full-width (three 1440px frames in a row are
@@ -95,36 +96,39 @@ template's copy. Label every reference frame with its source and author.
 ## The closing link block
 
 Every step that ends in something the owner must look at closes with a clean
-link block — readable in a terminal **and** on a phone. One line per link, no
-tracking parameters, no truncated URLs, no decoration.
+link block — readable in a terminal **and** on a phone. It is NOT the courier's
+`=== LINKS ===` block pasted as-is: that standard block omits registry rows with
+`in_close_block: false`, which is how this skill registers its pages. Build it yourself from
+the URLs: run `python3 <courier skill dir>/scripts/courier_preflight.py <docs_dir> --block-only --only <its files> --include-hidden`
+(or read the `url` column of the courier's status table) and write your own REVIEW /
+REFERENCES / PACK bullets. The format is the same: **plain markdown bullets**, one link per line,
+no tracking parameters, no truncated URLs, no headers, no columns, no code fence, no
+indentation.
 
-```
-REVIEW
-  Variants (phone-friendly)   <artifact url>
-  Variant A · phased spine    <artifact url>#a
-  Variant B · dense catalog   <artifact url>#b
-  Variant C · product theatre <artifact url>#c
+- [📱 REVIEW · Variants 390/1440](<artifact url>)
+- [🅰️ REVIEW · Variant A · phased spine](<artifact url>#a)
+- [🅱️ REVIEW · Variant B · dense catalog](<artifact url>#b)
+- [🔷 REVIEW · Variant C · product theatre](<artifact url>#c)
+- [🔗 REFERENCES · EMBERJACK · Framer · $39](<demo url>)
+- [🔗 REFERENCES · ASHLAR · Framer · $39](<demo url>)
+- [🔗 REFERENCES · GridFly · Framer · free](<demo url>)
 
-REFERENCES
-  EMBERJACK   <demo url>          Framer · SoloFoundry · $39
-  ASHLAR      <demo url>          Framer · SoloFoundry · $39
-  GridFly     <demo url>          Framer · free
-```
-
-5b's block has only these two groups — `.design/` holds nothing else exportable yet.
-STEP 7 adds a third group, PACK — the `.design/` pack files and any published artifact
-URLs (never local paths a phone cannot open) — once the brief and its exports exist.
+The groups are the label prefixes — REVIEW, then REFERENCES, then PACK — in that order;
+a blank line between groups is allowed, a header line is not. 5b's block has only
+REVIEW and REFERENCES — `.design/` holds nothing else exportable yet. STEP 7 adds the
+PACK group, the `.design/` pack files and any published artifact URLs (never local
+paths a phone cannot open), once the brief and its exports exist.
 
 Rules for the block: only links worth opening (no intermediate URLs, no API
-endpoints, no local paths the owner can't open from a phone); label before
-URL, aligned; group by purpose, never one flat list; nothing broken — every
-URL was opened this session; goes at the very end, after the analysis, never
-mixed in.
+endpoints, no local paths the owner can't open from a phone); label inside the
+link text; group by label prefix, never one unlabeled flat list; nothing broken —
+every URL was opened this session; goes at the very end, after the analysis, never
+mixed in — and nothing follows it.
 
 ## Deciding
 
-Present the block, then ask which variant leads. The owner may combine ("A's spine with
-C's hero") — that is a valid answer.
+Ask which variant leads in the prose ABOVE the block, then end the message with the block.
+The owner may combine ("A's spine with C's hero") — that is a valid answer.
 
 If none of the three convince, the direction is wrong, not the execution. Return to
 STEP 5's keep/drop with what the variants revealed.

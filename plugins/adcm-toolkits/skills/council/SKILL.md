@@ -65,6 +65,8 @@ ask the council --deep --context example: <big question>
 
 ## Execution flow
 
+**Hard rule: the main session is a pure orchestrator.** The 5 advisors run as parallel sub-agents, each with an explicit `model`: `"sonnet"` by default, or `"opus"` when the user asks for depth. The Chairman runs as an `"opus"` sub-agent. The main session only passes context (the question, the language, the injected hooks), reads the 6 RETURNs and presents the verdict (Step 5); it never deliberates as an advisor or as the Chairman itself. If no agent tool exists (claude.ai/Cowork), degrade to the sequential flow described in Step 2. Escape hatch, in the user's own words: `sin tanto lío` (direct mode for that one task) or `modo directo` (stays on until `modo orquestador`). Canonical rule: `../execution-prompt-architect/references/orchestrator-rule.md`.
+
 ### Step 1 — Parse the invocation
 
 1. Extract the **question** (everything after the trigger and the flags).
@@ -77,7 +79,7 @@ If a referenced context hook does not exist in `contexts/`, warn the user and pr
 
 ### Step 2 — Convene the 5 advisors
 
-Each advisor runs as an **isolated thinking block** — Claude must process its prompt without the other advisors' output contaminating it. In Claude Code this is done with parallel sub-agents via the `Task` tool. In claude.ai/Cowork it is done sequentially, but reading each advisor's prompt separately before drafting its response.
+Each advisor runs **isolated** — its prompt must be processed without the other advisors' output contaminating it. In Claude Code each advisor is its own sub-agent, launched in parallel in a single message with `model: "sonnet"` (or `"opus"` when the user asked for depth); the brief carries the advisor's prompt, the injected context and the question, and the RETURN is the advisor's structured response. Where no agent tool exists (claude.ai/Cowork), degrade to sequential: draft each advisor's response in turn, reading its prompt separately first.
 
 For each advisor:
 
@@ -104,7 +106,7 @@ If `--deep` is active: **for now**, do not run a real cross-review. Just add a n
 
 ### Step 4 — Convene the Chairman
 
-Read `chairman.md`. Pass it:
+Read `chairman.md` (or have the Chairman sub-agent read it) and launch the Chairman as an `"opus"` sub-agent; with no agent tool, run it in the main session. Pass it:
 
 1. The user's original question.
 2. The 5 advisor responses.

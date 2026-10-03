@@ -44,19 +44,17 @@ Do not summarize the pack in prose — point at it. A good handoff is short:
 ## Closing link block
 
 End the handoff with the clean, phone-readable block defined in
-`variant-preview.md` — grouped by purpose, label before URL, nothing broken,
-nothing extra. The owner reviews from a phone; a wall of raw URLs is unusable
-there. STEP 7 adds the third group the earlier blocks lack:
+`variant-preview.md` — plain bullets grouped by label prefix, nothing broken,
+nothing extra, no headers, no columns, no code fence. The owner reviews from a
+phone; a wall of raw URLs is unusable there. STEP 7 adds the third group the
+earlier blocks lack, labeled PACK (the Commerce bullet only if the business sells):
 
-```
-PACK
-  Brief          <repo or published URL of .design/brief.md>
-  References     <… references.md>
-  Tokens         <… tokens.css>
-  Commerce       <… commerce.md>      (only if it sells)
-  Assets         <… assets.md>
-  Decisions      <… decisions.md>
-```
+- [📦 PACK · Brief](<repo or published URL of .design/brief.md>)
+- [📦 PACK · References](<… references.md>)
+- [📦 PACK · Tokens](<… tokens.css>)
+- [📦 PACK · Commerce](<… commerce.md>)
+- [📦 PACK · Assets](<… assets.md>)
+- [📦 PACK · Decisions](<… decisions.md>)
 
 Published or repo links only — never a local path a phone cannot open.
 

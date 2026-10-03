@@ -83,7 +83,36 @@ Absolute path when needed:
    assets is forbidden.
 10. **Close with the link block.** Any step that produces something the owner
     must look at ends with the clean, phone-readable link block from
-    `variant-preview.md` — grouped, labeled, nothing broken, nothing extra.
+    `variant-preview.md` — plain bullets grouped by label, nothing broken,
+    nothing extra. The skill's artifacts (contact sheet, variants page) live in
+    `.design/preview/` and one Sonnet `artifact-courier` per batch (normally 1;
+    `model: "sonnet"`) publishes them; the main session never calls the Artifact tool. Register the
+    rows in `<docs_dir>/artifacts.json` with `in_close_block: false` when the
+    container has a brain, otherwise in `.design/artifacts.json` (same schema).
+    Because of that flag the courier's standard block OMITS these rows, so the
+    main session does NOT paste the courier's block as-is: it runs
+    `python3 <courier skill dir>/scripts/courier_preflight.py <docs_dir> --block-only --only <its files> --include-hidden`
+    (it narrows to exactly those rows; or reads the `url` column of the courier's
+    status table) and builds its OWN REVIEW / REFERENCES / PACK bullets from those
+    URLs, keeping the format rules below (plain bullets, groups by label prefix;
+    questions go ABOVE the block, which is the last lines, nothing after).
+11. **Pure orchestrator.** The main session interviews (STEP 1), locks the
+    direction (STEP 2), decides the curation (STEP 5) and writes the pack
+    (STEP 7); it does not browse, score or publish. Delegation map, every call
+    with an explicit `model`:
+    - **Browsing** (STEP 3 Framer / Pinterest / 21st.dev / Pexels, STEP 3b):
+      one `sonnet` sub-agent per source, with Chrome, returning a candidate
+      table (source, URL, demo URL, one line each) — never inline screenshots;
+      captures go to `.design/refs/`.
+    - **Scoring** (STEP 4): an `opus` sub-agent scores the merged tables
+      against the rubric and returns the ranking.
+    - **Contact sheet and variants** (STEP 5 / 5b): built by a `sonnet`
+      sub-agent from the orchestrator's brief; published by the
+      `artifact-courier`.
+
+    Escape hatch, in the user's own words: `sin tanto lío` (direct mode for
+    that one task) or `modo directo` (stays on until `modo orquestador`).
+    Canonical rule: `../execution-prompt-architect/references/orchestrator-rule.md`.
 
 ---
 
@@ -157,8 +186,11 @@ overall direction while a different one wins the product section.
 
 Read `references/curation-protocol.md`. Present the 5 finalists as a
 **contact-sheet Artifact** (screenshots, per-dimension scores, one line each),
-closing with the link block. Ask only *drop + why* — "which leads" is asked once,
-in STEP 5b. **≥2 survive → STEP 5b** (with exactly 2, variant C is A+B).
+built at `.design/preview/contact-sheet.html` and handed to the courier.
+Above the block, ask only *drop + why* — "which leads" is asked once, in STEP 5b.
+Close with the link block built from the URLs the courier published (rule 10:
+`courier_preflight.py ... --block-only --only <its files> --include-hidden`, never
+the courier's standard block); the block is the last lines. **≥2 survive → STEP 5b** (with exactly 2, variant C is A+B).
 **<2 → STEP 3** with the direction corrected by why they were dropped; the
 second return to STEP 3 from anywhere goes to STEP 2 instead.
 
@@ -166,15 +198,17 @@ second return to STEP 3 from anywhere goes to STEP 2 instead.
 
 Read `references/variant-preview.md`. Scores do not let anyone picture the
 result. Build **three fast variants of one page using the project's real brand**
-— one per surviving direction, deliberately unfinished — and publish them as a
-single Artifact with a **viewport toggle**: every variant judged at 390px *and*
+— one per surviving direction, deliberately unfinished — and build them as a
+single page, `.design/preview/variants.html`, handed to the courier to publish,
+with a **viewport toggle**: every variant judged at 390px *and*
 at 1440px, because desktop is not the phone stretched. Put the reference
 screenshots beside each interpretation. Write `.design/tokens.css`
 provisionally from `templates/tokens.css.tmpl` (LOCKED VARIANT in
 structure-only mode); STEP 6 refines it, never restarts it.
 
-Close with the link block. Then ask which leads; combining two is a valid
-answer.
+Ask which leads ABOVE the block (combining two is a valid answer), then close with the
+link block built from the courier's URLs (rule 10: `--block-only --include-hidden --only
+<its files>`, not the courier's block as-is). The block is the last lines.
 
 ### STEP 6 — Extract
 

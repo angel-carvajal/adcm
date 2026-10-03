@@ -51,8 +51,10 @@ Append one entry per wave session (including `[PARTIAL]` ones — see `execute.m
   change> (≤~20 lines, execute.md §1.7); an unlogged orchestrator edit is a protocol
   violation}}
 - **Agents used:** {{n}}/20 (opus {{a}} · sonnet {{b}}) — {{one line per sub-agent:
-  model + role (investigate / execute / review / simplify / verify) + scope; the
-  `simplify` line is the wave's code-simplifier pass and costs 1 agent + 1 of the Opus
-  quota; the budget and the roles are a hard limit of the session (execute.md §1.7)}}
+  model + role (investigate / execute / review / simplify / verify / capture / courier) + scope;
+  the `simplify` line is the wave's code-simplifier pass and costs 1 agent + 1 of the Opus
+  quota; the `courier` line is the `artifact-courier` delivery close — always sonnet: one courier per batch (normally 1; each extra batch = 1 more of the 20, 0 Opus quota) —
+  record the NUMBER of couriers on that line — plus the `regen` commands it ran and the artifact rows it updated or re-issued; the
+  budget and the roles are a hard limit of the session (execute.md §1.7)}}
 - **Escalations:** {{none | ID: sonnet → opus (reason, attempts) · ID: opus →
   orchestrator (reason)}}

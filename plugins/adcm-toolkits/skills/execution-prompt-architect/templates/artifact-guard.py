@@ -4,16 +4,26 @@
 Garantiza dos cosas cada vez que un turno intenta cerrar:
 
   1. FRESCURA — todo HTML registrado en un `artifacts.json` que cambió en disco durante
-     la sesión fue republicado a su MISMA URL (tool Artifact con `url`) DESPUÉS del
-     último cambio. Si no, bloquea el cierre y dice exactamente qué publicar.
+     la sesión tiene que estar republicado a su MISMA URL DESPUÉS del último cambio.
+     v5: la evidencia puede ser (a) un publish del tool Artifact en el transcript
+     principal, (b) el sello de la fila — `published_at` >= mtime del archivo — o (c) el
+     `sha256` de la fila igual al del archivo hoy (una regeneración idéntica es fresca
+     aunque su mtime sea nuevo). Los sellos los escribe el sub-agente artifact-courier
+     tras cada publish: el guard solo ve el transcript principal, no el de los
+     sub-agentes. El sha256 se calcula de forma perezosa, solo si la fila sería stale.
+     Si no hay evidencia, bloquea el cierre y apunta al courier (no a leer/publicar
+     desde la sesión principal).
   2. LINKS AL CIERRE (v3: también FORMATO y POSICIÓN — links Markdown, uno por línea,
      como ÚLTIMAS líneas del mensaje; nada después del último link · v4: si el cierre
      entrega una URL con IP de LAN, la MISMA app tiene que venir también como
-     `localhost`, porque desde iTerm en la Mac esa es la que el owner usa para validar) — si el turno publicó un artifact, cambió un HTML registrado o tocó
-     un doc de cierre (`close_markers`: task.md / execute.md / detailed-plan.md) del
-     módulo, el texto del asistente en el turno debe incluir las URLs canónicas de ese
-     módulo (la convención las pone en el bloque final). Si faltan, bloquea el cierre y
-     entrega el bloque de links listo para pegar.
+     `localhost`, porque desde iTerm en la Mac esa es la que el owner usa para validar ·
+     v5: el bloque se evalúa UNA vez sobre la UNIÓN de los módulos que cierran en el
+     turno, no módulo por módulo) — si el turno publicó un artifact, cambió un HTML
+     registrado o tocó un doc de cierre (`close_markers`: task.md / execute.md /
+     detailed-plan.md) del módulo, el texto del asistente en el turno debe incluir las
+     URLs canónicas de ese módulo (la convención las pone en el bloque final). Si faltan,
+     bloquea el cierre y entrega el bloque de links (la unión) listo para pegar; si el
+     courier ya corrió, se pega su bloque `=== LINKS ===` tal cual.
 
 Descubrimiento del registro: sube desde `cwd` buscando `ai/ai-brain/artifacts.json` o
 `ai-brain/artifacts.json`, deteniéndose en el home del usuario (nunca lo rebasa, para
@@ -24,7 +34,10 @@ una sesión.
 Formato de artifacts.json (paths relativos a su carpeta):
   {"close_markers": ["task.md", ...],
    "artifacts": [{"file": "modules/x/plans.html", "url": "https://claude.ai/code/artifact/…",
-                  "title": "…", "favicon": "📒", "in_close_block": true}]}
+                  "title": "…", "favicon": "📒", "in_close_block": true,
+                  "published_at": "2026-01-01T12:00:00.000Z", "version": "v3",
+                  "sha256": "<hex digest of the file as published>"}]}
+  (`published_at`, `version` y `sha256` son opcionales: los sella el courier.)
 
 Instalación (user settings, event Stop):
   {"hooks": {"Stop": [{"matcher": "", "hooks": [{"type": "command",
@@ -32,11 +45,13 @@ Instalación (user settings, event Stop):
 
 Fuente canónica: plugin adcm-toolkits → skills/execution-prompt-architect/templates/artifact-guard.py
 """
+import hashlib
 import json
 import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 
 REGISTRY_CANDIDATES = ("ai/ai-brain/artifacts.json", "ai-brain/artifacts.json")
 DEFAULT_MARKERS = ("task.md", "execute.md", "detailed-plan.md")
@@ -55,6 +70,29 @@ def iso_to_epoch(ts):
         return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
     except Exception:
         return None
+
+
+def file_sha256(path):
+    """Hex sha256 del archivo, o None si no se puede leer. Solo se llama cuando una fila
+    sería stale: el caso normal (fresca por transcript o por sello) no paga la lectura."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return None
+
+
+def stamped_sha(a):
+    value = a.get("sha256")
+    if not isinstance(value, str):
+        return None
+    value = value.strip().lower()
+    if value.startswith("sha256:"):
+        value = value[len("sha256:"):]
+    return value or None
 
 
 def find_registries(cwd):
@@ -167,16 +205,17 @@ def check(hook_input):
     cwd = hook_input.get("cwd") or os.getcwd()
     transcript = hook_input.get("transcript_path")
     if not transcript or not os.path.isfile(os.path.expanduser(transcript)):
-        return [], []
+        return [], None
     registries = find_registries(cwd)
     if not registries:
-        return [], []
+        return [], None
     session_start, turn_start, publishes, turn_text = parse_transcript(os.path.expanduser(transcript))
     if turn_start is None:
-        return [], []
+        return [], None
 
     now = time.time()
-    stale, links_missing = [], []
+    stale = []
+    union, all_missing = [], []  # módulos que cierran en este turno: links requeridos y faltantes
     for reg_dir, data in registries:
         markers = normalize_markers(data.get("close_markers"))
         entries = [
@@ -194,19 +233,35 @@ def check(hook_input):
             if not os.path.isfile(abs_file):
                 continue
             mtime = os.path.getmtime(abs_file)
+            a["_mtime"] = mtime
             # Un publish cuenta por path O por URL canónica (un file_path relativo en
             # la llamada al tool no siempre resuelve al mismo realpath desde el hook).
             pubs = [t for t, p, u in publishes if p == abs_file or (u and u == a["url"])]
             last_pub = max(pubs, default=None)
+            reg_pub = iso_to_epoch(a.get("published_at"))
+            if reg_pub is not None and reg_pub > now + CLOCK_SKEW:
+                # Sello futuro (editado a mano o reloj corrido): no es evidencia — de lo
+                # contrario un published_at lejano apagaría la revisión de frescura.
+                reg_pub = None
             if mtime > now + CLOCK_SKEW:
                 # mtime futuro (reloj corrido, restore de backup, touch -t): no es
-                # comparable — un publish de esta sesión lo da por fresco; sin publish
-                # sigue contando como stale para no perder la garantía.
-                if last_pub is None and mtime >= session_start:
+                # comparable — un publish de esta sesión (o un sello del courier de esta
+                # sesión) lo da por fresco; sin evidencia sigue contando como stale para
+                # no perder la garantía.
+                sealed_now = reg_pub is not None and reg_pub >= session_start
+                if last_pub is None and not sealed_now and mtime >= session_start:
                     stale.append((a, abs_file))
                 continue
-            if mtime >= session_start and (last_pub is None or last_pub < mtime):
-                stale.append((a, abs_file))
+            if mtime < session_start:
+                continue
+            if last_pub is not None and last_pub >= mtime:
+                continue  # publicado desde la sesión principal después del último cambio
+            if reg_pub is not None and reg_pub >= mtime:
+                continue  # sello del courier posterior al último cambio
+            stamp = stamped_sha(a)
+            if stamp is not None and stamp == file_sha256(abs_file):
+                continue  # contenido idéntico al publicado: el mtime nuevo no importa
+            stale.append((a, abs_file))
 
         def touched_this_turn(p):
             # mtime futuro (más allá del skew) no es evidencia de actividad del turno:
@@ -229,15 +284,23 @@ def check(hook_input):
             if not closing:
                 continue
             required = [a for a in arts if a.get("in_close_block", True)]
+            for a in required:
+                if all(a["url"] != x["url"] for x in union):
+                    union.append(a)
             missing = [a for a in required if a["url"] not in turn_text]
             if missing:
-                links_missing.append((mod, required, missing, []))
-                continue
-            probs = links_format_problems(turn_text, required)
-            probs += local_link_problems(turn_text)
-            if probs:
-                links_missing.append((mod, required, [], probs))
-    return stale, links_missing
+                all_missing.append((mod, missing))
+
+    links = None
+    if union:
+        # Un solo mensaje, un solo bloque: se evalúa la unión de todos los módulos que
+        # cierran, así dos módulos en el mismo turno no se estorban entre sí.
+        probs = []
+        if not all_missing:
+            probs = links_format_problems(turn_text, union) + local_link_problems(turn_text)
+        if all_missing or probs:
+            links = {"union": union, "missing": all_missing, "probs": probs}
+    return stale, links
 
 
 def fmt_link(a):
@@ -250,7 +313,7 @@ LINK_LINE = re.compile(r"^\s*(?:[-*•]\s*)?\[[^\]]+\]\(\S+\)\s*$")
 
 
 def links_format_problems(turn_text, required):
-    """Formato del bloque final (Angel, 28-ago-2026): los links son las ÚLTIMAS líneas del
+    """Formato del bloque final (regla del dueño, 28-ago-2026): los links son las ÚLTIMAS líneas del
     mensaje, uno por línea como link Markdown `- [emoji Título](url)`; nada después del
     último link; nunca varias URLs en una línea. Se evalúa la COLA del texto (el bloque =
     corrida de líneas-link que termina en la última línea con una URL requerida), así una
@@ -293,7 +356,7 @@ LOCAL_URL = re.compile(r"https?://(?:localhost|127\.0\.0\.1)(?::(?P<port>\d{1,5}
 
 
 def local_link_problems(turn_text):
-    """Regla de Angel (1-sep-2026): un link con IP de LAN sirve para abrirlo desde el cel,
+    """Regla del dueño (1-sep-2026): un link con IP de LAN sirve para abrirlo desde el cel,
     pero él valida desde iTerm en la Mac — ahí la que funciona es `localhost`. Nunca una
     sin la otra. Además la IP de LAN caduca (cambia de red y el link llega muerto), así
     que `localhost` es la que siempre sigue viva. Se exige por PUERTO: si entregas
@@ -304,7 +367,7 @@ def local_link_problems(turn_text):
     local = {m.group("port") or "80" for m in LOCAL_URL.finditer(turn_text)}
     return [
         "el puerto {p} se entregó SOLO con IP de LAN: falta su gemelo "
-        "`http://localhost:{p}/` en el mismo bloque (Angel valida desde iTerm en la Mac; "
+        "`http://localhost:{p}/` en el mismo bloque (el dueño valida desde una terminal en la Mac; "
         "la IP de LAN además caduca al cambiar de red)".format(p=p)
         for p in sorted(lan - local)
     ]
@@ -325,35 +388,46 @@ def main():
     except Exception:
         hook_input = {}
     try:
-        stale, links_missing = check(hook_input)
-        if not stale and not links_missing:
+        stale, links = check(hook_input)
+        if not stale and not links:
             return 0
 
         lines = ["⛔ artifact-guard: el cierre está incompleto."]
         if stale:
-            lines.append("Artifacts DESACTUALIZADOS (cambiaron en disco y no se republicaron a su URL):")
+            lines.append("Artifacts DESACTUALIZADOS (cambiaron en disco y no hay publish ni sello posterior):")
             for a, abs_file in stale:
-                lines.append(f"  • {a['file']} → Artifact(file_path=\"{abs_file}\", url=\"{a['url']}\")")
-            lines.append("  Antes de publicar, lee la versión viva (Artifact action=read con esa url) — el publish exige haberla visto.")
-        if links_missing:
-            for mod, required, missing, probs in links_missing:
-                if probs:
-                    lines.append(f"El BLOQUE DE LINKS existe pero NO cumple formato/posición (módulo {safe_rel(mod)}):")
-                    for pr in probs:
-                        lines.append(f"  • {pr}")
-                    lines.append("Regla: las ÚLTIMAS líneas del mensaje son la lista de links, uno por línea, tocables en el cel; rutas/hashes ARRIBA. Reescribe el cierre así:")
-                    for a in required:
-                        lines.append(f"- {fmt_link(a)}")
-                    continue
+                mt = datetime.fromtimestamp(a.get("_mtime", os.path.getmtime(abs_file)), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+                sello = a.get("published_at") or "sin sello"
+                lines.append(f"  • {a['file']} (mtime {mt} · published_at {sello})")
+            lines.append(
+                "  No la leas ni la publiques desde esta sesión: delega el cierre en UN sub-agente "
+                "artifact-courier (Agent general-purpose, model \"sonnet\"; brief = "
+                "templates/courier-brief.md del skill adcm-toolkits:artifact-courier). Él republica, "
+                "sella el registro y devuelve el bloque `=== LINKS ===`."
+            )
+        if links:
+            union = links["union"]
+            if links["probs"]:
+                lines.append("El BLOQUE DE LINKS existe pero NO cumple formato/posición:")
+                for pr in links["probs"]:
+                    lines.append(f"  • {pr}")
+                lines.append("Regla: las ÚLTIMAS líneas del mensaje son la lista de links, uno por línea, tocables en el cel; rutas/hashes ARRIBA.")
+            else:
+                lines.append("Falta el BLOQUE DE LINKS al final del mensaje. Links que faltan, por módulo:")
+                for mod, missing in links["missing"]:
+                    lines.append(f"  • módulo {safe_rel(mod)}: " + ", ".join(str(a.get("title") or a["file"]) for a in missing))
                 lines.append(
-                    f"Falta el BLOQUE DE LINKS al final del mensaje (módulo {safe_rel(mod)}). "
-                    "Pégalo tal cual, al final, como lista Markdown plana — NUNCA dentro de un "
-                    "bloque de código, backticks ni sangría de 4 espacios (en el cel eso se ve "
-                    "como código muerto, no clickeable):"
+                    "Pégalo como lista Markdown plana — NUNCA dentro de un bloque de código, "
+                    "backticks ni sangría de 4 espacios (en el cel eso se ve como código muerto, "
+                    "no clickeable)."
                 )
-                for a in required:
-                    lines.append(f"- {fmt_link(a)}")
-        lines.append("Corrige lo anterior (republica y/o agrega el bloque de links) y vuelve a cerrar.")
+            lines.append(
+                "Si el courier ya corrió, pega su bloque `=== LINKS ===` tal cual como últimas "
+                "líneas; si no, este:"
+            )
+            for a in union:
+                lines.append(f"- {fmt_link(a)}")
+        lines.append("Corrige lo anterior (delega en el courier y/o pega el bloque de links) y vuelve a cerrar.")
         reason = "\n".join(lines)
 
         if hook_input.get("stop_hook_active"):
