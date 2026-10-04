@@ -37,9 +37,16 @@ missing `_NAME` stamp means stale, the canonical stamps are never used for it); 
 whose file is absent stays `missing`). With NAME equal to the active account, or without the flag,
 nothing changes: `url` and its stamps are used.
 
+`--account auto` resolves to the registry's top-level `last_session_account` (written by every
+--mark-published: the --account NAME it ran with, else the active account) and, when that is absent, to
+the active account; the default report header then prints `account: <resolved> (auto)`. `--block-only`
+prints, per row, the url of the resolved account's family and falls back to the canonical `url` when the
+family has none (a warning on stderr names those rows): the block the main session pastes is the
+current account's. The `=== LINKS ===` section of the default report follows the same rule.
+
 Usage
   courier_preflight.py <docs_dir|artifacts.json> [--module REL]... [--only F,F]
-                       [--threshold-kb 600] [--batch-kb 400] [--page-kb 60] [--account NAME]
+                       [--threshold-kb 600] [--batch-kb 400] [--page-kb 60] [--account NAME|auto]
                        [--summary | --batches | --block-only [--include-hidden]]
   courier_preflight.py <docs_dir> --mark-published FILE URL VERSION
                        [--previous-url OLD] [--reason TEXT] [--account NAME]
@@ -48,7 +55,9 @@ Usage
                         with --account NAME other than the active account ONLY the `_NAME` family
                         is written: `url_NAME`, `sha256_NAME`, `published_at_NAME`,
                         `published_bytes_NAME`, `version_NAME` and, on a changed url,
-                        `previous_url_NAME` and `reissued_NAME`; `url` and its stamps stay untouched)
+                        `previous_url_NAME` and `reissued_NAME`; `url` and its stamps stay untouched;
+                        the top-level `last_session_account` is set to NAME, or to the active account
+                        when no --account is given and one is known)
   courier_preflight.py <docs_dir> --set-regen FILE COMMAND
   courier_preflight.py <docs_dir> --set-active-account NAME
                        (moves the registry to account NAME: on every row that has `url_NAME` the whole
@@ -80,7 +89,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
-__version__ = "0.15.0"
+__version__ = "0.15.1"
 
 REGISTRY_CANDIDATES = ("artifacts.json", "ai/ai-brain/artifacts.json", "ai-brain/artifacts.json")
 DEFAULT_MARKERS = ("task.md", "execute.md", "detailed-plan.md")
@@ -214,6 +223,26 @@ def other_account(data, name):
         return None
     active = active_account(data)
     return name if name.strip() != (active or "").strip() else None
+
+
+def resolve_account(data, name):
+    """(account, auto): `--account auto` becomes the registry's `last_session_account`, else the active
+    account (None when neither is known); any other NAME is returned unchanged."""
+    if name != "auto":
+        return name, False
+    last = data.get("last_session_account")
+    if isinstance(last, str) and last.strip():
+        return last.strip(), True
+    return active_account(data), True
+
+
+def link_url(r, acct):
+    """URL a link-block line shows for a row: the working account's url; under another account
+    (`acct`) a row without one falls back to its canonical `url`."""
+    if r["url"] or not acct:
+        return r["url"]
+    canon = r["a"].get("url")
+    return canon if isinstance(canon, str) and canon else None
 
 
 def regen_cmd(a):
@@ -408,8 +437,9 @@ def report(args):
     reg = find_registry(args.target)
     reg_dir = os.path.dirname(reg)
     data = load_registry(reg)
-    acct = other_account(data, args.account)
-    rows = analyse(reg_dir, data, args.threshold_kb, args.account)
+    account, auto = resolve_account(data, args.account)
+    acct = other_account(data, account)
+    rows = analyse(reg_dir, data, args.threshold_kb, account)
 
     # Link block: module filter only (mirrors the guard's per-module block).
     block_rows = rows
@@ -429,12 +459,16 @@ def report(args):
     work_rows = block_rows
 
     block = []
-    missing_url = []
+    missing_url = []  # rows with no usable url at all: left out of the block
+    fallback = []  # --account NAME rows without url_NAME: listed with their canonical `url`
     for r in block_rows:
         if r["a"].get("in_close_block", True) is False:
             continue
-        if r["url"]:
-            block.append("- " + fmt_link({**r["a"], "url": r["url"]}))
+        u = link_url(r, acct)
+        if u:
+            block.append("- " + fmt_link({**r["a"], "url": u}))
+            if not r["url"]:
+                fallback.append(r["file"])
         else:
             missing_url.append(r["file"])
 
@@ -450,11 +484,16 @@ def report(args):
     need = [r["file"] for r in work_rows if r["needs_regen"]]
     foreign = [r["file"] for r in work_rows if r["state"] == "other-account"]
 
+    def warn_fallback():
+        for f in fallback:
+            print(f"warn: {f} has no url_{acct}, listed with its canonical url (it may not open under {acct})", file=sys.stderr)
+
     if args.block_only:
         lines = block
         if args.include_hidden:
-            lines = ["- " + fmt_link({**r["a"], "url": r["url"]}) for r in work_rows if r["url"]]
+            lines = ["- " + fmt_link({**r["a"], "url": link_url(r, acct)}) for r in work_rows if link_url(r, acct)]
         print("\n".join(lines))
+        warn_fallback()
         for f in missing_url:
             print(f"warn: {f} has no url_{acct}, left out of the block (other account)" if acct
                   else f"warn: {f} has no url, left out of the block", file=sys.stderr)
@@ -487,6 +526,8 @@ def report(args):
     active = active_account(data)
     ignored = sorted({k for r in rows for k in r["a"] if k.startswith("url_") and k not in (f"url_{acct}", f"url_cuenta_{acct}")})
     print(f"registry: {reg}")
+    if auto:
+        print(f"account: {account or 'not set'} (auto)")
     if acct:
         read = sorted({f"url_{acct}" if f"url_{acct}" in r["a"] else f"url_cuenta_{acct}" for r in rows if r["url"]},
                       key=lambda k: "cuenta_" in k) or [f"url_{acct}"]
@@ -538,6 +579,7 @@ def report(args):
         if n:
             print(f"warn: {r['file']} has {n} line(s) over {LONG_LINE} chars "
                   f"(the Read tool truncates them; see the retry rule in procedure.md)")
+    warn_fallback()
     for f in missing_url:
         print(f"warn: {f} has no url_{acct}, left out of the block (other account)" if acct
               else f"warn: {f} has no url yet, left out of the block (publish it as `new`)")
@@ -621,6 +663,21 @@ def pick_row(data, file_):
     return hits[0]
 
 
+def set_top_key(data, key, value):
+    """Set a top-level registry key; a new one lands right after the active-account key (else at the end)."""
+    if key in data or not any(k in data for k in ACCOUNT_KEYS):
+        data[key] = value
+        return
+    items = list(data.items())
+    data.clear()
+    placed = False
+    for i, (k, v) in enumerate(items):
+        data[k] = v
+        if not placed and k in ACCOUNT_KEYS and not any(n in ACCOUNT_KEYS for n, _ in items[i + 1:]):
+            data[key] = value
+            placed = True
+
+
 def mark_published(args):
     file_, url, version = args.mark_published
     if not re.match(r"^https://\S+$", url):
@@ -633,7 +690,8 @@ def mark_published(args):
         absf = os.path.join(reg_dir, file_)
         if not os.path.isfile(absf):
             die(f"{file_} does not exist on disk, nothing to stamp")
-        acct = other_account(data, args.account)
+        session, _ = resolve_account(data, args.account)
+        acct = other_account(data, session)
         ukey, pkey, rkey, ckey, tkey, vkey, bkey = (f"{b}_{acct}" if acct else b for b in (
             "url", "previous_url", "reissued", "sha256", "published_at", "version", "published_bytes"))
         cur_url = acct_get(a, "url", acct)
@@ -664,13 +722,19 @@ def mark_published(args):
             a[pkey] = prev
             a[rkey] = f"{day}: {reason}. Antecedente: {prev}"
         after = {k: a.get(k) for k in before}
-        return before, after, acct
+        last_old = data.get("last_session_account")
+        last = session or active_account(data)  # the account this session publishes under
+        if last:
+            set_top_key(data, "last_session_account", last)
+        return before, after, acct, last_old, last
 
-    before, after, acct = update_registry(args.target, mutate)
+    before, after, acct, last_old, last = update_registry(args.target, mutate)
     print(f"stamped {file_}" + (f" (account {acct}: url_{acct})" if acct else ""))
     for k in after:
         if before[k] != after[k]:
             print(f"  {k}: {before[k]!r} -> {after[k]!r}")
+    if last and last_old != last:
+        print(f"  last_session_account: {last_old!r} -> {last!r}")
     return 0
 
 
@@ -799,8 +863,9 @@ def main():
     p.add_argument("--previous-url", metavar="OLD")
     p.add_argument("--reason", metavar="TEXT")
     p.add_argument("--set-regen", nargs=2, metavar=("FILE", "COMMAND"))
-    p.add_argument("--account", metavar="NAME",
-                   help="claude.ai account the session publishes under; when it is not the registry's "
+    p.add_argument("--account", metavar="NAME|auto",
+                   help="claude.ai account the session publishes under (`auto`: the registry's "
+                        "last_session_account, else its active_account); when it is not the registry's "
                         "active_account the working url is url_NAME (table, --block-only, --batches, "
                         "--summary, state machine; rows without it are `other-account`), and "
                         "--mark-published seals url_NAME and leaves url alone")

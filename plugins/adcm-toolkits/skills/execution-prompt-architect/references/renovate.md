@@ -2,18 +2,20 @@
 
 Read when the user says 'renovate the brain', 'upgrade the brain', 'renueva el brain' or
 'actualiza el protocolo'. It brings an older brain up to the checker's target
-(`renovate_check.py --version`) and never re-plans: wave scope, state and logbook history stay.
+(`renovate-check --version`) and never re-plans: wave scope, state and logbook history stay.
 
 ## 0. Requirement and snapshot
 Deterministic first, model second. `{{skill_dir}}` = this skill's base dir; `<docs_dir>` = the brain. A plugin
-version that ships `renovate_check.py` must be loaded (`/reload-plugins` or a new session).
-- Never read `task.md` or `execute.md`. State: `python3 {{skill_dir}}/templates/status_digest.py --brain <docs_dir>`
+version that ships `renovate_check.py` must be loaded (`/reload-plugins` or a new session). Its `bin/` launchers
+(`status-digest`, `renovate-check`, `plans-regen`, `prompts-regen`) run bare, nothing before them; without the
+plugin the form is `python3 {{skill_dir}}/templates/<script>.py` (`status_digest.py`, `renovate_check.py`, ...).
+- Never read `task.md` or `execute.md`. State: `status-digest --brain <docs_dir>`
 - Snapshot (pasted into every brief):
-  `python3 {{skill_dir}}/templates/renovate_check.py --brain <docs_dir> --all-modules --invariants`
+  `renovate-check --brain <docs_dir> --all-modules --invariants`
   Exit 0 `up-to-date` (stop: 0 agents) · 1 `needed(<blocks>)` · 2 no brain or unreadable · 64 usage.
 
 ## 1. Scripts (deterministic, 0 agents)
-`renovate_check.py --brain <docs_dir> --all-modules --copy-scripts` copies the missing SCRIPTS files
+`renovate-check --brain <docs_dir> --all-modules --copy-scripts` copies the missing SCRIPTS files
 into `<docs_dir>/scripts/` and nothing else. A differing copy is informational (`SCRIPTS ok · custom:
 <file>`) and never blocks `up-to-date`: keep it when customised (own builders, titles), else `--force-outdated`.
 The one SCRIPTS case that needs an executor is `cache-dep: <file>` (a script reading `plugins/cache/`).
@@ -35,9 +37,9 @@ ONE `Agent(subagent_type: "adcm-toolkits:auditor")` (read-only), brief ≤40 lin
 - `git -C <docs_dir> diff --stat`: only the expected files, no deletions of history;
 - the INVARIANTS line (s7 headers, h2 sections, logbook entries, wave rows) before and after:
   identical; `lines=` is informational and may grow;
-- generators: `plans-regen.py --check` / `prompts-regen.py --check` only for rows whose `regen`
+- generators: `plans-regen --check` / `prompts-regen --check` only for rows whose `regen`
   uses them (`regen none` is not checked; exit 3 = hand-maintained layout, leave it);
-- `renovate_check.py --brain <docs_dir> --all-modules` → `RENOVATE: up-to-date`;
+- `renovate-check --brain <docs_dir> --all-modules` → `RENOVATE: up-to-date`;
 - a public brain additionally gets the privacy grep over the added lines.
 Findings go back to the SAME executor (`SendMessage`, cost 0).
 

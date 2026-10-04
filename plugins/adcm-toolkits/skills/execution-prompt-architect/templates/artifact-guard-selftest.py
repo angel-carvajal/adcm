@@ -210,10 +210,51 @@ def make_cases(now):
               text="Wave closed.\n\n" + block(dict(ART_ROOT, url="https://claude.ai/code/artifact/00000000-unrelated")),
               stamp={"plans.html": {"published_at": iso(now - 50), "version": "v2"}}),
          lambda rc, out: expect_block(rc, out, "Brain Plans"), None),
+        # Per-account publish evidence: a session under another claude.ai account seals ITS family
+        # (`published_at_<acct>` / `sha256_<acct>`, alias `*_cuenta_<acct>`). A row is stale only when
+        # NO family proves it; the canonical stamps here are stale (older than the file, wrong sha).
+        ("stamp_family_other_account",
+         dict(mtimes=fresh_file, text=closing_text,
+              stamp={"plans.html": {"published_at": iso(now - 200), "sha256": "0" * 64, "version": "v1",
+                                    "published_at_alt": iso(now - 50), "version_alt": "v2"}}),
+         expect_silent,
+         [  # (a) fresh sha256_alt alone (its published_at_alt is older than the file)
+          (dict(mtimes=fresh_file, text=closing_text,
+                stamp={"plans.html": {"published_at": iso(now - 200), "sha256": "0" * 64,
+                                      "published_at_alt": iso(now - 200), "sha256_alt": ROOT_SHA}}),
+           expect_silent),
+          # (b) the Spanish alias spelling of the family
+          (dict(mtimes=fresh_file, text=closing_text,
+                stamp={"plans.html": {"published_at": iso(now - 200),
+                                      "published_at_cuenta_alt": iso(now - 50)}}),
+           expect_silent),
+          # (c) every family stale (older stamp, wrong hash) -> block
+          (dict(mtimes=fresh_file, text=closing_text,
+                stamp={"plans.html": {"published_at": iso(now - 200), "sha256": "0" * 64,
+                                      "published_at_alt": iso(now - 200), "sha256_alt": "1" * 64}}),
+           lambda rc, out: expect_block(rc, out, "DESACTUALIZADOS", "plans.html")),
+          # (d) a future published_at_alt is not evidence, like the canonical one
+          (dict(mtimes=fresh_file, text=closing_text,
+                stamp={"plans.html": {"published_at": iso(now - 200),
+                                      "published_at_alt": "2099-01-01T00:00:00.000Z"}}),
+           lambda rc, out: expect_block(rc, out, "DESACTUALIZADOS", "plans.html"))]),
         ("fail_open",
          dict(bad_registry=True, bad_transcript=True),
          expect_silent, None),
     ]
+
+
+def run_spec(guard, now, spec, check):
+    tmp = None
+    try:
+        tmp, proj, transcript, brain = build(now, spec)
+        rc, out, _err = run_guard(guard, tmp, proj, transcript)
+        return check(rc, out)
+    except Exception as exc:  # a broken harness is a failure, not a crash
+        return f"harness error: {exc!r}"
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():
@@ -228,17 +269,14 @@ def main():
 
     now = time.time()
     failed = 0
-    for name, spec, check, _ in make_cases(now):
-        tmp = None
-        try:
-            tmp, proj, transcript, brain = build(now, spec)
-            rc, out, _err = run_guard(guard, tmp, proj, transcript)
-            problem = check(rc, out)
-        except Exception as exc:  # a broken harness is a failure, not a crash
-            problem = f"harness error: {exc!r}"
-        finally:
-            if tmp:
-                shutil.rmtree(tmp, ignore_errors=True)
+    for name, spec, check, extra in make_cases(now):
+        # `extra`: further (spec, checker) scenarios of the same case; the case passes when all do.
+        problem = run_spec(guard, now, spec, check)
+        for i, (xspec, xcheck) in enumerate(extra or []):
+            if problem:
+                break
+            found = run_spec(guard, now, xspec, xcheck)
+            problem = f"scenario ({chr(97 + i)}): {found}" if found else None
         if problem:
             failed += 1
             print(f"FAIL {name}: {problem}")

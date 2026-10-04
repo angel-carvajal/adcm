@@ -27,7 +27,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RELEASE = "0.15.0"  # what plugin.json, the template Protocol line and __version__ must all say
+RELEASE = "0.15.1"  # what plugin.json, the template Protocol line and __version__ must all say
 VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")

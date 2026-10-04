@@ -11,6 +11,10 @@ Garantiza dos cosas cada vez que un turno intenta cerrar:
      aunque su mtime sea nuevo). Los sellos los escribe el sub-agente artifact-courier
      tras cada publish: el guard solo ve el transcript principal, no el de los
      sub-agentes. El sha256 se calcula de forma perezosa, solo si la fila sería stale.
+     Los sellos son por cuenta: además del canónico (`published_at`, `sha256`) cuenta cualquier
+     familia `published_at_<cuenta>` / `sha256_<cuenta>` (y el alias `*_cuenta_<cuenta>`) de la
+     fila — una sesión bajo otra cuenta de claude.ai sella SU familia; la fila es stale solo si
+     NINGUNA familia la prueba.
      Si no hay evidencia, bloquea el cierre y apunta al courier (no a leer/publicar
      desde la sesión principal).
   2. LINKS AL CIERRE (v3: también FORMATO y POSICIÓN — links Markdown, uno por línea,
@@ -85,14 +89,19 @@ def file_sha256(path):
         return None
 
 
-def stamped_sha(a):
-    value = a.get("sha256")
+def norm_sha(value):
     if not isinstance(value, str):
         return None
     value = value.strip().lower()
     if value.startswith("sha256:"):
         value = value[len("sha256:"):]
     return value or None
+
+
+def family_values(a, base):
+    """Valores de `base` (sello canónico) y de todo `<base>_<cuenta>` de la fila; el alias
+    `<base>_cuenta_<cuenta>` también empieza por `<base>_`, así que queda cubierto."""
+    return [v for k, v in a.items() if isinstance(k, str) and (k == base or k.startswith(base + "_"))]
 
 
 def find_registries(cwd):
@@ -238,17 +247,17 @@ def check(hook_input):
             # la llamada al tool no siempre resuelve al mismo realpath desde el hook).
             pubs = [t for t, p, u in publishes if p == abs_file or (u and u == a["url"])]
             last_pub = max(pubs, default=None)
-            reg_pub = iso_to_epoch(a.get("published_at"))
-            if reg_pub is not None and reg_pub > now + CLOCK_SKEW:
-                # Sello futuro (editado a mano o reloj corrido): no es evidencia — de lo
-                # contrario un published_at lejano apagaría la revisión de frescura.
-                reg_pub = None
+            # Sellos `published_at` de toda familia (canónica + por cuenta). Uno futuro (editado
+            # a mano o reloj corrido) no es evidencia — de lo contrario un published_at lejano
+            # apagaría la revisión de frescura.
+            reg_pubs = [e for e in (iso_to_epoch(v) for v in family_values(a, "published_at"))
+                        if e is not None and e <= now + CLOCK_SKEW]
             if mtime > now + CLOCK_SKEW:
                 # mtime futuro (reloj corrido, restore de backup, touch -t): no es
                 # comparable — un publish de esta sesión (o un sello del courier de esta
                 # sesión) lo da por fresco; sin evidencia sigue contando como stale para
                 # no perder la garantía.
-                sealed_now = reg_pub is not None and reg_pub >= session_start
+                sealed_now = any(e >= session_start for e in reg_pubs)
                 if last_pub is None and not sealed_now and mtime >= session_start:
                     stale.append((a, abs_file))
                 continue
@@ -256,11 +265,11 @@ def check(hook_input):
                 continue
             if last_pub is not None and last_pub >= mtime:
                 continue  # publicado desde la sesión principal después del último cambio
-            if reg_pub is not None and reg_pub >= mtime:
-                continue  # sello del courier posterior al último cambio
-            stamp = stamped_sha(a)
-            if stamp is not None and stamp == file_sha256(abs_file):
-                continue  # contenido idéntico al publicado: el mtime nuevo no importa
+            if any(e >= mtime for e in reg_pubs):
+                continue  # sello del courier (de cualquier cuenta) posterior al último cambio
+            stamps = {h for h in map(norm_sha, family_values(a, "sha256")) if h}
+            if stamps and file_sha256(abs_file) in stamps:
+                continue  # contenido idéntico al publicado (en alguna cuenta): el mtime nuevo no importa
             stale.append((a, abs_file))
 
         def touched_this_turn(p):

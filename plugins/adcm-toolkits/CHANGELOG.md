@@ -1,5 +1,30 @@
 # Changelog — adcm-toolkits
 
+## 0.15.1 — 2026-10-04
+
+- The delivery close always prints the links of the CURRENT session's claude.ai account:
+  the courier brief's `ACCOUNT` defaults to `auto`; the courier probes the registry's
+  `url_<account>` families with the Artifact tool, works on the family that opens, seals
+  it with `--mark-published … --account <x>`, records `last_session_account` in the
+  registry so the next close starts there, and builds the `=== LINKS ===` block from that
+  family (`courier-preflight … --block-only --account <x>`). A URL the session cannot open
+  is never printed as the close. Trigger: a session on another account printed the
+  registry's canonical URL after re-issuing the page, so the owner tapped a link of the
+  other account.
+- `artifact-guard.py` accepts any per-account stamp family (`published_at_<x>` /
+  `sha256_<x>`) as publish evidence, so a close sealed under `--account` is not reported
+  stale; it already accepted `url_<x>` links. Selftests: guard 16, preflight 10.
+- `bin/` executables on the Bash PATH while the plugin is enabled (`courier-preflight`,
+  `status-digest`, `renovate-check`, `plans-regen`, `prompts-regen`): bare, prefix-stable
+  commands for the main session and the courier (POSIX sh wrappers that exec the plugin's
+  own script with `PYTHONDONTWRITEBYTECODE`).
+- Registry seal denied by the auto-mode classifier ("Create Public Surface" on a local
+  `artifacts.json` write): the courier returns `REGISTRY: blocked by permissions: <exact
+  command>` and the main session hands the command to the owner to run with `!`, never
+  runs it itself. The documented remedy is an `autoMode.allow` exception in the owner's
+  user settings describing the seal as a local file edit (README), not a permission
+  bypass.
+
 ## 0.15.0 — 2026-10-03
 
 Lessons from the first three real renovations.

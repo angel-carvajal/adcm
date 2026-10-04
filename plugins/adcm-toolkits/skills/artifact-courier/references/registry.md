@@ -8,7 +8,8 @@ All paths are relative to `<docs_dir>`. The preflight accepts the folder or the 
 | Field | Meaning |
 |---|---|
 | `close_markers` | Docs whose change means "closing" a module (default `task.md`, `execute.md`, `detailed-plan.md`). The guard and `--module` use them to find each row's module root. |
-| `active_account` | Which claude.ai account the `url` field belongs to (a localized alias, `cuenta_activa`, is read too). The brief's `ACCOUNT` is compared with it; `--set-active-account NAME` renames: `url` ← `url_<NAME>`, the old `url` → `url_<old active>`, `url_<NAME>` removed, and `active_account` ← NAME (rows without `url_<NAME>` are left as they are). |
+| `active_account` | Which claude.ai account the `url` field belongs to (a localized alias, `cuenta_activa`, is read too). The brief's `ACCOUNT` (default `auto`) is resolved against it; `--set-active-account NAME` renames: `url` ← `url_<NAME>`, the old `url` → `url_<old active>`, `url_<NAME>` removed, and `active_account` ← NAME (rows without `url_<NAME>` are left as they are). |
+| `last_session_account` | Informational, top-level: the account the last seal ran under, written by every `--mark-published`, with or without `--account`. `--account auto` resolves to it, else to `active_account`. It is a hint, never a URL: a stale value costs one failed probe (procedure step 2b), never a wrong link. Never edit it by hand. |
 | `artifacts` | The rows below. Unknown top-level and row fields are preserved untouched. |
 
 ## Row fields that already existed
@@ -53,6 +54,18 @@ it, a row named `prompts.html` uses `execute.md` and `task.md` beside it (plus `
 uses `task.md` and the four plan documents found beside it, in either language set: `propuesta-ejecutiva` / `executive-proposal`, `plan-maestro` /
 `master-plan`, `plan-detallado` / `detailed-plan`, `plan-timeframe` / `timeframe-plan`.
 
+## Links block: per session account
+
+The close prints the links of the account the CURRENT session is logged into, which is not always
+`active_account`. `--block-only --account <x>` prints each row's `url_<x>` (the canonical `url` when
+`<x>` is `active_account`); a row without that family is printed with its canonical `url` plus a stderr
+warning (only a row with no url at all is omitted). The courier probes the account on the first row (procedure step 2b), seals
+under it (`last_session_account`) and reports a changed account or URL under `URL CHANGES`, and every such
+fallback row under `ERRORS` as `<file>: not opened by this account`. A canonical URL the session cannot open is never
+passed off as the session's link. `--account auto` is the
+unprobed guess (`last_session_account`, else `active_account`); a `session` family (`url_session`) is
+what a re-issue on an account the registry did not know creates.
+
 ## States
 
 | State | Rule |
@@ -90,6 +103,7 @@ identical bytes costs nothing. The courier's link block is the format the guard 
 ```json
 {
   "active_account": "primary",
+  "last_session_account": "secondary",
   "close_markers": ["task.md", "execute.md", "detailed-plan.md"],
   "artifacts": [
     {

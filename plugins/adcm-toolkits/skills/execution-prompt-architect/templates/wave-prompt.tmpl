@@ -46,7 +46,7 @@ Load the skill `{{project_context_skill}}`, read
 `{{docs_dir}}/execute.md` (this protocol). {{Wave-specific preamble: extra skills to
 load, repos to open, state assumptions — e.g. "W2 must be merged" — and what to do if
 an assumption fails.}}
-Then run `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`: this wave's
+Then run `status-digest --brain {{docs_dir}}` (bare; without the plugin: `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`): this wave's
 deps ✅, no foreign `[PARTIAL]` open; never read task.md whole. Exit 2 → one `adcm-toolkits:digester` with
 `{{docs_dir}}/scripts/status-brief.md` (fallback under AGENT BUDGET & ROLES); without an Agent tool, stop and report.
 

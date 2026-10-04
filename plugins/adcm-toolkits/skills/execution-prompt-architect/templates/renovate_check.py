@@ -58,7 +58,7 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.15.0"
+__version__ = "0.15.1"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",

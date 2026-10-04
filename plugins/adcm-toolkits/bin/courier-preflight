@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+export PYTHONDONTWRITEBYTECODE=1
+self=$0
+while [ -h "$self" ]; do
+  dir=$(cd "$(dirname "$self")" && pwd -P)
+  self=$(readlink "$self")
+  case $self in /*) ;; *) self=$dir/$self ;; esac
+done
+root=$(cd "$(dirname "$self")/.." && pwd -P)
+exec python3 -B "$root/skills/artifact-courier/scripts/courier_preflight.py" "$@"

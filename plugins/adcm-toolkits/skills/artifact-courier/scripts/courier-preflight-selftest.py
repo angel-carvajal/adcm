@@ -25,7 +25,13 @@ canonical link of the registry's `active_account`, `url_<account>` the link of a
     stamps is stale even when the shared stamps are fresh); --set-active-account moves the whole
     family (url, previous_url, reissued, sha256, published_at, published_bytes, version);
   - `url_cuenta_NAME` is an accepted alias of `url_NAME`; a row whose file is missing and that
-    has no `url_NAME` stays `missing` (not `other-account`).
+    has no `url_NAME` stays `missing` (not `other-account`);
+  - the session account: every --mark-published writes the top-level `last_session_account` (the
+    --account NAME it ran with, else the active account when known); `--account auto` resolves to it
+    (else to the active account) and the report header prints `account: <resolved> (auto)`;
+  - --block-only (and the `=== LINKS ===` section of the default report) is the block the main session
+    pastes: per row the url of the resolved account's family, falling back to the canonical `url`
+    (with a stderr warning) when the family has none.
 
 Fixtures are generic (account names "acmecorp" and "alt", example.com links, no private
 paths). The script under test defaults to the courier_preflight.py next to this file; pass
@@ -100,9 +106,12 @@ class Ctx:
             rows.append(row)
         return self.write_registry(d, rows)
 
-    def write_registry(self, d, rows):
+    def write_registry(self, d, rows, active=ACTIVE, extra=None):
+        top = {"active_account": active} if active else {}
+        top.update(extra or {})
+        top["artifacts"] = rows
         with open(os.path.join(d, "artifacts.json"), "w", encoding="utf-8") as fh:
-            json.dump({"active_account": ACTIVE, "artifacts": rows}, fh, indent=2, ensure_ascii=False)
+            json.dump(top, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
         return d
 
@@ -380,6 +389,122 @@ def case_set_active_account_family(ctx, t):
         t.eq(fam(f, "_" + OTHER), alt[f], f"{f}: round trip restores the alt family")
 
 
+def case_last_session_account(ctx, t):
+    d = ctx.registry("c9")
+    t.ok("last_session_account" not in ctx.load(d), "fixture: no last_session_account yet")
+    # --account auto without last_session_account resolves to the active account
+    auto = ctx.run(d, "--account", "auto")
+    t.eq(auto.rc, 0, "--account auto (no last_session_account) exit code")
+    t.has(auto.out, f"account: {ACTIVE} (auto)", "header shows the resolved active account")
+    t.eq({f: r.get("URL") for f, r in table_rows(auto.out).items()}, CORP, "auto == active: the table URL column is `url`")
+    t.eq(ctx.run(d, "--account", "auto", "--block-only").out, ctx.run(d, "--block-only").out,
+         "auto == active: --block-only equals the default block")
+    t.lacks(ctx.run(d).out, "(auto)", "default header has no auto line")
+    # sealing under `alt` records it, right after active_account
+    new = "https://example.com/a/plans-alt-2"
+    r = ctx.run(d, "--mark-published", "plans.html", new, "V2", "--account", OTHER)
+    t.eq(r.rc, 0, "--mark-published --account alt exit code")
+    t.has(r.out, f"last_session_account: None -> '{OTHER}'", "the seal output reports last_session_account")
+    data = ctx.load(d)
+    t.eq(data.get("last_session_account"), OTHER, "last_session_account == alt after the seal")
+    t.eq(list(data), ["active_account", "last_session_account", "artifacts"], "new key sits right after active_account")
+    t.eq(data.get("active_account"), ACTIVE, "active_account untouched")
+    # --account auto now resolves to it
+    auto = ctx.run(d, "--account", "auto")
+    t.eq(auto.rc, 0, "--account auto (after the seal) exit code")
+    t.has(auto.out, f"account: {OTHER} (auto)", "header shows the session account")
+    rows = table_rows(auto.out)
+    t.eq(rows.get("plans.html", {}).get("URL"), new, "auto: plans.html URL is the sealed url_alt")
+    t.eq(rows.get("plans.html", {}).get("STATE"), "fresh", "auto: the sealed row is fresh under alt")
+    t.eq(rows.get("prompts.html", {}).get("URL"), ALT["prompts.html"], "auto: prompts.html URL is url_alt")
+    t.eq(rows.get("deck.html", {}).get("STATE"), "other-account", "auto: the row without url_alt is other-account")
+    t.eq(ctx.run(d, "--account", "auto", "--block-only").out, ctx.run(d, "--account", OTHER, "--block-only").out,
+         "--account auto == --account alt for --block-only")
+    t.eq(ctx.run(d, "--account", "auto", "--summary").out, ctx.run(d, "--account", OTHER, "--summary").out,
+         "--account auto == --account alt for --summary")
+    t.eq(ctx.run(d, "--account", "auto", "--batches").out, ctx.run(d, "--account", OTHER, "--batches").out,
+         "--account auto == --account alt for --batches")
+    # a plain run is not influenced by the key
+    with_key = ctx.run(d).out
+    data.pop("last_session_account")
+    ctx.write_registry(d, data["artifacts"])
+    t.eq(ctx.run(d).out, with_key, "default report ignores last_session_account")
+    # the seal under the active account, or without --account, moves it back to the active account
+    ctx.write_registry(d, data["artifacts"], extra={"last_session_account": OTHER})
+    r = ctx.run(d, "--mark-published", "prompts.html", "https://example.com/a/prompts-corp-2", "V2")
+    t.eq(r.rc, 0, "--mark-published without --account exit code")
+    t.eq(ctx.load(d).get("last_session_account"), ACTIVE, "no --account: last_session_account == the active account")
+    ctx.write_registry(d, data["artifacts"], extra={"last_session_account": OTHER})
+    r = ctx.run(d, "--mark-published", "prompts.html", "https://example.com/a/prompts-corp-3", "V3", "--account", ACTIVE)
+    t.eq(r.rc, 0, f"--mark-published --account {ACTIVE} exit code")
+    t.eq(ctx.load(d).get("last_session_account"), ACTIVE, f"--account {ACTIVE}: last_session_account == {ACTIVE}")
+    auto = ctx.run(d, "--account", "auto")
+    t.has(auto.out, f"account: {ACTIVE} (auto)", "auto follows the key back to the active account")
+    t.eq(table_rows(auto.out).get("prompts.html", {}).get("URL"), "https://example.com/a/prompts-corp-3",
+         "auto == active: the table URL is the canonical url")
+    # no active account known: no --account leaves the key out, --account NAME still writes it
+    d = ctx.registry("c9b")
+    ctx.write_registry(d, ctx.load(d)["artifacts"], active=None)
+    r = ctx.run(d, "--mark-published", "plans.html", "https://example.com/a/plans-corp-2", "V2")
+    t.eq(r.rc, 0, "--mark-published without any account known: exit code")
+    t.ok("last_session_account" not in ctx.load(d), "no account known: last_session_account is not written")
+    t.has(ctx.run(d, "--account", "auto").out, "account: not set (auto)", "auto with nothing known: header says not set")
+    r = ctx.run(d, "--mark-published", "plans.html", "https://example.com/a/plans-alt-3", "V3", "--account", OTHER)
+    t.eq(r.rc, 0, "--mark-published --account alt (no active account) exit code")
+    t.eq(ctx.load(d).get("last_session_account"), OTHER, "--account alt: last_session_account written even without an active account")
+    t.ok(not os.path.exists(os.path.join(d, LOCK)), "lock file removed")
+
+
+def case_block_only_uses_session_account(ctx, t):
+    d = ctx.registry("c10")
+    default = ctx.run(d, "--block-only")
+    t.eq(default.rc, 0, "default --block-only exit code")
+    for f, u in CORP.items():
+        t.has(default.out, u, f"default block shows the canonical url of {f}")
+    t.eq(default.err, "", "default --block-only prints no warning")
+    bo = ctx.run(d, "--block-only", "--account", OTHER)
+    t.eq(bo.rc, 0, "--block-only --account alt exit code")
+    lines = bo.out.splitlines()
+    t.eq(len(lines), 3, "one line per row, the row without url_alt included")
+    for f, u in ALT.items():
+        t.has(bo.out, u, f"block shows url_alt of {f}")
+        t.lacks(bo.out, CORP[f], f"block does not show the canonical url of {f}")
+    t.has(bo.out, f"- [📄 Deck]({CORP['deck.html']})", "the row without url_alt prints its canonical url")
+    t.has(bo.err, "deck.html has no url_alt", "stderr names the row that fell back to the canonical url")
+    t.lacks(bo.err, "plans.html", "stderr does not name rows that have url_alt")
+    # the default report's `=== LINKS ===` section follows the same rule
+    full = ctx.run(d, "--account", OTHER)
+    links = full.out.split("=== LINKS ===", 1)[1] if "=== LINKS ===" in full.out else ""
+    t.eq(links.strip(), bo.out.strip(), "`=== LINKS ===` section == --block-only under --account alt")
+    t.has(full.err, "deck.html has no url_alt", "default report: stderr names the canonical fallback row")
+    t.lacks(full.out, "left out of the block", "default report: no row is left out while a canonical url exists")
+    # a hidden row stays out of the block unless --include-hidden, and then also prints the alt url
+    d = ctx.registry("c10b", tweak={"prompts.html": {"in_close_block": False}})
+    t.lacks(ctx.run(d, "--block-only", "--account", OTHER).out, ALT["prompts.html"], "hidden row not in the block")
+    hid = ctx.run(d, "--block-only", "--include-hidden", "--account", OTHER)
+    t.has(hid.out, ALT["prompts.html"], "--include-hidden: the hidden row prints its url_alt")
+    t.lacks(hid.out, CORP["prompts.html"], "--include-hidden: not its canonical url")
+    t.has(hid.out, CORP["deck.html"], "--include-hidden: the row without url_alt prints its canonical url")
+    # a row with neither url_alt nor url is still left out, with a warning
+    d = ctx.registry("c10c", tweak={"deck.html": {"url": None}})
+    bo = ctx.run(d, "--block-only", "--account", OTHER)
+    t.eq(len(bo.out.splitlines()), 2, "a row with no url at all is left out of the block")
+    t.has(bo.err, "deck.html has no url_alt, left out of the block", "stderr: left out, no url at all")
+    # the session account recorded by the seal drives it: --account auto prints the same block
+    d = ctx.registry("c10d")
+    new = "https://example.com/a/plans-alt-2"
+    t.eq(ctx.run(d, "--mark-published", "plans.html", new, "V2", "--account", OTHER).rc, 0, "seal under alt exit code")
+    auto = ctx.run(d, "--block-only", "--account", "auto")
+    t.has(auto.out, new, "auto block: the sealed url_alt")
+    t.has(auto.out, ALT["prompts.html"], "auto block: the other url_alt")
+    t.has(auto.out, CORP["deck.html"], "auto block: the canonical fallback")
+    for f in ("plans.html", "prompts.html"):
+        t.lacks(auto.out, CORP[f], f"auto block: not the canonical url of {f}")
+    # under the active account nothing changes: every row prints `url`
+    t.eq(ctx.run(d, "--block-only", "--account", ACTIVE).out, ctx.run(d, "--block-only").out,
+         f"--account {ACTIVE} block == default block")
+
+
 CASES = [
     ("default_uses_url_and_active_account_equals_default", case_default_uses_url_and_active_account_equals_default),
     ("account_selects_url_other_account", case_account_selects_url_other_account),
@@ -389,6 +514,8 @@ CASES = [
     ("account_alias_url_cuenta", case_account_alias_url_cuenta),
     ("missing_file_without_url_other_account", case_missing_file_without_url_other_account),
     ("set_active_account_family", case_set_active_account_family),
+    ("last_session_account", case_last_session_account),
+    ("block_only_uses_session_account", case_block_only_uses_session_account),
 ]
 
 
