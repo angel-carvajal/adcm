@@ -199,9 +199,9 @@ On 'renovate the brain', 'upgrade the brain', 'renueva el brain' or 'actualiza e
 brain planned under an older protocol. It never re-plans and never edits `execute.md` from memory:
 `python3 {{skill_dir}}/templates/renovate_check.py --brain <docs_dir> --all-modules --invariants`
 (`--copy-scripts` copies the missing scripts) lists which blocks are missing — SCRIPTS ·
-ARTIFACTS · EXECUTE · TASK · CONTEXT — and the main session launches ONE `adcm-toolkits:executor`
+ARTIFACTS · EXECUTE · TASK · RULES · CONTEXT — and the main session launches ONE `adcm-toolkits:executor`
 per block with `templates/renovate-brief.md`, then an auditor gate and the courier close.
-`RENOVATE: up-to-date` means 0 agents. Full flow, orders and gates: `references/renovate.md`.
+`RENOVATE: up-to-date` means 0 agents. RULES annotates obsolete memory notes (a dated `Superseded` note is appended, nothing deleted) and corrects container `CLAUDE.md` lines in place. Full flow, orders and gates: `references/renovate.md`.
 
 ## Execution flow
 

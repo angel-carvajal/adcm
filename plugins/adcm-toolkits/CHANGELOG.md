@@ -1,5 +1,24 @@
 # Changelog — adcm-toolkits
 
+## 0.14.2 — 2026-10-03
+
+- `renovate_check.py` gains the **RULES** block: it resolves the project's auto-memory
+  directory (`$CLAUDE_CONFIG_DIR/projects/<sanitized container>/memory/`, override
+  `--memory-dir`, skip `--no-rules`) plus the container's `CLAUDE.md`/`AGENTS.md` and the
+  brain `README.md`, and flags obsolete protocol notes with a versioned pattern list: old
+  protocol versions, pre-0.14 role assignments, the courier spawned as `general-purpose`,
+  "read task.md at start", "artifact-courier does not exist", sub-agents sending media
+  (`fix`), and prompts-only regen / plans.html by hand / guard-counts-main-only / historical
+  version mentions (`review`). Negated or current wordings ("never reads task.md",
+  "sub-agents have no SendUserFile", the general-purpose fallback) are not findings; a
+  finding already quoted in a `**Superseded (protocol …)**` note is dropped, so the block is
+  idempotent. The checker never writes memory and never scans a config dir's own CLAUDE.md
+  or ORCHESTRATOR.md. Selftest: 20 cases.
+- Renovate's executor brief and `references/renovate.md`: the RULES block appends a dated
+  `Superseded` note at the end of a memory file (never edits or deletes a line), marks the
+  `MEMORY.md` hook, and edits CLAUDE.md/AGENTS.md lines in place; `review` findings go to
+  the owner.
+
 ## 0.14.1 — 2026-10-03
 
 - `execution-prompt-architect`: **renovate** — one phrase ("renovate the brain" / "renueva el

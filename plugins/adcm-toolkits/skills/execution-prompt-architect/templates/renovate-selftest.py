@@ -27,11 +27,12 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "0.14.1"
+RELEASE = "0.14.2"  # what plugin.json, the template Protocol line and __version__ must all say
+VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl")
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
-BLOCKS = ("scripts", "artifacts", "execute", "task", "context", "modules")
+BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "context", "modules")
 KEYS = ("version", "target", "brain", "module", "protocol", "blocks", "needed", "invariants", "text")
 DONE = "✅🔀"
 DOCS = {"en": ("master-plan.md", "detailed-plan.md"),
@@ -105,7 +106,8 @@ class Ctx:
             self.write("skilltpl/templates/" + n, tpl(n))
         self.env = dict(os.environ)
         self.env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8",
-                         "PYTHONUTF8": "1", "HOME": root})
+                         "PYTHONUTF8": "1", "HOME": root,
+                         "CLAUDE_CONFIG_DIR": os.path.join(root, "cfg")})
 
     def path(self, rel):
         return os.path.join(self.root, *rel.split("/"))
@@ -210,7 +212,8 @@ def both(ctx, t, brain, *flags, rc=0, twin=None, ro=True):
         gone = [k for k in KEYS if k not in d]
         t.ok(not gone, f"json lacks keys {gone}")
         t.eq(d.get("target"), VERSION, "json target")
-        t.eq(sorted((d.get("blocks") or {}).keys()), sorted(BLOCKS), "json blocks keys")
+        got = set((d.get("blocks") or {}).keys())
+        t.ok(set(BLOCKS) - {"rules"} <= got <= set(BLOCKS), f"json blocks keys, got {sorted(got)}")
         m = re.fullmatch(r"RENOVATE: needed\((.*)\)", last)
         t.eq(d.get("needed"), m.group(1).split(",") if m else [], "json needed == last plain line")
         need = d.get("needed") or []
@@ -702,7 +705,7 @@ def case_version_consistency(ctx, t):
     v_check = m.group(1) if m else None
     t.ok(v_tmpl is not None, "execute.md.tmpl has no '> **Protocol:** adcm-toolkits X.Y.Z' line")
     t.ok(v_check is not None, "renovate_check.py has no __version__")
-    t.eq([v_plugin, v_tmpl, v_check], [VERSION] * 3, "plugin.json == execute.md.tmpl Protocol line == __version__ == 0.14.1")
+    t.eq([v_plugin, v_tmpl, v_check], [RELEASE] * 3, f"plugin.json == execute.md.tmpl Protocol line == __version__ == {RELEASE}")
 
 
 def case_usage_error(ctx, t):
@@ -876,6 +879,381 @@ def case_audit_round2(ctx, t):
         t.ok("too large" in last, f"last line says 'too large', got {last[:80]!r}")
 
 
+def sanitize(path):
+    return re.sub(r"[^A-Za-z0-9]", "-", path)
+
+
+def put(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    return path
+
+
+def note(line):
+    """A memory file whose only interesting line is line 3."""
+    return f"# Note\n\n{line}\n"
+
+
+def memdir(ctx, container):
+    return os.path.join(ctx.root, "cfg", "projects", sanitize(container), "memory")
+
+
+def put_mem(ctx, container, files):
+    d = memdir(ctx, container)
+    for n, body in files.items():
+        put(os.path.join(d, n), body)
+    return d
+
+
+def container_brain(ctx, name, layout="ai/ai-brain", **kw):
+    """An up-to-date brain at <root>/<name>/<layout>; returns (brain, container)."""
+    under, leaf = os.path.split(layout)
+    return fresh(ctx, leaf, under=(name + "/" + under).rstrip("/"), **kw), os.path.join(ctx.root, name)
+
+
+def rules_of(d):
+    return blk(d, "rules") or {}
+
+
+def found(d):
+    return sorted((f.get("file"), f.get("id"), f.get("severity")) for f in rules_of(d).get("findings") or [])
+
+
+def rules_lines(d):
+    """(the RULES summary line, the indented finding lines right after it, the '… +k more' line or None)."""
+    txt = d.get("text") or []
+    i = next((k for k, x in enumerate(txt) if x.startswith("RULES ")), None)
+    if i is None:
+        return None, [], None
+    det = []
+    for x in txt[i + 1:]:
+        if re.match(r"  \S+:\d+ [a-z][a-z-]+ — ", x):
+            det.append(x)
+        else:
+            break
+    more = txt[i + 1 + len(det)] if i + 1 + len(det) < len(txt) and txt[i + 1 + len(det)].startswith("  … +") else None
+    return txt[i], det, more
+
+
+STALE16 = {  # file -> (stale line, id, severity); every stale line sits on line 3 of its file
+    "version-plain.md": ("The brain follows adcm-toolkits 0.8.0 for every execution.", "old-version", "fix"),
+    "version-bold.md": ("Skill execution-prompt-architect **0.8.0** is the standard here.", "old-version", "fix"),
+    "version-protocolo.md": ("Seguimos el protocolo 0.11.0 para las olas.", "old-version", "fix"),
+    "roles-old.md": ("`opus` ejecuta ⚠gates · `sonnet` implementa", "roles-old", "fix"),
+    "prompts-only.md": ("Regenerate the prompts page with prompts-regen.py after each wave.", "prompts-only-regen", "review"),
+    "plans-by-hand.md": ("plans.html se actualiza a mano cada cierre.", "plans-by-hand", "review"),
+    "guard-main.md": ("El guard solo cuenta el texto principal del mensaje final.", "guard-main-only", "review"),
+    "courier-gp.md": ("Launch general-purpose for the courier close of every wave.", "courier-general-purpose", "fix"),
+    "reads-task.md": ("Al arrancar la sesión, lee task.md completo para retomar el trabajo.", "reads-task-md", "fix"),
+    "courier-missing.md": ("El subagente `artifact-courier` no existe en este proyecto.", "courier-missing", "fix"),
+    "media.md": ("El courier envía las capturas con SendUserFile al terminar.", "subagent-sends-media", "fix"),
+}
+
+
+def case_rules_memory(ctx, t):
+    b, c = container_brain(ctx, "mem")
+    files = {n: note(v[0]) for n, v in STALE16.items()}
+    files["no-existe-bare.md"] = note("El archivo de configuración no existe todavía; hay que crearlo.")
+    files["MEMORY.md"] = ("# Memory index\n\n"
+                          "- [Plain notes](version-plain.md) — follows adcm-toolkits 0.11.0 for every brain\n"
+                          "- [adcm-toolkits 0.8.0 notes](roles-old.md) — neutral hook text\n")
+    md = put_mem(ctx, c, files)
+    before = snap(os.path.join(ctx.root, "cfg"))
+    d = both(ctx, t, b, rc=1)
+    if d:
+        want = sorted([(n, v[1], v[2]) for n, v in STALE16.items()] + [("MEMORY.md", "old-version", "fix")])
+        t.eq(found(d), want, "findings (file, id, severity): 9 fix + 3 review; 'no existe' alone and the MEMORY.md title are not findings")
+        t.eq(d.get("needed"), ["rules"], "needed")
+        r = rules_of(d)
+        t.eq(r.get("state"), "needed", "rules.state")
+        t.eq(os.path.realpath(r.get("memory_dir") or ""), os.path.realpath(md), "rules.memory_dir")
+        t.eq(r.get("files_scanned"), len(files), "rules.files_scanned (every .md of the memory dir, MEMORY.md included)")
+        for f in r.get("findings") or []:
+            want_line = 3 if f.get("file") != "prompts-only.md" else f.get("line")
+            t.ok(f.get("line") == want_line and isinstance(f.get("line"), int) and f["line"] >= 1,
+                 f"{f.get('file')}: line {f.get('line')!r}, want {want_line}")
+            t.ok(isinstance(f.get("snippet"), str) and f["snippet"] and isinstance(f.get("correction"), str) and f["correction"],
+                 f"{f.get('file')}: snippet and correction are non-empty strings")
+        head, det, more = rules_lines(d)
+        t.ok(head is not None and head.startswith("RULES needed · memory ") and sanitize(c) in head
+             and head.endswith(" · claude.md 0 · findings 12 (fix 9 · review 3)"), f"RULES line, got {head!r}")
+        t.eq(len(det), 6, "six detail lines '  <file>:<line> <id> — <snippet>'")
+        t.eq(more, "  … +6 more (use --json)", "overflow line")
+        t.ok(all(len(x.split(" — ", 1)[1]) <= 60 for x in det), "detail snippets are at most 60 characters")
+    t.eq(snap(os.path.join(ctx.root, "cfg")), before, "the memory dir is never written")
+    # only `review` findings: listed, but rules stays out of needed and the exit is 0
+    t.tag = "(review only) "
+    b2, c2 = container_brain(ctx, "mem-review")
+    put_mem(ctx, c2, {n: note(v[0]) for n, v in STALE16.items() if v[2] == "review"})
+    d = both(ctx, t, b2)
+    if d:
+        t.eq([rules_of(d).get("state"), d.get("needed")], ["ok", []], "rules.state ok and needed empty with review findings only")
+        t.eq(sorted(s for _, _, s in found(d)), ["review"] * 3, "three review findings")
+        head, _, _ = rules_lines(d)
+        t.ok((head or "").startswith("RULES ok · memory ") and (head or "").endswith("findings 3 (fix 0 · review 3)"),
+             f"RULES line, got {head!r}")
+
+
+def case_rules_whitelist_idempotent(ctx, t):
+    b, c = container_brain(ctx, "white")
+    superseded = ("# Old note\n\nFollow adcm-toolkits 0.8.0 for planning sessions.\n\n"
+                  "**Superseded (protocol 0.14.2, 2026-10-03):** the current protocol applies "
+                  "(line 3: \"Follow adcm-toolkits 0.8.0 for planning sessions.\")\n")
+    files = {
+        "current.md": note("Migrated the brain a 0.8.0 → 0.14.1 last week; protocolo 0.11.0 ya no es el vigente."),
+        "regen-none.md": note("plans.html se mantiene a mano; `regen: none` por un bug del generador."),
+        "renovate-notes.md": "# Renovate\n\nadcm-toolkits 0.8.0 stays in this log.\n\n`opus` ejecuta ⚠gates · `sonnet` implementa\n",
+        "superseded.md": superseded,
+        "html-note.md": note("<!-- renovate: adcm-toolkits 0.8.0 kept for history -->"),
+        "MEMORY.md": ("# Memory index\n\n- [Old](superseded.md) — adcm-toolkits 0.8.0 rules · ⚠ superseded (protocol 0.14.2)\n"
+                      "- [Current](current.md) — follows adcm-toolkits 0.14.1\n"),
+    }
+    put_mem(ctx, c, files)
+    d = both(ctx, t, b)
+    if d:
+        t.eq(found(d), [], "no findings: 0.14.x / vigente lines, regen: none, renovate-*.md, quoted Superseded notes are ignored")
+        t.eq([rules_of(d).get("state"), d.get("needed")], ["ok", []], "rules.state / needed")
+        head, det, more = rules_lines(d)
+        t.ok((head or "").startswith("RULES ok · memory ") and (head or "").endswith("findings 0 (fix 0 · review 0)")
+             and not det and more is None, f"RULES line without detail lines, got {head!r}")
+    runs = [ctx.run(b, "--json") for _ in range(2)] + [ctx.run(b) for _ in range(2)]
+    t.eq(runs[0].out, runs[1].out, "two --json runs are byte-identical")
+    t.eq(runs[2].out, runs[3].out, "two plain runs are byte-identical")
+
+
+def case_rules_targets(ctx, t):
+    stale = note("Plan every brain with adcm-toolkits 0.8.0 from now on.")
+    cfg = os.path.join(ctx.root, "cfg")
+    # (a) nothing to read: n/a; the config dir's own CLAUDE.md / ORCHESTRATOR.md are never targets
+    t.tag = "(a nothing) "
+    b, c = container_brain(ctx, "none")
+    for p in (os.path.join(cfg, "CLAUDE.md"), os.path.join(cfg, "ORCHESTRATOR.md"), os.path.join(ctx.root, ".claude", "CLAUDE.md")):
+        put(p, stale)
+    d = both(ctx, t, b)
+    if d:
+        r = rules_of(d)
+        t.eq([r.get("state"), r.get("memory_dir"), r.get("files_scanned"), r.get("findings")], ["n/a", None, 0, []], "rules block")
+        head, _, _ = rules_lines(d)
+        t.ok((head or "").startswith("RULES n/a"), f"RULES line starts 'RULES n/a', got {head!r}")
+        t.eq(d.get("needed"), [], "needed")
+    # (b) --memory-dir overrides the derived location
+    t.tag = "(b --memory-dir) "
+    b, c = container_brain(ctx, "over")
+    custom_dir = os.path.join(ctx.root, "custom-mem")
+    put(os.path.join(custom_dir, "stale.md"), stale)
+    d = both(ctx, t, b, "--memory-dir", custom_dir, rc=1)
+    if d:
+        t.eq(os.path.realpath(rules_of(d).get("memory_dir") or ""), os.path.realpath(custom_dir), "rules.memory_dir")
+        t.eq(found(d), [("stale.md", "old-version", "fix")], "findings")
+        t.eq(d.get("needed"), ["rules"], "needed")
+    # (c) --no-rules skips the block even with stale memory
+    t.tag = "(c --no-rules) "
+    b, c = container_brain(ctx, "skip")
+    put_mem(ctx, c, {"stale.md": stale})
+    d = both(ctx, t, b, rc=1)
+    if d:
+        t.eq(d.get("needed"), ["rules"], "sanity: the same brain needs rules without the flag")
+    d = both(ctx, t, b, "--no-rules")
+    if d:
+        t.eq([rules_of(d).get("state"), rules_of(d).get("findings"), d.get("needed")], ["n/a", [], []], "rules block / needed")
+        head, _, _ = rules_lines(d)
+        t.ok((head or "").startswith("RULES n/a") and "skipped" in (head or ""), f"RULES line says skipped, got {head!r}")
+    # (d) instruction files of the container: absolute paths, no memory dir needed
+    t.tag = "(d claude.md) "
+    b, c = container_brain(ctx, "instr")
+    cm = put(os.path.join(c, "CLAUDE.md"), note("Use protocolo execution-prompt-architect **0.8.0** for planning."))
+    ag = put(os.path.join(c, "ai", "AGENTS.md"), note("Always use adcm-toolkits 0.11.0 for plans."))
+    d = both(ctx, t, b, rc=1)
+    if d:
+        fs = rules_of(d).get("findings") or []
+        t.eq(sorted(os.path.realpath(f.get("file") or "") for f in fs), sorted([os.path.realpath(cm), os.path.realpath(ag)]),
+             "findings point at the CLAUDE.md and the AGENTS.md")
+        t.ok(all(os.path.isabs(f.get("file") or "") for f in fs), "files are absolute paths for instruction files")
+        t.eq(sorted((f.get("id"), f.get("severity"), f.get("line")) for f in fs), [("old-version", "fix", 3)] * 2, "ids / severities / lines")
+        head, _, _ = rules_lines(d)
+        t.eq(head, "RULES needed · memory none · claude.md 2 · findings 2 (fix 2 · review 0)", "RULES line")
+        t.eq(d.get("needed"), ["rules"], "needed")
+    # (e) sanitisation turns '_' and '.' into '-'
+    t.tag = "(e sanitisation) "
+    b, c = container_brain(ctx, "client_projects/acme.web")
+    md = put_mem(ctx, c, {"stale.md": stale})
+    d = both(ctx, t, b, rc=1)
+    if d:
+        t.eq(os.path.realpath(rules_of(d).get("memory_dir") or ""), os.path.realpath(md), "rules.memory_dir")
+        t.eq(found(d), [("stale.md", "old-version", "fix")], "findings")
+    # (f) the three brain layouts resolve to the same container
+    for k, layout in enumerate(("ai/ai-brain", "ai-brain", "docs/ai-brain")):
+        t.tag = f"(f layout {layout}) "
+        b, c = container_brain(ctx, f"lay{k}", layout)
+        md = put_mem(ctx, c, {"stale.md": stale})
+        d = both(ctx, t, b, rc=1)
+        if d:
+            t.eq(os.path.realpath(rules_of(d).get("memory_dir") or ""), os.path.realpath(md), "rules.memory_dir")
+            t.eq(found(d), [("stale.md", "old-version", "fix")], "findings")
+    # (g) a memory dir named after the brain's own cwd is read too
+    t.tag = "(g brain-cwd memory) "
+    b, c = container_brain(ctx, "cwd")
+    put_mem(ctx, c, {"clean.md": note("Nothing stale in here.")})
+    put_mem(ctx, b, {"brain-only.md": stale})
+    d = both(ctx, t, b, rc=1)
+    if d:
+        t.eq(sorted(os.path.basename(f.get("file") or "") for f in rules_of(d).get("findings") or []), ["brain-only.md"], "findings")
+
+
+def case_rules_cap(ctx, t):
+    mods = {}
+    for i in range(1, 6):
+        mods.update(module_files(f"modules/m{i:02d}"))
+    b, c = container_brain(ctx, "cap", extra=mods)
+    put_mem(ctx, c, {f"n{i:02d}.md": note(f"Follow adcm-toolkits 0.8.0 rule {i}.") for i in range(30)})
+    d = both(ctx, t, b, "--all-modules", "--invariants", rc=1)
+    if d:
+        t.eq(d.get("needed"), ["rules", "modules"], "needed")
+        t.eq(len(rules_of(d).get("findings") or []), 30, "json carries all 30 findings")
+        head, det, more = rules_lines(d)
+        t.ok((head or "").startswith("RULES needed · memory ") and (head or "").endswith("findings 30 (fix 30 · review 0)"),
+             f"RULES line, got {head!r}")
+        t.eq(len(det), 6, "exactly six detail lines")
+        t.eq(more, "  … +24 more (use --json)", "overflow line")
+        txt = d.get("text") or []
+        t.ok(any(x.startswith("INVARIANTS s7_wave_headers=") for x in txt), "root INVARIANTS line kept")
+        for i in range(1, 6):
+            t.ok(any(x.startswith(f"INVARIANTS modules/m{i:02d}") for x in txt), f"INVARIANTS line of modules/m{i:02d} kept")
+        t.ok(txt and txt[-1].startswith("RENOVATE: needed("), "last line intact")
+    # pressure: 14 registry rows push the output past 40 lines; INVARIANTS and the RULES summary survive
+    t.tag = "(pressure) "
+    b, c = container_brain(ctx, "cap2", extra=mods, rows=[art(f"page{i}.html") for i in range(14)])
+    put_mem(ctx, c, {f"n{i:02d}.md": note(f"Follow adcm-toolkits 0.8.0 rule {i}.") for i in range(30)})
+    d = both(ctx, t, b, "--all-modules", "--invariants", rc=1)
+    if d:
+        txt = d.get("text") or []
+        t.ok(len(txt) <= 40, f"{len(txt)} lines")
+        t.ok(any(x.startswith("RULES needed") for x in txt), "RULES summary kept")
+        t.ok(any(x.startswith("INVARIANTS s7_wave_headers=") for x in txt), "root INVARIANTS line kept")
+        for i in range(1, 6):
+            t.ok(any(x.startswith(f"INVARIANTS modules/m{i:02d}") for x in txt), f"INVARIANTS line of modules/m{i:02d} kept")
+
+
+def case_rules_round2(ctx, t):
+    cfg = os.path.join(ctx.root, "cfg")
+    stale = note("Plan every brain with adcm-toolkits 0.8.0 from now on.")
+
+    def lines_of(d, wild=()):
+        return sorted((f.get("file"), f.get("line"), f.get("id"), "*" if (f.get("file"), f.get("line")) in wild else f.get("severity"))
+                      for f in rules_of(d).get("findings") or [])
+
+    def mem_run(tag, name, files, expect, wild=()):
+        """One container with `files` in its memory dir: findings must be exactly `expect` (file, line, id, severity)."""
+        t.tag = f"({tag}) "
+        b, c = container_brain(ctx, name)
+        put_mem(ctx, c, files)
+        fix = any(s == "fix" for *_, s in expect)
+        rc = 1 if fix else ctx.run(b, "--json").rc if wild else 0
+        d = both(ctx, t, b, rc=rc)
+        if d:
+            t.eq(lines_of(d, wild), sorted(expect), "findings (file, line, id, severity)")
+            t.eq(d.get("needed"), ["rules"] if rc == 1 else [], "needed")
+        return d
+
+    # (a) negated and current wordings are not stale; (b) the stale wordings still are
+    mem_run("a negated", "r2a", {"a.md": "# Note\n\n" + "\n".join([
+        "nunca lee task.md al arrancar",
+        "status_digest.py reads task.md at session start",
+        "the courier reads task.md wave map to restart pages",
+        "sub-agents have no SendUserFile",
+        "courier cannot call SendUserFile; the main session sends",
+        "general-purpose fallback when the agent types are not loaded",
+        "Opus executes only ⚠gate waves"]) + "\n"}, [])
+    mem_run("b still stale", "r2b", {"b.md": "# Note\n\nlee task.md al arrancar para saber el estado\n"
+                                    "the courier sends the screenshots with SendUserFile\n"},
+            [("b.md", 3, "reads-task-md", "fix"), ("b.md", 4, "subagent-sends-media", "fix")])
+    # (c) old-version: a 'current' word only excuses the line when it comes AFTER the version
+    mem_run("c positional skip", "r2c", {"c.md": "# Note\n\n" + "\n".join([
+        "Protocolo VIGENTE (adcm-toolkits 0.8.0)",
+        "adcm-toolkits 0.8.0 ya no es el vigente",
+        "currently uses adcm-toolkits 0.8.0",
+        "concurrent sessions on adcm-toolkits 0.8.0"]) + "\n"},
+            [("c.md", 3, "old-version", "fix"), ("c.md", 5, "old-version", "fix"), ("c.md", 6, "old-version", "fix")])
+    # (d) keywords: another plugin or MCP is not ours; 'toolkit' / 'actualizado a' are; a bare 'protocolo' is only `review`
+    mem_run("d keywords", "r2d", {"d.md": "# Note\n\n" + "\n".join([
+        "acme-admin plugin 0.7.1",
+        "MCP protocol 0.8",
+        "el toolkit en 0.11.0",
+        "adcm-toolkits actualizado a 0.11.0",
+        "ola ejecutada con protocolo 0.8.0"]) + "\n"},
+            [("d.md", 5, "old-version", "*"), ("d.md", 6, "old-version", "*"), ("d.md", 7, "old-version", "review")],
+            wild={("d.md", 5), ("d.md", 6)})
+    # (e) two memory dirs (container + brain cwd) with the same file name: `file` is relative to <config>/projects/
+    t.tag = "(e two memory dirs) "
+    b, c = container_brain(ctx, "r2e")
+    dirs = [put_mem(ctx, c, {"stale.md": stale}), put_mem(ctx, b, {"stale.md": stale})]
+    d = both(ctx, t, b, rc=1)
+    if d:
+        fs = rules_of(d).get("findings") or []
+        t.eq(len(fs), 2, "one finding per memory dir")
+        t.eq(len({f.get("file") for f in fs}), 2, "the two `file` values differ")
+        t.ok(all(not os.path.isabs(f.get("file") or "/") and os.path.isfile(os.path.join(cfg, "projects", f.get("file") or ""))
+                 for f in fs),
+             f"`file` is relative to <config>/projects/, got {[f.get('file') for f in fs]}")
+        t.eq(sorted(os.path.realpath(x) for x in rules_of(d).get("memory_dirs") or []), sorted(os.path.realpath(x) for x in dirs),
+             "rules.memory_dirs lists both directories")
+    # (f) a stale line right under a Superseded note (no blank line) is still a finding; only the note line and its
+    #     indented / '(line' continuation lines are skipped
+    mem_run("f line under a note", "r2f", {"f.md": "# Note\n\n"
+            "**Superseded (protocol 0.14.2, 2026-10-03):** the roles changed\n"
+            "  (line 9: \"Follow adcm-toolkits 0.6.6 for old things\")\n"
+            "(line 11: \"Use adcm-toolkits 0.7.0 for older things\")\n"
+            "Follow adcm-toolkits 0.8.0 for planning sessions.\n"}, [("f.md", 6, "old-version", "fix")])
+    # (g) MEMORY.md hooks separated by ' - ' or ': ' are scanned; a version in the link title is not
+    mem_run("g hook separators", "r2g", {"MEMORY.md": "# Memory index\n\n"
+            "- [Plain](a.md) - follows adcm-toolkits 0.11.0 for every brain\n"
+            "- [Other](b.md): follows adcm-toolkits 0.8.0 for planning\n"
+            "- [adcm-toolkits 0.6.6 notes](c.md) - neutral hook text\n"},
+            [("MEMORY.md", 3, "old-version", "fix"), ("MEMORY.md", 4, "old-version", "fix")])
+    # (h) a brain reached through a symlink with another name still resolves its container
+    t.tag = "(h symlinked brain) "
+    if hasattr(os, "symlink") and os.name != "nt":
+        b, c = container_brain(ctx, "r2h")
+        put_mem(ctx, c, {"stale.md": stale})
+        link = os.path.join(ctx.root, "links", "shortcut")
+        os.makedirs(os.path.dirname(link))
+        try:
+            os.symlink(b, link)
+        except (OSError, NotImplementedError):
+            link = None
+        if link:
+            d = both(ctx, t, link, rc=1)
+            if d:
+                t.eq(lines_of(d), [("stale.md", 3, "old-version", "fix")], "findings (container resolved through the symlink)")
+    # (j) `plans.html = none (a mano)` is a hand-kept page by design; a file that cites 0.14.0 is current
+    mem_run("j hand-kept page / 0.14.0", "r2j", {
+        "j1.md": note("plans.html = `none` (a mano)"),
+        "j2.md": "# Note\n\nplans.html se actualiza a mano cada cierre.\nPrompts page via prompts-regen.py.\n"
+                 "Brain migrated under protocol 0.14.0 last month.\n"}, [])
+    # (i) the config dir's own CLAUDE.md / ORCHESTRATOR.md are never scanned, even when the brain lives inside it
+    #     or --memory-dir points at it
+    t.tag = "(i config dir) "
+    home_cfg = os.path.join(ctx.root, ".claude")
+    old_env = ctx.env
+    ctx.env = dict(old_env, CLAUDE_CONFIG_DIR=home_cfg)
+    try:
+        for n in ("CLAUDE.md", "ORCHESTRATOR.md"):
+            put(os.path.join(home_cfg, n), note("Plan every brain with adcm-toolkits 0.8.0 and `opus` ejecuta ⚠gates."))
+        b = fresh(ctx, "ai-brain", under=".claude")
+        d = both(ctx, t, b)
+        if d:
+            t.eq([lines_of(d), rules_of(d).get("claude_files")], [[], 0], "findings / claude_files with the brain inside ~/.claude")
+        put(os.path.join(home_cfg, "stale.md"), stale)
+        rc = ctx.run(b, "--json", "--memory-dir", home_cfg).rc  # whether the other files of that dir are scanned is open
+        d = both(ctx, t, b, "--memory-dir", home_cfg, rc=rc)
+        if d:
+            t.ok(rc in (0, 1) and {f[0] for f in lines_of(d)} <= {"stale.md"} and rules_of(d).get("claude_files") == 0,
+                 f"with --memory-dir ~/.claude neither CLAUDE.md nor ORCHESTRATOR.md is scanned, got {lines_of(d)} claude_files={rules_of(d).get('claude_files')}")
+    finally:
+        ctx.env = old_env
+
+
 CASES = [
     ("fresh_0141_up_to_date", case_fresh_0141_up_to_date),
     ("legacy_08", case_legacy_08),
@@ -892,6 +1270,11 @@ CASES = [
     ("spanish_markers", case_spanish_markers),
     ("s7_header_prefixes", case_s7_header_prefixes),
     ("audit_round2", case_audit_round2),
+    ("rules_memory", case_rules_memory),
+    ("rules_whitelist_idempotent", case_rules_whitelist_idempotent),
+    ("rules_targets", case_rules_targets),
+    ("rules_cap", case_rules_cap),
+    ("rules_round2", case_rules_round2),
 ]
 
 
@@ -923,6 +1306,11 @@ def main():
     if not os.path.isfile(checker):
         print(f"checker not found: {checker}")
         return 2
+    global VERSION
+    m = re.search(r"""^__version__\s*=\s*["']([^"']+)["']""", read(checker) or "", re.M)
+    if m:
+        VERSION = m.group(1)
+        EXEC_DEFAULTS["protocol"] = VERSION
     cases = [c for c in CASES if not args.only or c[0] == args.only]
     if not cases:
         print(f"unknown case {args.only!r}; known: {', '.join(n for n, _ in CASES)}")

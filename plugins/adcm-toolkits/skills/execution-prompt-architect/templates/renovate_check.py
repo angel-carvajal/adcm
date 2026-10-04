@@ -2,18 +2,21 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json and scripts/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.14.1) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.14.2) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
---copy-scripts; execute.md, task.md and the registry are renovated by an executor from this report.
+--copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
+from this report, never by this script.
 
 Usage
   renovate_check.py --brain DOCS_DIR [--all-modules | --module REL] [--skill-dir PATH]
-                    [--copy-scripts [--force-outdated]] [--invariants] [--json] [--version]
+                    [--copy-scripts [--force-outdated]] [--memory-dir PATH] [--no-rules]
+                    [--invariants] [--json] [--version]
   --module REL      check <brain>/REL instead of the root (scripts stay n/a)
   --all-modules     also check modules/*/task.md; `modules` joins needed when one lacks anything
   --skill-dir PATH  templates live in PATH/templates/<name>, then PATH/<name> (default: this script's dir)
   --copy-scripts    copy the MISSING files of scripts/ from the templates; --force-outdated also
                     overwrites files whose sha256 differs (a project copy may be customised)
+  --memory-dir PATH memory dir to scan instead of the resolved one (see RULES); --no-rules skips RULES
   --invariants      counts renovation must not change: s7_wave_headers, h2_sections, logbook_entries,
                     wave_rows (fences and HTML comments ignored); the execute.md line count is
                     informational (`stats.execute_lines`, plain `lines=n`): renovation adds lines
@@ -27,6 +30,12 @@ Blocks (ok | missing | partial | outdated | n/a)
   EXECUTE    role types, digest line, LAST LOG in section 4, Next/blocked labels in 2b, model rule,
              `> **Protocol:**` line, SKILLS line per pending wave of section 7
   TASK       `## DoD-human pending` (canonical) or an equivalent legacy section
+  RULES      obsolete protocol notes (STALE_RULES) in the project's auto-memory (+ MEMORY.md hooks) and in
+             CLAUDE.md/AGENTS.md/README.md of the container: only `fix` findings make it needed. Targets:
+             memory = $CLAUDE_CONFIG_DIR (else ~/.claude)/projects/<container path, non-alphanumerics -> '-'>/
+             memory (container = DOCS_DIR minus a trailing [ai|docs]/ai-brain; also the DOCS_DIR-named dir);
+             CLAUDE.md and AGENTS.md in the container, <container>/ai and DOCS_DIR; DOCS_DIR/README.md.
+             Notes already corrected (`Superseded (protocol`, `<!-- renovate:`) are ignored. Root run only.
   CONTEXT    code-project-context skill named by execute.md (informational, never needed)
 
 Output is at most 40 lines; the last is `RENOVATE: up-to-date | needed(a,b) | unparsed (...)`.
@@ -42,14 +51,14 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.14.1"
+__version__ = "0.14.2"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
            "prompts-regen.py", "prompts-html.tmpl")
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
-BLOCKS = ("scripts", "artifacts", "execute", "task", "context", "modules")
-NEED = ("missing", "partial", "unparsed")
+BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "context", "modules")
+NEED = ("missing", "partial", "unparsed", "needed")
 FLAGS = (("digest_line", "digest-line"), ("last_log_s4", "last-log-s4"), ("next_label", "next-label"),
          ("blocked_label", "blocked-label"), ("model_rule", "model-rule"), ("protocol_line", "protocol-line"))
 DOCS_ES = ("propuesta-ejecutiva.md", "plan-maestro.md", "plan-detallado.md")
@@ -436,6 +445,157 @@ def scripts_block(brain, skill_dir, copy, force):
             'outdated': outdated, 'copied': copied, 'failed': failed}
 
 
+# ---------------------------------------------------------------- RULES: obsolete notes in memory and CLAUDE.md
+# (id, severity, regex on the plain line, the line is left out when it also matches, correction)
+STALE_RULES = (
+    ('old-version', 'fix',
+     r'(?:toolkits?|execution-prompt-architect|protocolo|(?:adcm|execution|brain)\s+protocol|brain(?: a)?|'
+     r'(?:adcm-toolkits|execution-prompt-architect|brain|protocolo?|toolkits?)[^.\n]{0,30}?(?:subi[oó]|actualizad[oa]|updated|bumped)\s+(?:a|to))(?:\s+(?:en|in|at|on|is|es|v))?\s*\**v?0\.(?:[6-9]|1[0-3])(?:\.\d+)?\b',
+     None,  # skipped when the line cites 0.14+ or says current right after the version
+     'protocol is <target>: roles are adcm-toolkits:* agent types, status via status_digest.py, close via adcm-toolkits:courier'),
+    ('roles-old', 'fix', r'\bopus\W{0,4}(?:ejecuta|implementa|executes|implements)|\bsonnet\W{0,4}(?:audita|audits)',
+     r'adcm-toolkits:|0\.1[4-9]|\b(?:only|solo|s[oó]lo)\b.{0,12}gate|\b(?:cuota|quota)\b|agotad|exhaust',  # "Opus executes only ⚠gate waves" is the new rule
+     'since 0.14 Opus audits (adcm-toolkits:auditor) and executes only ⚠gate waves (executor + model: opus); Sonnet executes (adcm-toolkits:executor)'),
+    ('prompts-only-regen', 'review', r'prompts-regen\.py', r'plans-regen|regen: none|0\.1[4-9]',  # file level: first mention
+     'review: plans.html is regenerated too (plans-regen.py); confirm this note about prompts-regen.py alone still holds'),
+    ('plans-by-hand', 'review', r'plans\.html.*(?:a mano|by hand|hand-?render)', r'regen: none|plans-regen|0\.1[4-9]',
+     'review: plans.html is regenerated by plans-regen.py unless its registry row says regen: none'),
+    ('guard-main-only', 'review', r'guard.*(?:solo|only).*(?:cuenta|count).*(?:principal|main|texto|text)', None,
+     'review: the artifact guard rules changed in the current protocol; confirm this note still holds'),
+    ('courier-general-purpose', 'fix', r'general-purpose.{0,60}(?:courier|cierre|artifacts)',
+     r'fallback|without (?:the )?(?:agent )?types|sin (?:los )?tipos|not loaded',
+     'the close is adcm-toolkits:courier (Sonnet pinned)'),
+    ('reads-task-md', 'fix', r'\b(?:lee|leer|read|reads|leyendo)\b.{0,20}task\.md.{0,40}'
+     r'\b(?:al arrancar|arranque|al inicio|at (?:session )?start|on start|to resume|para retomar|retomar)\b',
+     r"\b(?:nunca|never|not|no|don.t|jam[aá]s)\b|digest",
+     'the main session never reads task.md: run status_digest.py --brain <docs_dir>'),
+    ('courier-missing', 'fix', r"artifact-courier.{0,40}(?:no existe|not exist|doesn.t exist)", None,
+     'artifact-courier is a skill + the adcm-toolkits:courier agent type (plugin ≥ 0.14.0; reload plugins)'),
+    ('subagent-sends-media', 'fix', r'(?:courier|sub-?agent\w*).{0,50}SendUserFile',
+     r'ha(?:s|ve) no|no tiene|not available|cannot|can.t|never|nunca|\bsin\b|main session|sesi[oó]n principal',
+     'sub-agents have no SendUserFile: they return MEDIA: unsent paths and the main session sends them'),
+)
+FILE_LEVEL, QUIET_RULES = 'prompts-only-regen', ('prompts-only-regen', 'plans-by-hand')
+IGNORED_NAME = re.compile(r'renovate|refresh-01[4-9]', re.I)
+INDEX_LINK = re.compile(r'^\s*-\s*\[[^\]]*\]\([^)]*\)\s*')
+
+
+def fold(s):
+    return re.sub(r'[\W_]+', ' ', s.lower()).strip()
+
+
+def scan_file(text, hook, only_version):
+    """[(line, rule id, severity, snippet)] of one file. Skipped: a correction note (a line starting
+    `Superseded (protocol` plus the indented / `(line` lines after it; everything after `<!-- renovate:`) and
+    any finding whose first 40 folded snippet chars a note of the same file quotes. `hook`: MEMORY.md index,
+    only the text after the `- [title](file)` link."""
+    lines = text.split('\n')
+    skip, notes, in_note, after = set(), [], False, False
+    for i, ln in enumerate(lines):
+        if after or '<!-- renovate:' in ln:
+            after = True
+        elif 'superseded (protocol' in ln.lower():
+            in_note = re.match(r'[\s>*_-]*superseded \(protocol', ln, re.I) is not None
+        elif not (in_note and ln.strip() and (ln[0] in ' \t' or ln.startswith('(line'))):
+            in_note = False
+            continue
+        skip.add(i)
+        notes.append(ln)
+    act = []
+    for i, ln in enumerate(lines):
+        m = INDEX_LINK.match(ln)
+        t = (ln[m.end():].lstrip(' —–-:') if m else '') if hook else ln
+        t = ' '.join(plain(t[:4000]).split())
+        if i not in skip and t:
+            act.append((i + 1, t))
+    quoted, out = fold(' '.join(notes)), []
+    body = '\n'.join(t for _, t in act)
+    quiet = re.search(r'0\.1[4-9]\.\d', body) or re.search(r'(?:regen|plans\.html)\W{0,12}none\b', body)
+    for k, (rid, sev, rx, skp, corr) in enumerate(STALE_RULES):
+        if (only_version and rid != 'old-version') or (quiet and rid in QUIET_RULES):
+            continue
+        hits = [(n, t, m) for n, t in act for m in [re.search(rx, t, re.I)] if m]
+        if rid == FILE_LEVEL:  # one finding per file (first mention), unless the file also says plans regenerate
+            hits = [] if any(re.search(skp, t, re.I) for _, t in act) else hits[:1]
+        elif rid == 'old-version':
+            hits = [h for h in hits if not re.search(r'0\.1[4-9]', h[1])
+                    and not re.search(r'\b(?:vigente|current|target)\b', h[1][h[2].end():h[2].end() + 40], re.I)
+                    and not re.search(r'\b(?:MCP|HTTP|TLS|SSH|OAuth|git)\b', h[1][max(0, h[2].start() - 25):h[2].start()], re.I)]
+        elif skp:
+            hits = [h for h in hits if not re.search(skp, h[1], re.I)]
+        for n, t, m in hits:
+            st = max(0, m.start() - 20) if m.start() > 40 else 0
+            snip, history = t[st:st + 60], rid == 'old-version' and re.search(r'\b(?:ejecutada|added|shipped|desde|since)\b', t, re.I)
+            if not (fold(snip)[:40] and fold(snip)[:40] in quoted):
+                out.append((n, k, 'review' if history else sev, snip))
+    return [(n, STALE_RULES[k][0], sev, snip) for n, k, sev, snip in sorted(out)]
+
+
+def container_of(brain):
+    """X for a brain at X/ai/ai-brain, X/docs/ai-brain or X/ai-brain; None for any other name."""
+    parts = brain.rstrip(os.sep).split(os.sep)
+    if parts[-1] != 'ai-brain' or len(parts) < 2:
+        return None
+    return os.sep.join(parts[:-2] if len(parts) > 2 and parts[-2] in ('ai', 'docs') else parts[:-1]) or os.sep
+
+
+def empty_rules(**kw):
+    return dict({'state': 'n/a', 'memory_dir': None, 'memory_dirs': [], 'files_scanned': 0, 'claude_files': 0, 'findings': []}, **kw)
+
+
+def rules_block(brain, args):
+    """RULES block: scans memory files, CLAUDE.md/AGENTS.md and the brain README; never writes anything."""
+    block = empty_rules()
+    if args.no_rules:
+        return dict(block, skipped=True)
+    home = os.path.expanduser('~')
+    cfg = os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude')
+    proj = os.path.join(cfg, 'projects')
+    cfgs = {os.path.realpath(d) for d in glob.glob(os.path.join(glob.escape(home), '.claude*')) + [cfg]}
+    heads = [brain, os.path.realpath(brain)]  # abspath and realpath spellings of the brain and its container
+    conts = [c for c in (container_of(h) for h in heads) if c]
+    conts += [os.path.realpath(c) for c in conts]
+    names = list(dict.fromkeys(conts + heads))
+    if args.memory_dir:
+        mdirs = [os.path.abspath(os.path.expanduser(args.memory_dir))]
+    else:  # derived dirs count only inside <config>/projects/
+        mdirs = [d for d in (os.path.join(proj, re.sub(r'[^A-Za-z0-9]', '-', n), 'memory') for n in names)
+                 if os.path.realpath(d).startswith(os.path.realpath(proj) + os.sep)]
+    mdirs = [d for k, d in enumerate(mdirs) if os.path.isdir(d) and os.path.realpath(d) not in map(os.path.realpath, mdirs[:k])]
+    srcs = []  # (path, shown, hook text only, version rule only, is CLAUDE.md/AGENTS.md)
+    for d in mdirs:
+        try:
+            listing = sorted(n for n in os.listdir(d) if n.endswith('.md') and not IGNORED_NAME.search(n))
+        except OSError:
+            listing = []
+        for n in listing:
+            path = os.path.join(d, n)
+            shown = n if len(mdirs) < 2 else os.path.relpath(path, proj) if path.startswith(proj + os.sep) else path
+            srcs.append((path, shown, n == 'MEMORY.md', False, False))
+    for base in dict.fromkeys(conts + [os.path.join(c, 'ai') for c in conts] + heads):
+        for n in ('CLAUDE.md', 'AGENTS.md'):
+            srcs.append((os.path.join(base, n), os.path.join(base, n), False, False, True))
+    srcs.append((os.path.join(brain, 'README.md'),) * 2 + (False, True, False))
+    done = set()
+    for path, shown, hook, ver, claude in srcs:
+        real = os.path.realpath(path)
+        guarded = os.path.dirname(real) in cfgs and os.path.basename(real).lower() in ('claude.md', 'agents.md', 'orchestrator.md')
+        text = None if real in done or guarded else read_text(path)  # a config dir's own instruction files are never targets
+        if text is None:
+            continue
+        done.add(real)
+        block['files_scanned'] += 1
+        block['claude_files'] += claude
+        for n, rid, sev, snip in scan_file(text, hook, ver):
+            info = next(r for r in STALE_RULES if r[0] == rid)
+            block['findings'].append({'file': shown, 'line': n, 'id': rid, 'severity': sev, 'snippet': snip,
+                                      'correction': info[4].replace('<target>', TARGET)})
+    fix = sum(f['severity'] == 'fix' for f in block['findings'])
+    block.update(memory_dir=mdirs[0] if mdirs else None, memory_dirs=mdirs,
+                 state='needed' if fix else 'ok' if block['files_scanned'] else 'n/a')
+    return block
+
+
 # ---------------------------------------------------------------- rendering
 def lacks(m, found):
     gone = [t for t in TYPES if not m['types'][t]]
@@ -466,26 +626,37 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
                'TASK missing · no DoD-human pending section' + nxt if t['state'] == 'missing' else
                'TASK ok%s%s' % (' · DoD-human pending' if t['shape'] == 'canonical' else
                                 ' (legacy shape: %s)' % t['heading'], nxt))
-    mid.append('CONTEXT n/a (business-context only)' if c['state'] == 'n/a' else 'CONTEXT ok (%s)%s · last_scanned %s' % (
-        c['skill'], ' · plugin ' + c['plugin'] if c['plugin'] else '', c['last_scanned'] or 'unknown'))
+    ru, rules_l = b['rules'], []
+    if ru.get('skipped') or module:
+        mid.append('RULES n/a · skipped' if ru.get('skipped') else 'RULES n/a (root only)')
+    else:
+        fx = sum(f['severity'] == 'fix' for f in ru['findings'])
+        mid.append('RULES %s · memory %s · claude.md %d · findings %d (fix %d · review %d)' % (
+            ru['state'], ru['memory_dir'] or 'none', ru['claude_files'], len(ru['findings']), fx, len(ru['findings']) - fx))
+        rules_l = ['  %s:%d %s — %s' % (f['file'], f['line'], f['id'], f['snippet']) for f in ru['findings'][:6]]
+        rules_l += ['  … +%d more (use --json)' % (len(ru['findings']) - 6)] if len(ru['findings']) > 6 else []
+    after = [('CONTEXT n/a (business-context only)' if c['state'] == 'n/a' else 'CONTEXT ok (%s)%s · last_scanned %s' % (
+        c['skill'], ' · plugin ' + c['plugin'] if c['plugin'] else '', c['last_scanned'] or 'unknown'))]
     mod_l = []
     if args.all_modules:
-        mid.append('MODULES %d' % len(mods) if mods else 'MODULES none')
+        after.append('MODULES %d' % len(mods) if mods else 'MODULES none')
         mod_l = ['  %s %s' % (m['module'], 'needed(%s)' % ','.join(m['needed']) if m['needed'] else 'up-to-date') for m in mods]
     inv_l = []
     if inv:
         fmt = lambda x, n: ' '.join('%s=%d' % kv for kv in x.items()) + ' · lines=%d' % n['execute_lines']
         inv_l = ['INVARIANTS ' + fmt(inv, stats)] + ['INVARIANTS %s %s' % (m['module'], fmt(m['invariants'], m['stats'])) for m in mods]
     last = 'RENOVATE: needed(%s)' % ','.join(needed) if needed else 'RENOVATE: up-to-date'
-    fits = lambda: len(pre + rows_l + mid + mod_l + inv_l) + 1 <= MAX_LINES
-    if not fits() and rows_l:  # shed order: registry rows, module lines, module INVARIANTS (the root one stays)
+    fits = lambda: len(pre + rows_l + mid + rules_l + after + mod_l + inv_l) + 1 <= MAX_LINES
+    if not fits() and rows_l:  # shed order: registry rows, module lines, RULES findings, module INVARIANTS (the root one stays)
         rows_l = ['  … %d rows without regen (use --json)' % len(rows_l)]
     if not fits() and mod_l:
         mod_l = ['  … %d modules, %d need work (use --json)' % (len(mods), sum(bool(m['needed']) for m in mods))]
+    if not fits() and rules_l:
+        rules_l = ['  … %d findings (use --json)' % len(ru['findings'])]
     if not fits():
-        room = MAX_LINES - len(pre + rows_l + mid + mod_l) - 1
+        room = MAX_LINES - len(pre + rows_l + mid + rules_l + after + mod_l) - 1
         inv_l = inv_l[:room - 1] + ['INVARIANTS … %d module lines not shown (use --json)' % (len(inv_l) - room + 1)]
-    return pre + rows_l + mid + mod_l + inv_l + [last]
+    return pre + rows_l + mid + rules_l + after + mod_l + inv_l + [last]
 
 
 def emit(args, data, lines, code):
@@ -523,7 +694,10 @@ def run(args):
         sub = review(os.path.join(brain, rel), lang)
         mods.append(dict({'module': rel, 'needed': sub['needed']},
                          **({'invariants': sub['inv'], 'stats': sub['stats']} if args.invariants else {})))
-    blocks = dict(scripts=scripts, **rev['blocks'], modules=mods)
+    rb = rev['blocks']
+    rules = rules_block(brain, args) if not module else empty_rules()
+    blocks = {'scripts': scripts, 'artifacts': rb['artifacts'], 'execute': rb['execute'], 'task': rb['task'],
+              'rules': rules, 'context': rb['context'], 'modules': mods}
     needed = [b for b in BLOCKS if (b == 'modules' and any(m['needed'] for m in mods)) or (
         b not in ('modules', 'context') and blocks[b]['state'] in NEED)]
     inv = rev['inv'] if args.invariants else None
@@ -547,6 +721,8 @@ def main(argv=None):
         ap.add_argument('--skill-dir', metavar='PATH', help='holds templates/<name> (default: this script\'s directory)')
         ap.add_argument('--copy-scripts', action='store_true', help='copy the missing scripts/ files from the templates')
         ap.add_argument('--force-outdated', action='store_true', help='with --copy-scripts: overwrite differing copies too')
+        ap.add_argument('--memory-dir', metavar='PATH', help='scan this memory dir instead of the resolved one')
+        ap.add_argument('--no-rules', action='store_true', help='skip the RULES block')
         for flag in ('--all-modules', '--invariants', '--json'):
             ap.add_argument(flag, action='store_true')
         ap.add_argument('--version', action='version', version='renovate_check.py ' + __version__)
