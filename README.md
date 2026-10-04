@@ -23,7 +23,7 @@ ADCM public toolkits for Claude Code (open-source).
 
 ## Notes
 
-- Public open-source toolkit marketplace by ADCM. The `adcm-toolkits` plugin ships the Council multi-advisor deliberation framework (generic, no confidential context), a code-project context generator, a business context generator, and an execution-prompt architect. **Do not commit private context to a public fork.** Since 0.12.0 the plugin also ships an artifact courier (a Sonnet sub-agent that regenerates and republishes the plan pages and returns the links block) and a pure-orchestrator hard rule shared by all six skills. It also ships a deterministic status digest for session start. Since 0.14.0: six role agents with fixed models and tools.
+- Public open-source toolkit marketplace by ADCM. The `adcm-toolkits` plugin ships the Council multi-advisor deliberation framework (generic, no confidential context), a code-project context generator, a business context generator, and an execution-prompt architect. **Do not commit private context to a public fork.** Since 0.12.0 the plugin also ships an artifact courier (a Sonnet sub-agent that regenerates and republishes the plan pages and returns the links block) and a pure-orchestrator hard rule shared by all six skills. It also ships a deterministic status digest for session start. Since 0.14.0: six role agents with fixed models and tools. Since 0.14.1: a renovate flow for existing brains.
 - Per-plugin requirements: see each plugin's README.
 
 ## License

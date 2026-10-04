@@ -1,5 +1,23 @@
 # Changelog — adcm-toolkits
 
+## 0.14.1 — 2026-10-03
+
+- `execution-prompt-architect`: **renovate** — one phrase ("renovate the brain" / "renueva el
+  brain al protocolo vigente") upgrades an existing brain to the current protocol without
+  re-planning. `templates/renovate_check.py` (stdlib, deterministic) reports per block what is
+  missing — `scripts/` copies (and copies them with `--copy-scripts`), `artifacts.json` rows
+  without `regen` (with the suggested `--set-regen` command), `execute.md` markers (agent
+  types, model rule, status-digest line, `LAST LOG` resume, `Next:`/`blocked`, `SKILLS:` on
+  pending waves, protocol line), the `task.md` pending-human section, the code-context skill
+  name — plus `--invariants` (counts renovate must not change) and `--all-modules`. Exit 0
+  up-to-date · 1 needed · 2 unparsed · 64 usage. `references/renovate.md` is the flow for the
+  main session; `templates/renovate-brief.md` the per-block executor brief; `templates/
+  renovate-selftest.py` 15 cases (two audit rounds: header prefixes, wrapped skill lines,
+  protocol mismatch, symlink-safe copies, unparsed registries, line-cap ordering).
+- `execute.md.tmpl` now carries `> **Protocol:** adcm-toolkits <version>` under the title, so
+  the checker and future upgrades know which protocol a brain was generated with; a selftest
+  case asserts that plugin.json, the template line and the checker version agree.
+
 ## 0.14.0 — 2026-10-03
 
 - New `agents/` catalog — the tiers of the orchestration protocol as plugin agent types, so

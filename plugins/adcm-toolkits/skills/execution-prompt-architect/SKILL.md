@@ -1,25 +1,20 @@
 ---
 name: execution-prompt-architect
 description: >
-  Turns a task description plus deep code analysis into a complete execution-plan
-  family: an executive proposal (what is sought and what to approve), a master
-  plan (strategy and decisions), a detailed plan (task catalog with repo, owner,
-  detail and DoD per task), a timeframe plan (wave calendar: sessions and days,
-  critical path, milestones, buffer), a task tracker (waves,
-  burn, logbook), and an execution protocol with copy-paste prompts per wave
-  (GOAL · TASKS · SCOPE manifest · LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) whose
-  loop exits by verifiable DoD, never by fatigue, enforces a comment policy and closes
-  every wave with a code-simplifier pass. Each wave prompt is self-contained: its SCOPE
-  embeds the investigation (files and why, impact census, reuse plan), so executing
-  sessions never re-analyze. Best with the project's `code-project-context-[project-name]`
-  skill from `code-project-context-generator`. Triggers when the user asks to 'create an
-  execution plan', 'generate optimal prompts', 'plan my migration', 'wave execution
-  plan', 'batch migration plan', 'execution prompts', 'plan de ejecución',
-  'prompts por olas', 'plan por lotes', 'genera los prompts', or any variation where
-  they want a code-analysis-driven plan of tasks and migrations with ready-to-run
-  prompts per wave; also at session start on 'where did we leave off', 'dónde nos
-  quedamos', 'en qué quedamos', 'status del proyecto', 'project status', 'retomar el
-  proyecto', 'resume the project'.
+  Turns a task description plus deep code analysis into an execution-plan family
+  (executive proposal, master plan, detailed plan, timeframe plan, task tracker) and an
+  execution protocol with copy-paste prompts per wave (GOAL · TASKS · SCOPE manifest ·
+  LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) whose loop exits by verifiable DoD, never
+  by fatigue, with a comment policy and a code-simplifier pass per wave. Each wave prompt
+  is self-contained: its SCOPE embeds the investigation, so executing sessions never
+  re-analyze. Best with the project's `code-project-context-*` skill. Triggers when the
+  user asks to 'create an execution plan', 'generate optimal prompts', 'plan my
+  migration', 'wave execution plan', 'batch migration plan', 'execution prompts', 'plan de
+  ejecución', 'prompts por olas', 'plan por lotes', 'genera los prompts', or any request
+  for a code-analysis-driven plan with ready-to-run prompts per wave; also at session
+  start on 'where did we leave off', 'dónde nos quedamos', 'en qué quedamos', 'status del
+  proyecto', 'project status', 'retomar el proyecto', 'resume the project'; and on
+  'renovate the brain', 'upgrade the brain', 'renueva el brain', 'actualiza el protocolo'.
 compatibility: >
   Works with any Claude model. In Claude Code the code analysis fans out to
   sub-agents using the model/effort the user picks; in environments without
@@ -197,6 +192,16 @@ matters · `2` unparsed: always ONE `Agent(subagent_type: "adcm-toolkits:digeste
 with `templates/status-brief.md` (1 of the 20, 0 Opus quota) · `64` usage error. For the detail
 of a logbook entry use `--entry [K]` (the K-th newest, in full, ≤40 lines) — nobody opens
 `task.md`.
+
+## Renovate an existing brain
+
+On 'renovate the brain', 'upgrade the brain', 'renueva el brain' or 'actualiza el protocolo', for a
+brain planned under an older protocol. It never re-plans and never edits `execute.md` from memory:
+`python3 {{skill_dir}}/templates/renovate_check.py --brain <docs_dir> --all-modules --invariants`
+(`--copy-scripts` copies the missing scripts) lists which blocks are missing — SCRIPTS ·
+ARTIFACTS · EXECUTE · TASK · CONTEXT — and the main session launches ONE `adcm-toolkits:executor`
+per block with `templates/renovate-brief.md`, then an auditor gate and the courier close.
+`RENOVATE: up-to-date` means 0 agents. Full flow, orders and gates: `references/renovate.md`.
 
 ## Execution flow
 
@@ -427,7 +432,9 @@ the absolute code-repo path to start the session in). Use the templates in `temp
 > that same set consistently.
 
 Cross-link them: executive-proposal → master-plan → detailed-plan →
-timeframe-plan → task.md → execute.md. Every fact in
+timeframe-plan → task.md → execute.md. The generated `execute.md` carries the line
+`> **Protocol:** adcm-toolkits <plugin version>` (the template has it), which `renovate_check.py`
+reads to know what an old brain lacks. Every fact in
 the prompts must trace back to the analysis — never invent commands, paths or repo
 names; use the ones found in Step 3.
 
@@ -549,7 +556,8 @@ with its template** — `plans-regen.py` + `plans-html.tmpl` and `prompts-regen.
 `prompts-html.tmpl` (a script's `--init` looks for its `.tmpl` beside itself, so a
 script copied alone breaks) — so later sessions regenerate without the plugin
 installed (`status_digest.py` and `status-brief.md` already went there in Step 5, whatever
-the HTML answer). The exact command goes into the `regen` field of the artifact's row in
+the HTML answer). The copies are those of the plugin version the
+generated `execute.md` names in its `> **Protocol:** adcm-toolkits <plugin version>` line. The exact command goes into the `regen` field of the artifact's row in
 `artifacts.json`: for `plans.html` it is `python3 scripts/plans-regen.py --brain . --lang <lang> plans.html`
 WITHOUT `--init` (`plans-regen.py` auto-initializes the shell when the output file is missing);
 for `prompts.html` the stored command MUST include `--init`, `--lang <plan language>` and the
@@ -668,5 +676,6 @@ happen every session is not a note — it is a hook.
   before the final DoD-auto run.
 - **The orchestrator is pure.** In any substantive task the main session analyzes, writes briefs, launches sub-agents with an explicit `model` or an `adcm-toolkits:*` type (Plan and Explore agents included — without a `model` a Plan agent inherits the main session's model), reads their short RETURNs and decides; it does not read files in bulk, edit at scale, browse, render or publish. Two exceptions only: the ≤20-line shortcut already above (logged), and the user's escape hatch — `sin tanto lío` for that one task, `modo directo` until the user says `modo orquestador`. Full rule, brief format and tier table: `references/orchestrator-rule.md`.
 - **Session state comes from the digest, never from `task.md`.** To learn where a project stands the main session runs `status_digest.py --brain <docs_dir>` (the skill's canonical copy, else the brain's `scripts/` copy) and reads its ≤40 lines; it never reads `task.md`, `execute.md` or the plans for that. Exit 2 (tracker does not parse) → ONE `Agent(subagent_type: "adcm-toolkits:digester")` with `templates/status-brief.md` (1 of the 20, 0 Opus quota). The digest parses the logbook, so every entry keeps the `Next:`, `Blocked:` and `Agents used:` labels.
+- **Upgrades go through renovate.** Bringing an existing brain to the current protocol is `references/renovate.md` (checker, one executor per block, audit gate, courier) — never a hand-edit of `execute.md` from memory, never a re-plan of waves.
 - **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; the `artifact-courier` sub-agent (`adcm-toolkits:courier`, `sonnet` fixed by the type) runs each row's `regen`, republishes it to that SAME URL (re-issuing above ~300 KB), stamps the row and returns the links block — the main session never calls the Artifact tool, never reads or edits brain HTML (`plans.html`, `prompts.html`) and never assembles the block; it pastes the courier's block verbatim. Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered — and make sure the brain is reachable as `ai/ai-brain/` or `ai-brain/` from the code repos, or the hook never fires.
 - **Closes are read on a phone.** Links in the close are plain Markdown bullets `- [emoji Title](url)` — never inside code fences, backticks, or 4-space indentation (that renders as dead, non-tappable text on mobile; the raw URL inside the Markdown link keeps Claude Code's footer quick-access badges working). The order of the close: narrative with repo paths and commit hashes → media (the main session sends the VISUAL CHECK screenshots the courier returns as `MEDIA: unsent`, a GIF when the feature spans several screens) → ONE short final message made of the pending DoD-human lines and then the courier's block (localhost, LAN, artifacts) as the LAST lines — no headings, no text inside the block and nothing after it. Paths, hashes and DoD-human go ABOVE the block, never after it: the guard rejects any text after the last link, and the owner must see media + links without scrolling back up.
