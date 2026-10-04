@@ -85,8 +85,8 @@ Absolute path when needed:
     must look at ends with the clean, phone-readable link block from
     `variant-preview.md` — plain bullets grouped by label, nothing broken,
     nothing extra. The skill's artifacts (contact sheet, variants page) live in
-    `.design/preview/` and one Sonnet `artifact-courier` per batch (normally 1;
-    `model: "sonnet"`) publishes them; the main session never calls the Artifact tool. Register the
+    `.design/preview/` and one `adcm-toolkits:courier` per batch (normally 1;
+    the type fixes `sonnet`) publishes them; the main session never calls the Artifact tool. Register the
     rows in `<docs_dir>/artifacts.json` with `in_close_block: false` when the
     container has a brain, otherwise in `.design/artifacts.json` (same schema).
     Because of that flag the courier's standard block OMITS these rows, so the
@@ -99,16 +99,18 @@ Absolute path when needed:
 11. **Pure orchestrator.** The main session interviews (STEP 1), locks the
     direction (STEP 2), decides the curation (STEP 5) and writes the pack
     (STEP 7); it does not browse, score or publish. Delegation map, every call
-    with an explicit `model`:
+    an `adcm-toolkits:*` type (which fixes the `model`) or an explicit `model`;
+    no plugin in this session → `Agent(subagent_type: "general-purpose", model: "<tier>")`
+    with the same brief:
     - **Browsing** (STEP 3 Framer / Pinterest / 21st.dev / Pexels, STEP 3b):
-      one `sonnet` sub-agent per source, with Chrome, returning a candidate
+      one `adcm-toolkits:researcher` per source, with Chrome, returning a candidate
       table (source, URL, demo URL, one line each) — never inline screenshots;
       captures go to `.design/refs/`.
-    - **Scoring** (STEP 4): an `opus` sub-agent scores the merged tables
-      against the rubric and returns the ranking.
-    - **Contact sheet and variants** (STEP 5 / 5b): built by a `sonnet`
-      sub-agent from the orchestrator's brief; published by the
-      `artifact-courier`.
+    - **Scoring** (STEP 4): an `adcm-toolkits:researcher` called with `model: opus`
+      scores the merged tables against the rubric and returns the ranking.
+    - **Contact sheet and variants** (STEP 5 / 5b): rendered by an
+      `adcm-toolkits:executor-frontend` from the orchestrator's brief; published by the
+      `adcm-toolkits:courier`.
 
     Escape hatch, in the user's own words: `sin tanto lío` (direct mode for
     that one task) or `modo directo` (stays on until `modo orquestador`).

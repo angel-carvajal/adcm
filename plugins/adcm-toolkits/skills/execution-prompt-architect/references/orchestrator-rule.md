@@ -34,32 +34,41 @@ modules/<mod>]` — `<path>` is `execution-prompt-architect/templates/status_dig
 brain copy `<docs_dir>/scripts/status_digest.py` — and reads only its ≤40 lines. Exit 0 ok · 1
 partial (digest printed, `DIGEST: partial(<parts>)`): the digest is enough, spawn the fallback
 only if the missing part matters · 2 unparsed: always ONE `Agent(subagent_type:
-"general-purpose", model: "sonnet")` with `execution-prompt-architect/templates/status-brief.md`
-(1 of the 20, 0 Opus quota) · 64 usage error. `--entry [K]` prints the K-th newest logbook entry
+"adcm-toolkits:digester")` with `execution-prompt-architect/templates/status-brief.md`
+(1 of the 20, 0 Opus quota; the type fixes `sonnet` and read-only tools) · 64 usage error. `--entry [K]` prints the K-th newest logbook entry
 in full (≤40 lines).
 
 ## `model` on EVERY delegated call
 
-Every `Agent` and every Workflow `agent()` call names its `model` — packaged agents
-included, and the built-in Plan and Explore types too: a Plan agent called without
-`model` inherits the main session's model. The plugin's frontmatter is irrelevant.
+Every `Agent` and every Workflow `agent()` call either names its `model` or uses an
+`adcm-toolkits:*` type. A per-call `model` overrides the type's default: `researcher` +
+`model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and
+Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the
+main session is one tier down; types fix the TOOL SET, the tier rules still set the model.
+The built-in Plan and Explore types and any other packaged agent still need an explicit
+`model`: a Plan agent called without `model` inherits the main session's model. The role
+agents load at the next session or on `/reload-plugins`.
 
 ## Tiers
 
-| Tier | Does | Never |
-|---|---|---|
-| Main session (orchestrator) | Decides design and scope, audits deliverables, writes briefs, runs the DoD, integrates | Executes, reads in bulk, renders, publishes, browses |
-| `opus` (quota 10 per session; 2 reserved) | Investigates, audits, reviews regression, verifies gates, implements ⚠gate waves | Decides scope |
-| `sonnet` | Executes, renders, publishes (courier), researches, runs scripts | Self-approves |
-| `haiku` | Inventory-only tasks: listing, counting, grepping, file-existence checks | Anything that needs judgement |
+| Tier | Agent type | Does | Never |
+|---|---|---|---|
+| Main session (orchestrator) | — | Decides design and scope, audits deliverables, writes briefs, runs the DoD, integrates | Executes, reads in bulk, renders, publishes, browses |
+| `opus` (quota 10 per session; 2 reserved) | `adcm-toolkits:auditor` (reviews, gate verifier) · `adcm-toolkits:researcher` + `model: opus` (investigations) · `adcm-toolkits:executor` + `model: opus` (⚠gate waves) | Investigates, audits, reviews regression, verifies gates, implements ⚠gate waves | Decides scope |
+| `sonnet` | `adcm-toolkits:executor` · `adcm-toolkits:executor-frontend` (UI waves) · `adcm-toolkits:researcher` (default; also the capture role: browser, no edits) · `adcm-toolkits:courier` · `adcm-toolkits:digester` | Executes, renders, publishes (courier), researches, captures, runs scripts, digests status | Self-approves |
+| `haiku` | `general-purpose` + `model: haiku` | Inventory-only tasks: listing, counting, grepping, file-existence checks | Anything that needs judgement |
 
-When the main session is not the top tier, every row moves one tier down; the courier
-stays `sonnet` regardless. Budget 20 agents per session, `SendMessage` to a live agent
+The types fix the tool set; the tier rules above still set the model of each call. When
+the brief's DoD includes the VISUAL CHECK, `executor-frontend` captures it itself — never
+both it and a capture agent. When the main session is not the top tier, every row moves
+one tier down; the courier stays `sonnet` regardless. No plugin in this session →
+`Agent(subagent_type: "general-purpose", model: "<tier>")` with the same brief. Budget 20 agents per session, `SendMessage` to a live agent
 costs 0.
 
 ## Brief format (≤40 lines)
 
-`TASK` (ID + title) · `FILES` (what to read or touch, and why) · `DELIVERABLE` (the
+`TASK` (ID + title) · `FILES` (what to read or touch, and why) · `SKILLS` (the wave's
+"Skills to load": what the executor loads with `Skill` before starting) · `DELIVERABLE` (the
 output, with the orchestrator's decisions applied) · `DOD-SLICE` (`command → expected
 result`, run before returning) · `STOP IF` (conditions to stop and report instead of
 improvising) · `FORBIDDEN` (paths, actions, dependency changes) · `RETURN` (exact shape

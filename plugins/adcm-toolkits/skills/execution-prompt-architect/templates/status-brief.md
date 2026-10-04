@@ -1,5 +1,5 @@
 # STATUS BRIEF (fill every {{...}}; this file is the Agent prompt; {{module}} = modules/<m> or none)
-# Agent(subagent_type: "general-purpose", model: "sonnet"). Exit 2: always one. Exit 1: the digest is enough, only if the missing part matters. 1 of the 20, 0 Opus quota.
+# Agent(subagent_type: "adcm-toolkits:digester") (no plugin in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief). Exit 2: always one. Exit 1: the digest is enough, only if the missing part matters. 1 of the 20, 0 Opus quota.
 
 TASK: Produce the status digest of {{docs_dir}} (module: {{module}}). status_digest.py exited {{exit}}:
   {{stderr + partial stdout}}

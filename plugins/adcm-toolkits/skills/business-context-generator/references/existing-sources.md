@@ -84,14 +84,14 @@ RETURN   rows · UNKNOWN list · exhausted: yes|no · the 3 files you would read
    contradiction is itself a finding worth showing the owner.
 3. **Class**: on disagreement the **strictest class wins**.
 4. **Emit the UNKNOWN list** — it *is* the interview agenda for STEP 2.
-5. **ONE `opus` refuter pass** over the consolidated sheet, if budget allows:
+5. **ONE refuter pass** (`adcm-toolkits:auditor` + `model: opus`) over the consolidated sheet, if budget allows:
    *"what here is stale, invented or misclassified?"* — it sees the sheet, not the
    sources, and returns findings only.
 
 ## 5. Budget
 
 Maximum 20 delegated agents; a typical run spends **4–8**: ≤6 miners + 1 refuter.
-`model` is always explicit. When presenting the sheet, report
+Miners are `adcm-toolkits:researcher` calls with the tier of §1 as their explicit `model`; the refuter is an `adcm-toolkits:auditor`. When presenting the sheet, report
 `agents used: n/20 (opus a · sonnet b)`.
 
 ## 6. Ultracode shape
@@ -104,13 +104,13 @@ let used = 0, opus = 0, sonnet = 0
 const spend = (model, prompt, opts) => {
   if (used >= BUDGET) throw new Error('agent budget exhausted — ask the user')
   used++; model === 'opus' ? opus++ : sonnet++
-  return agent(prompt, {...opts, model})
+  return agent(prompt, {...opts, model, agentType: opts.agentType ?? 'adcm-toolkits:researcher'})
 }
 // ≤6 miners, one per DISJOINT family; FAMILIES[i].model is fixed by the table in §1
 const mined = await parallel(FAMILIES.map(f => () =>
   spend(f.model, minerBrief(f), {label: f.key, phase: 'Mine', schema: ROW})))
 const sheet = consolidate(mined)                    // plain code, no agent — §4
-const refuted = await spend('opus', refutePrompt(sheet), {phase: 'Refute'})
+const refuted = await spend('opus', refutePrompt(sheet), {phase: 'Refute', agentType: 'adcm-toolkits:auditor'})
 log(`agents used: ${used}/${BUDGET} (opus ${opus} · sonnet ${sonnet})`)
 return { sheet, refuted, unknowns: sheet.filter(r => r.value === 'UNKNOWN') }
 // The interview (AskUserQuestion, STEP 2) runs in the main session, after this.

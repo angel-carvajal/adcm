@@ -8,7 +8,7 @@ recommendation and asking "good?" produces agreement, not a decision.
 Show exactly **5 finalists** as one **contact-sheet artifact** — a single
 phone-first page, not a screenshot pasted into chat. Read `artifact-design`
 before building it. The page is built into `.design/preview/contact-sheet.html`
-and published by the `artifact-courier` sub-agent, never by the main session.
+and published by the `adcm-toolkits:courier`, never by the main session.
 
 Build rules:
 

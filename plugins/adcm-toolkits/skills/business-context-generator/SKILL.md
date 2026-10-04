@@ -69,19 +69,20 @@ Same tiered protocol as `execution-prompt-architect` (canonical role table in it
 | Role | Model | Does | Never does |
 |---|---|---|---|
 | **Orchestrator** | the main session (Fable) | Owns STEP 0. Writes the miner briefs. **Audits** every fact sheet that comes back (contradictions, staleness, confidentiality class) and consolidates them into ONE sheet. Runs the interview. Fills a tiny gap itself (one Read/grep) instead of spending an agent. | Mine a whole source family itself when agents are available. Delegate AskUserQuestion. Spawn agents of its own tier. |
-| **Miner / Auditor** | `opus` sub-agents (quota 10) | One source FAMILY each: extracts facts into the row schema, flags UNKNOWNs, proposes a confidentiality class. Also the single refuter pass over the consolidated sheet. | Write files. Interview the user. Invent a value. Read outside its `PATHS`. |
-| **Bulk extractor** | `sonnet` sub-agents | Mechanical families: decks/HTML, CSS tokens, catalog dumps. Proposes a class; the orchestrator decides. | Judge confidentiality, resolve conflicts, or decide scope. |
-| **Researcher / Generator** | `sonnet` sub-agents, one per file or family | STEP 1 website research (returns a short fact sheet, never raw pages) and STEP 3 generation of the 8 context files from the audited fact sheet and the interview answers, written to disk. | Decide scope, judge confidentiality, or interview the user. |
+| **Miner / Auditor** | `adcm-toolkits:researcher` called with `model: opus` (quota 10); the refuter pass is an `adcm-toolkits:auditor` | One source FAMILY each: extracts facts into the row schema, flags UNKNOWNs, proposes a confidentiality class. Also the single refuter pass over the consolidated sheet. | Write files. Interview the user. Invent a value. Read outside its `PATHS`. |
+| **Bulk extractor** | `adcm-toolkits:researcher` (default `sonnet`) | Mechanical families: decks/HTML, CSS tokens, catalog dumps. Proposes a class; the orchestrator decides. | Judge confidentiality, resolve conflicts, or decide scope. |
+| **Researcher / Generator** | `adcm-toolkits:researcher` (STEP 1) and `adcm-toolkits:executor` (STEP 3), one per file or family | STEP 1 website research (returns a short fact sheet, never raw pages) and STEP 3 generation of the 8 context files from the audited fact sheet and the interview answers, written to disk. | Decide scope, judge confidentiality, or interview the user. |
 
 **Pure-orchestrator rule.** The main session does only STEP 0, the interview (STEP 2),
 the audit of the fact sheets and the review (STEP 4); STEP 1 web research and STEP 3
-generation are always delegated to the sub-agents above, each call with an explicit
-`model`, each RETURN short and structured (files written, rulings, open questions),
+generation are always delegated to the sub-agents above, each call an `adcm-toolkits:*` type
+or an explicit `model` (no plugin in this session → `Agent(subagent_type: "general-purpose",
+model: "<tier>")` with the same brief), each RETURN short and structured (files written, rulings, open questions),
 never whole files. Escape hatch, in the user's own words: `sin tanto lío` (direct mode
 for that one task) or `modo directo` (stays on until `modo orquestador`). Canonical
 rule: `../execution-prompt-architect/references/orchestrator-rule.md`.
 
-**Budget: 20 delegated agents per run.** `model` is ALWAYS explicit; `SendMessage`
+**Budget: 20 delegated agents per run.** Every call carries an explicit `model` or an `adcm-toolkits:*` type; `SendMessage`
 to a live miner costs 0; a realistic run spends 4–8. Reaching 20 means STOP and ask
 the user — and no agent may spawn unbounded amplifiers of its own.
 
@@ -125,8 +126,8 @@ Only when STEP 0 item 4 answered YES. Read `references/existing-sources.md`.
 
 1. **Inventory with the owner.** Agree the paths: one line per source family and
    what that family should prove.
-2. **Fan out ONE agent per family** (≤6): `opus` for judgement families, `sonnet`
-   for bulk ones, each with a miner brief plus the fact-sheet row schema.
+2. **Fan out ONE agent per family** (≤6): `adcm-toolkits:researcher` with `model: opus` for judgement families, plain
+   `adcm-toolkits:researcher` (`sonnet`) for bulk ones, each with a miner brief plus the fact-sheet row schema.
    Families are **DISJOINT trees** — no two miners read the same path.
 3. **Audit and consolidate — the orchestrator, never delegated.** Dedupe; resolve
    conflicts by authority (**prod DB > product code > execution docs > collateral

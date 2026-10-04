@@ -401,7 +401,7 @@ def main():
                 lines.append(f"  • {a['file']} (mtime {mt} · published_at {sello})")
             lines.append(
                 "  No la leas ni la publiques desde esta sesión: delega el cierre en UN sub-agente "
-                "artifact-courier (Agent general-purpose, model \"sonnet\"; brief = "
+                "artifact-courier (tipo `adcm-toolkits:courier`; sin el plugin: Agent general-purpose, model \"sonnet\"; brief = "
                 "templates/courier-brief.md del skill adcm-toolkits:artifact-courier). Él republica, "
                 "sella el registro y devuelve el bloque `=== LINKS ===`."
             )

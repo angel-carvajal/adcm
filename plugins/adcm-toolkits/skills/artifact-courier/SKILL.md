@@ -5,8 +5,8 @@ description: >
   (the courier) regenerates and republishes every stale claude.ai Artifact listed in the
   project's artifacts.json, in place after reading the live version or re-issued as a new
   artifact above ~300 KB, stamps published_at / version / sha256 so the artifact-guard Stop
-  hook trusts it, sends the visual-check screenshots (a GIF when the feature spans several
-  screens) and returns the tappable links block the main session pastes verbatim. The main
+  hook trusts it, returns the visual-check screenshot paths (the main session sends them)
+  and the tappable links block the main session pastes verbatim. The main
   session never calls the Artifact tool, never reads or edits the HTML. Triggers on
   'republica los artifacts', 'actualiza los artifacts', 'publica los artifacts', 'sube los
   artifacts', 'bloque de links', 'links de cierre', 'cierre con links', 'republish the
@@ -28,7 +28,8 @@ to 1 MB) lands in the main context. The courier does that in a cheap, disposable
 2. Start the preview server if the close has one; note its localhost URL (or `none`).
 3. Fill `{{skill_dir}}/templates/courier-brief.md`, one brief per batch (`--batches`), run in turn.
    Preview and Media only in the LAST brief (others: none); REGEN only in the first, COMMIT only in the last.
-4. `Agent(subagent_type: "general-purpose", model: "sonnet", prompt: <brief>)`, in every tier.
+4. `Agent(subagent_type: "adcm-toolkits:courier", prompt: <brief>)`, in every tier (fixes `sonnet`; no plugin
+   in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief).
 5. The courier cannot send files (sub-agents have no `SendUserFile`): take its `MEDIA: unsent:
    <paths>` and `SendUserFile` them BEFORE the final message. Paste all after
    `=== LINKS ===` of the last RETURN verbatim as the LAST lines; above it narrative, hashes, human DoD.
@@ -66,5 +67,4 @@ fields and state rules are in `references/registry.md`. You are the only agent t
 - `references/procedure.md`: the ten steps and the exact RETURN contract.
 - `references/registry.md`: the `artifacts.json` schema this skill reads and stamps.
 
-Placeholders: `{{skill_dir}}` is this skill's folder, `<docs_dir>` the folder that holds
-`artifacts.json` (usually the project's `ai/ai-brain`).
+Placeholders: `{{skill_dir}}` = this skill's folder, `<docs_dir>` = the folder with `artifacts.json` (usually `ai/ai-brain`).

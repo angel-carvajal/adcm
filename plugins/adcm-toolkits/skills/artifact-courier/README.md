@@ -1,7 +1,7 @@
 # artifact-courier
 
 Moves the delivery close of a session, republishing claude.ai Artifacts and producing the
-tappable links block, off the expensive main model and onto one disposable Sonnet sub-agent.
+tappable links block, off the expensive main model and onto one disposable agent, `adcm-toolkits:courier` (Sonnet).
 
 ## Why this exists
 
@@ -16,9 +16,9 @@ This skill packages the cheap way:
 - **A preflight script** reads `artifacts.json` and says which rows are missing, new, fresh,
   stale (in place) or stale and too big (re-issue), which need a regen, how to split the live
   reads into batches, and prints the links block in the exact format the guard checks.
-- **A courier brief and procedure** for a Sonnet sub-agent: regenerate, read the live copy
+- **A courier brief and procedure** for the `adcm-toolkits:courier` agent (Sonnet): regenerate, read the live copy
   (paged when the tool saves it to a file), publish, seal the registry with `published_at`,
-  `version` and `sha256`, optionally commit, check the preview, send the screenshots, return a
+  `version` and `sha256`, optionally commit, check the preview, return the screenshot paths (the main session sends them), return a
   short structured report.
 - **Registry stamps** that the artifact-guard hook can trust, so a publish done by a
   sub-agent counts even though the hook only sees the main transcript.

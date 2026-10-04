@@ -1,5 +1,5 @@
 # COURIER BRIEF (fill every {{...}}; this file is the Agent prompt)
-# Agent(subagent_type: "general-purpose", model: "sonnet"). One brief per batch, sequential.
+# Agent(subagent_type: "adcm-toolkits:courier") (no plugin in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief). One brief per batch, sequential.
 # REGEN: yes only in the FIRST courier, COMMIT: yes only in the LAST (both on a single batch). Preview/Media: last brief only.
 
 TASK: Delivery close for {{docs_dir}}. Follow {{skill_dir}}/references/procedure.md, steps 1-10.

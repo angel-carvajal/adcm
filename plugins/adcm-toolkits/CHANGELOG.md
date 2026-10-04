@@ -1,5 +1,26 @@
 # Changelog — adcm-toolkits
 
+## 0.14.0 — 2026-10-03
+
+- New `agents/` catalog — the tiers of the orchestration protocol as plugin agent types, so
+  the default model and the tool set of a delegation are fixed by the definition, not by the brief:
+  `adcm-toolkits:courier` (Sonnet, `artifact-courier` preloaded, no Edit/Write),
+  `adcm-toolkits:auditor` (Opus, read-only: Read/Grep/Glob/Bash, effort high),
+  `adcm-toolkits:executor` (Sonnet, all tools), `adcm-toolkits:executor-frontend` (Sonnet,
+  the `frontend-design` skill preloaded ≈2.5k tokens per spawn, builds inside the `.design/`
+  pack), `adcm-toolkits:researcher` (Sonnet by default, `model: opus` per call, web + browser,
+  no writes except captures) and `adcm-toolkits:digester` (Sonnet, read-only, status-digest
+  fallback). `agents/README.md` has the table and the measured preload cost.
+- Delegation rule across the six skills, the execution templates and `orchestrator-rule.md`:
+  an `adcm-toolkits:*` type fixes the tool set and the default model; the tier rules still set
+  the model per call (`executor` + `model: opus` on ⚠gate waves, `auditor` + `model: sonnet`
+  after the Opus quota); `general-purpose` needs an explicit `model`. Briefs carry a `SKILLS:`
+  line (the wave's "Skills to load"): area knowledge lives in skills loaded per brief, never in
+  per-area agents. Fallback when the plugin is absent: `general-purpose` + explicit model.
+- Plugin agents load at the next session or `/reload-plugins`.
+- `artifact-guard.py`: the stale-artifacts message now names `adcm-toolkits:courier` (the
+  `general-purpose` + `model: sonnet` form stays as the no-plugin fallback); selftest 13/13.
+
 ## 0.13.0 — 2026-10-03
 
 - `execution-prompt-architect`: new `templates/status_digest.py` (stdlib, deterministic) answers

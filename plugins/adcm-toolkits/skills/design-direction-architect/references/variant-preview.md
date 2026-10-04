@@ -79,7 +79,7 @@ then build the call with technique 1 or 2.
 
 ## The review page
 
-Build **one** page that holds all three, published by the `artifact-courier` (never by the
+Build **one** page that holds all three, published by the `adcm-toolkits:courier` (never by the
 main session) as an Artifact so it opens on a phone from a link:
 
 - a **viewport toggle** that switches all three between 390px and 1440px at once — mobile
