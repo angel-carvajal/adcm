@@ -9,7 +9,7 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
 `task.md` never translate.
 -->
 # {{project_name}} — Execution protocol ({{initiative_title}})
-> **Protocol:** adcm-toolkits 0.15.1
+> **Protocol:** adcm-toolkits 0.15.2
 
 > **What this is.** The operating manual of the build. It defines HOW the catalog in
 > `detailed-plan.md` gets executed: **wave sessions** (not 1 task = 1 session),
@@ -39,7 +39,7 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
    verification** by ANOTHER agent, an `adcm-toolkits:auditor` (the reserved one — never the
    executor itself, never the orchestrator's tier) that did NOT see the
    implementation, given only the diff + the DoD + that wave's attack checklist (§6). Its
-   brief carries `REPORT PATH: {{docs_dir}}/qa/gate-<w>.md`: it returns the full report under
+   brief carries `REPORT PATH: {{docs_dir}}/qa/gate-<w>.md` — or the brain's existing layout (e.g. `qa/<wave>/gate-*.md` when `qa/` already has per-wave folders; never change an existing brain's convention): it returns the full report under
    `REPORT:` and the orchestrator saves it verbatim (a mechanical save, not an edit).
    This covers the simplifier too: it edits code, so it is an implementer — the
    orchestrator re-runs the DoD over its edits, and on ⚠gate waves the simplifier is
@@ -81,7 +81,7 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
    when a brief would cost more than the change): every one is LOGGED in the
    `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an
    unlogged orchestrator edit is a protocol violation, not a shortcut. Saving a sub-agent's
-   RETURN verbatim to the path its brief names (gate reports `qa/gate-<w>.md`, digests) is a
+   RETURN verbatim to the path its brief names (gate reports `qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout, digests) is a
    mechanical save, not an edit. The orchestrator
    is otherwise PURE: it never reads files in bulk, never edits at scale, never renders,
    browses or publishes, and every `Agent`/`Workflow` call names its `model` (Plan and

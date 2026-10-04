@@ -119,7 +119,7 @@ The types fix each role's `model` and tool set, so the brief does not have to (t
 adversarial verification is ANOTHER `adcm-toolkits:auditor` (the reserved one) that did not see the
 implementation. The simplify pass runs BEFORE that verification — the verifier
 attacks the bytes that ship, and it is never the simplifier. Ladder: Opus →
-orchestrator. The verifier's brief carries `REPORT PATH: {{docs_dir}}/qa/gate-<w>.md`: the
+orchestrator. The verifier's brief carries `REPORT PATH: {{docs_dir}}/qa/gate-<w>.md` (or the brain's existing `qa/<wave>/gate-*.md` layout): the
 auditor stays read-only and returns the full report under `REPORT:`, and the orchestrator
 saves it verbatim (exception 3 of `references/orchestrator-rule.md`).
 
@@ -478,7 +478,7 @@ Non-negotiable rules:
    the executor is `adcm-toolkits:executor` + `model: opus`, the simplify pass runs BEFORE the mandatory **adversarial
    verification**, which is ANOTHER `adcm-toolkits:auditor` (the reserved one) that did NOT implement,
    attacking the diff with that wave's attack checklist from §6 (its brief names `REPORT PATH:
-   {{docs_dir}}/qa/gate-<w>.md`; it returns the report under `REPORT:` and you save it verbatim). WORKFLOW embeds one
+   {{docs_dir}}/qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout; it returns the report under `REPORT:` and you save it verbatim). WORKFLOW embeds one
    `## Executor brief` block per task, pre-filled from SCOPE, plus the single
    `## Simplifier brief` block. Never emit a WORKFLOW where the main session
    implements first, where an executor self-approves, where the diff is audited by

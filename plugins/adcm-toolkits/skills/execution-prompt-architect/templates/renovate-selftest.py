@@ -13,7 +13,9 @@ Exit code 1 when any case FAILs.
 Every run is asserted twice (plain + --json with the same flags): exit code, <= 40 plain lines,
 last line `RENOVATE: up-to-date | needed(a,b) | unparsed (...)` consistent with the exit code
 and with json.needed, json.text == plain stdout lines, and the brain tree untouched unless the
-case passes --copy-scripts. Fixtures are generic (Acme, modules/billing, example.com).
+case passes --copy-scripts. Fixtures are generic (Acme, modules/billing, example.com); their
+artifacts.json declares `active_account` unless a case drops it on purpose (the ARTIFACTS block
+adds a `review: no active_account declared` line and `no_active_account: true` when it is missing).
 The checker under test defaults to the renovate_check.py next to this file.
 """
 import argparse
@@ -27,7 +29,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RELEASE = "0.15.1"  # what plugin.json, the template Protocol line and __version__ must all say
+RELEASE = "0.15.2"  # what plugin.json, the template Protocol line and __version__ must all say
 VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
@@ -234,8 +236,13 @@ def art(file_, regen=None):
     return r
 
 
-def art_json(rows):
-    return json.dumps({"close_markers": ["task.md", "execute.md"], "artifacts": rows}, indent=1) + "\n"
+def art_json(rows, account=("active_account", "acme")):
+    """The registry text. `account` = (key, value) declares the active account, None leaves it undeclared."""
+    top = {"close_markers": ["task.md", "execute.md"]}
+    if account:
+        top[account[0]] = account[1]
+    top["artifacts"] = rows
+    return json.dumps(top, indent=1) + "\n"
 
 
 def plans_cmd(lang):
@@ -709,6 +716,54 @@ def case_invariants_stable(ctx, t):
     t.eq(dig(runs[0].data, "stats"), {"execute_lines": lines}, "stats (the line count is informational, not an identity counter)")
     line = f"INVARIANTS s7_wave_headers=3 h2_sections={real} logbook_entries=2 wave_rows=3 · lines={lines}"
     t.ok(line in runs[2].lines, f"plain line {line!r}")
+
+
+def case_artifacts_no_active_account(ctx, t):
+    def line(d):
+        return next((x for x in d.get("text") or [] if "review: no active_account declared" in x), None)
+
+    # (a) rows but no active_account/cuenta_activa: a review line, JSON flag, `needed` untouched
+    t.tag = "(undeclared) "
+    b = fresh(ctx, "na-undeclared", extra={"artifacts.json": art_json(ok_rows(), account=None)})
+    d = both(ctx, t, b)
+    if d:
+        ln = line(d)
+        t.ok(ln is not None, "plain output has a 'review: no active_account declared' line")
+        t.ok(ln is not None and "courier-preflight" in ln and "--set-active-account" in ln,
+             f"the review line names the fix (courier-preflight ... --set-active-account), got {ln!r}")
+        t.ok(blk(d, "artifacts", "no_active_account") is True, f"blocks.artifacts.no_active_account is true, got {blk(d, 'artifacts', 'no_active_account')!r}")
+        t.eq([blk(d, "artifacts", k) for k in ("state", "total", "rows_without_regen")], ["ok", 2, []], "artifacts block otherwise unchanged")
+        t.eq(d.get("needed"), [], "needed (the review line never makes a brain needed)")
+    # (b) the same registry needing a real artifacts fix: `needed` is what it is without the review line
+    rows = [art("plans.html", plans_cmd("en")), art("ui-mockup.html")]
+    t.tag = "(undeclared + rows without regen) "
+    d = both(ctx, t, fresh(ctx, "na-need", rows=rows, extra={"artifacts.json": art_json(rows, account=None)}), rc=1)
+    if d:
+        t.ok(line(d) is not None, "the review line is printed next to a real artifacts finding")
+        t.ok(blk(d, "artifacts", "no_active_account") is True, "no_active_account is true")
+        t.eq(d.get("needed"), ["artifacts"], "needed holds artifacts for its own reason only")
+    t.tag = "(declared + rows without regen) "
+    d = both(ctx, t, fresh(ctx, "na-need-ok", rows=rows), rc=1)
+    if d:
+        t.ok(line(d) is None, "declared: no review line")
+        t.ok(blk(d, "artifacts", "no_active_account") is False, "declared: no_active_account is false")
+        t.eq(d.get("needed"), ["artifacts"], "needed (identical to the undeclared run)")
+    # (c) a registry that declares the account (either spelling): no line, flag false
+    for key in ("active_account", "cuenta_activa"):
+        t.tag = f"({key}) "
+        b = fresh(ctx, "na-" + key, extra={"artifacts.json": art_json(ok_rows(), account=(key, "acme"))})
+        d = both(ctx, t, b)
+        if d:
+            t.ok(line(d) is None, "no 'no active_account declared' line")
+            t.ok(not anyline(d.get("text"), "--set-active-account"), "no --set-active-account hint")
+            t.ok(blk(d, "artifacts", "no_active_account") is False, f"no_active_account is false, got {blk(d, 'artifacts', 'no_active_account')!r}")
+            t.eq(d.get("needed"), [], "needed")
+    # (d) no registry at all: nothing to review
+    t.tag = "(no registry) "
+    d = both(ctx, t, ctx.brain("na-none", execute=exec_doc(W3, skills={"W2", "W3"}), task=task_doc(W3)))
+    if d:
+        t.eq(blk(d, "artifacts", "state"), "n/a", "artifacts.state")
+        t.ok(line(d) is None, "no registry: no review line")
 
 
 def case_version_consistency(ctx, t):
@@ -1355,6 +1410,7 @@ CASES = [
     ("copy_scripts", case_copy_scripts),
     ("context_names", case_context_names),
     ("invariants_stable", case_invariants_stable),
+    ("artifacts_no_active_account", case_artifacts_no_active_account),
     ("version_consistency", case_version_consistency),
     ("usage_error", case_usage_error),
     ("no_execute", case_no_execute),

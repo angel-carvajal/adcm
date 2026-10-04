@@ -1,5 +1,19 @@
 # Changelog — adcm-toolkits
 
+## 0.15.2 — 2026-10-04
+
+- Gate reports keep the brain's layout: the verifier brief's `REPORT PATH` is
+  `qa/gate-<w>.md` for new brains or the existing per-wave layout (`qa/<wave>/gate-*.md`)
+  when the brain already has one; renovate never changes an existing convention.
+- `courier-preflight --set-active-account NAME` on a registry that declares no account and
+  has no `url_<NAME>` family just declares `active_account` (exit 0) instead of failing;
+  `--summary --account …` ends with the resolved account; `renovate-check` flags a registry
+  with rows but no declared account as `review` with the command to declare it.
+- Renovate's CONTEXT block ends with the plugin update: the executor reports
+  `PLUGIN: <plugin>@<marketplace> <old> → <new>` and the main session runs
+  `plugin marketplace update` + `plugin update` (or hands them to the owner) and reminds the
+  reload — a refreshed context skill is not live until the installed plugin loads it.
+
 ## 0.15.1 — 2026-10-04
 
 - The delivery close always prints the links of the CURRENT session's claude.ai account:

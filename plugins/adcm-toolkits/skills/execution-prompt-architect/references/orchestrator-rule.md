@@ -26,7 +26,7 @@ decides/integrates. It does NOT execute the task itself:
    In direct mode the main session does everything itself. Never infer it from tone or
    from the task looking small.
 3. **Verbatim saves.** Saving a sub-agent's RETURN unchanged to the path the brief names
-   (gate reports `qa/gate-<w>.md`, digests) is a mechanical save, not an edit.
+   (gate reports `qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout, digests) is a mechanical save, not an edit.
 
 ## Session start: the status digest
 

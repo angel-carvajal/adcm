@@ -233,7 +233,7 @@ every wave close without paying a full refresh.
 2. **Preserve the `human` files** untouched: `business-flows.md`, `security.md`, `tech-debt.md`, and the identity/danger-zone prose of `SKILL.md` (anything outside the markers).
 3. **Update `last_scanned`** in the `SKILL.md` frontmatter and the wrapper comments.
 4. **Flag drift:** if the scan changed materially (new modules, stack change, endpoints added/removed), prepend a one-line note to the affected human files: `> ⚠ possible drift since last scan — review.` Do not edit their content.
-5. Tell the user what was refreshed vs preserved.
+5. Tell the user what was refreshed vs preserved. A refresh is not finished until the installed plugin loads it: STEP 5 Option A (patch bump + commit); push when the owner asked for it (renovate's CONTEXT block does), then `claude plugin marketplace update <mk>` + `claude plugin update <plugin>@<mk>` + `/reload-plugins` (or a new session).
 
 ### STEP 5: Package and install
 
@@ -249,7 +249,7 @@ full naming convention). Create it there if missing:
 `.claude-plugin/marketplace.json` + `plugins/<plugin>/.claude-plugin/plugin.json`, own
 git repo. Then bump the plugin's `version` (minor for a new skill, patch for a
 refresh), update the marketplace README table, commit in THAT repo — and never push
-for the user. Registration lives in the profile's Claude settings, not the container.
+for the user unless the owner asked (e.g. through renovate's CONTEXT block). Registration lives in the profile's Claude settings, not the container.
 
 **Option B — standalone `.skill` zip** (no marketplace, or claude.ai):
 

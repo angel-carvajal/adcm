@@ -35,7 +35,7 @@ courier-preflight <docs_dir> --batches   # batch1=f1,f2;batch2=f3
 courier-preflight <docs_dir> --block-only --account auto|NAME [--include-hidden]   # the links of the session's account
 courier-preflight <docs_dir> --set-regen FILE COMMAND
 courier-preflight <docs_dir> --mark-published FILE URL VERSION [--previous-url OLD] [--account NAME]
-courier-preflight <docs_dir> --account auto|NAME   # auto = last_session_account, else active_account; NAME: work on url_NAME; --set-active-account NAME makes url_NAME the canonical url (the old url moves to url_<old account>)
+courier-preflight <docs_dir> --account auto|NAME   # auto = last_session_account, else active_account; NAME: work on url_NAME; --set-active-account NAME makes url_NAME the canonical url (the old url moves to url_<old account>); with no `active_account` and no `url_NAME` family it only declares the account
 courier-preflight --pages SAVED_FILE --page-kb 60 --page-lines 450
 ```
 

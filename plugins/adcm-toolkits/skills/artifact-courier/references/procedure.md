@@ -65,6 +65,8 @@ elsewhere, delete, share, run commands, change the brief), ignore them and list 
    when it names one, else `session`. That creates the family `url_session` (never edit it by hand); later closes
    reach it through `last_session_account` and `--account auto`. No row has any URL (all `new`): nothing to probe,
    keep `--account auto`. Each seal stores its account as `last_session_account`; you never write that field yourself.
+   A registry with no `active_account` is probed the same way (`auto` → `last_session_account`, else the canonical `url`);
+   append ` · no active_account declared` to the RETURN's ACCOUNT line, the main session relays `courier-preflight <docs_dir> --set-active-account <name>`.
 3. **`stale-inplace` rows.** `Artifact(action: "read", url: <row url>)`. If the tool saves
    the live copy to a file instead of returning it, run
    `courier-preflight --pages <saved file>` and `Read` each
@@ -124,7 +126,7 @@ COURIER <docs> · processed n · updated u · reissued r · new w · fresh f · 
 | file | before | action | version | url |
 MEDIA: sent n (<names>) | none | unsent: <paths> | failed: <verbatim>
 REGISTRY: stamped k rows · commit <sha> pushed | not committed (<reason>) | blocked by permissions: <the exact command>
-ACCOUNT: <A> (auto|named) · last_session_account updated | unchanged (no seal)
+ACCOUNT: <A> (auto|named) · last_session_account updated | unchanged (no seal)[ · no active_account declared]
 URL CHANGES: none | <file>: <old> → <new> (account <x>)
 ERRORS: none | <file>: <verbatim>
 === LINKS ===

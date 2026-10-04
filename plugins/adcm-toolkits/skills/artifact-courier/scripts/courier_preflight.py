@@ -43,6 +43,8 @@ the active account; the default report header then prints `account: <resolved> (
 prints, per row, the url of the resolved account's family and falls back to the canonical `url` when the
 family has none (a warning on stderr names those rows): the block the main session pastes is the
 current account's. The `=== LINKS ===` section of the default report follows the same rule.
+`--summary` ends with ` · account: <resolved> (auto|named)` only when --account is passed (without the
+flag the line is exactly the one status_digest.py has always read).
 
 Usage
   courier_preflight.py <docs_dir|artifacts.json> [--module REL]... [--only F,F]
@@ -67,7 +69,10 @@ Usage
                         active account, `previous` when none is set); rows without `url_NAME` stay
                         untouched and are listed;
                         `active_account` (and `cuenta_activa` if present) = NAME; running it
-                        again with the old account restores every `url`)
+                        again with the old account restores every `url`. A registry that declares
+                        no active account and has no `url_NAME` family on any row is only
+                        declared: `active_account: NAME` is written, nothing else changes. Exit 2
+                        when NAME is already the active account)
   courier_preflight.py --pages SAVED_FILE [--page-kb 60] [--page-lines 450]
 
 Reading never writes anything. Only --mark-published, --set-regen and --set-active-account write
@@ -89,7 +94,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
-__version__ = "0.15.1"
+__version__ = "0.15.2"
 
 REGISTRY_CANDIDATES = ("artifacts.json", "ai/ai-brain/artifacts.json", "ai-brain/artifacts.json")
 DEFAULT_MARKERS = ("task.md", "execute.md", "detailed-plan.md")
@@ -520,6 +525,8 @@ def report(args):
             parts.append(f"batches {len(batches)}: {batches_text(batches)}")
         if work_rows and counts.get("fresh", 0) == len(work_rows) and not due and not need:
             parts.append("nothing to publish")
+        if args.account:
+            parts.append(f"account: {account or 'not set'} ({'auto' if auto else 'named'})")
         print("courier-preflight: " + " · ".join(parts))
         return 0
 
@@ -750,6 +757,10 @@ def set_active_account(args):
         if (old or "").strip() == name.strip():
             die(f"{name!r} is already the active account, nothing to swap")
         osuf = suffix_for(old)
+        if not (old or "").strip() and not any(isinstance(acct_get(a, "url", name), str) and acct_get(a, "url", name)
+                                   for a in data["artifacts"] if isinstance(a, dict)):
+            data["active_account"] = name  # nothing declared, nothing to move: just declare it
+            return old, None, None
         swapped, kept = [], []
         for a in data["artifacts"]:
             if not isinstance(a, dict) or not isinstance(a.get("file"), str):
@@ -781,6 +792,9 @@ def set_active_account(args):
         return old, swapped, kept
 
     old, swapped, kept = update_registry(args.target, mutate)
+    if swapped is None:
+        print(f"declared active_account: {name} (no url_{name} families to move)")
+        return 0
     print(f"active account: {old or 'not set'} -> {name}")
     print(f"moved the url_{name} family -> canonical keys and the canonical family -> _{suffix_for(old)} "
           f"on {len(swapped)} row(s): {', '.join(swapped)}")
@@ -870,8 +884,11 @@ def main():
                         "--summary, state machine; rows without it are `other-account`), and "
                         "--mark-published seals url_NAME and leaves url alone")
     p.add_argument("--set-active-account", metavar="NAME",
-                   help="move the registry to account NAME: swap url <-> url_NAME on every row that has it "
-                        "and set active_account (and cuenta_activa if present)")
+                   help="move the registry to account NAME: on every row that has url_NAME the url family "
+                        "is renamed (url_NAME -> url, old url -> url_<old active>) and active_account "
+                        "(and cuenta_activa if present) is set; a registry that declares no active account "
+                        "(missing or empty) and has no url_NAME family is only declared: active_account: NAME "
+                        "is written, nothing else changes; exit 2 when NAME is already active")
     p.add_argument("--pages", metavar="SAVED_FILE")
     p.add_argument("--page-kb", type=float, default=60)
     p.add_argument("--page-lines", type=int, default=450)

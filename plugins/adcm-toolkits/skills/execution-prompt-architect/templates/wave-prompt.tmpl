@@ -162,7 +162,7 @@ a · sonnet b) · escalations` at close. You are a PURE orchestrator
 (`references/orchestrator-rule.md` of the skill `execution-prompt-architect`): you do
 not read files in bulk, edit at scale, render, browse or publish — only the ≤~20-line
 logged fixes and the verbatim save of a sub-agent's RETURN to the path its brief names
-(gate reports `qa/gate-<w>.md`, digests) — and every `Agent`/`Workflow` call, Plan and Explore agents included,
+(gate reports `qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout, digests) — and every `Agent`/`Workflow` call, Plan and Explore agents included,
 names its `model` or is an `adcm-toolkits:*` type. The user's `sin tanto lío` (that task) or `modo directo` (until
 `modo orquestador`) switches it off.
 {{ALWAYS spell out the cycle with real IDs and scopes, e.g.:
@@ -199,7 +199,7 @@ verification — the verifier attacks the bytes that ship and is never the simpl
 Before closing: MANDATORY adversarial
 verification — launch ANOTHER `adcm-toolkits:auditor` (the reserved one) that did NOT see
 the implementation, give it only the diff + the DoD + the attack checklist for
-{{Wx}} in execute.md §6, with `REPORT PATH: {{docs_dir}}/qa/gate-{{Wx}}.md` in its brief: the
+{{Wx}} in execute.md §6, with `REPORT PATH: {{docs_dir}}/qa/gate-{{Wx}}.md` — or the brain's existing layout (e.g. `qa/<wave>/gate-*.md` when `qa/` already has per-wave folders; never change an existing brain's convention) — in its brief: the
 auditor returns the full report under `REPORT:` and you save it verbatim (a mechanical save;
 log `gate report: <path>`). Every finding is fixed and re-verified before close."}}
 {{If advisory (NO-gate but the task spec or risk profile asks for an independent

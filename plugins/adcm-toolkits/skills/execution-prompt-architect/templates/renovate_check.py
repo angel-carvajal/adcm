@@ -2,7 +2,7 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json and scripts/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.15.0) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.15.2) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
 --copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
 from this report, never by this script.
@@ -33,7 +33,11 @@ Blocks (ok | missing | partial | outdated | n/a)
              path reads a templates copy that a cache purge deletes; JSON `blocks.scripts.cache_dep`
              lists the sorted brain-relative paths (`.build/y.sh`, `scripts/x.py`) and the block is
              needed (point the script to the local scripts/*.tmpl copies)
-  ARTIFACTS  registry rows without `regen` (`none` counts ok) with the suggested --set-regen command
+  ARTIFACTS  registry rows without `regen` (`none` counts ok) with the suggested --set-regen command;
+             a registry with rows that declares no `active_account`/`cuenta_activa` (missing or empty)
+             adds the advice line `· review: no active_account declared → courier-preflight <docs_dir>
+             --set-active-account <name>` (never needed; JSON `blocks.artifacts.no_active_account`,
+             shed with the registry rows under the 40-line cap)
   EXECUTE    role types, digest line, LAST LOG in section 4, Next/blocked labels in 2b, model rule,
              `> **Protocol:**` line, SKILLS line per pending wave of section 7
   TASK       `## DoD-human pending` (canonical) or an equivalent legacy section
@@ -58,7 +62,7 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.15.1"
+__version__ = "0.15.2"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
@@ -371,14 +375,14 @@ def read_execute(text, glyphs):
 def read_artifacts(path, lang, ids):
     """Registry block: rows without `regen` (absent or empty; `none` and project builders count ok)."""
     if not os.path.lexists(path):
-        return {'state': 'n/a', 'total': 0, 'rows_without_regen': []}
+        return {'state': 'n/a', 'total': 0, 'rows_without_regen': [], 'no_active_account': False}
     try:
         data = json.loads(read_text(path) or '')
     except ValueError:
         data = None
     rows = data.get('artifacts') if isinstance(data, dict) else data
     if not isinstance(rows, list):  # present but not a registry: a renovation cannot guess its rows
-        return {'state': 'unparsed', 'total': 0, 'rows_without_regen': []}
+        return {'state': 'unparsed', 'total': 0, 'rows_without_regen': [], 'no_active_account': False}
     rows = [r for r in rows if isinstance(r, dict)]
     bad = []
     for r in rows:
@@ -390,7 +394,10 @@ def read_artifacts(path, lang, ids):
                    'python3 scripts/prompts-regen.py --brain . --lang %s --init %s %s' % (lang, ','.join(ids), f)
                    if base == 'prompts.html' and ids else 'blocked: needs wave ids' if base == 'prompts.html' else 'none')
             bad.append({'file': f, 'suggest': cmd})
-    return {'state': 'missing' if bad else 'ok', 'total': len(rows), 'rows_without_regen': bad}
+    declared = isinstance(data, dict) and any(isinstance(data.get(k), str) and data[k].strip()
+                                              for k in ('active_account', 'cuenta_activa'))
+    return {'state': 'missing' if bad else 'ok', 'total': len(rows), 'rows_without_regen': bad,
+            'no_active_account': isinstance(data, dict) and bool(rows) and not declared}
 
 
 def review(tdir, lang):
@@ -650,6 +657,8 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
                'ARTIFACTS unparsed (artifacts.json is not a registry)' if a['state'] == 'unparsed' else
                'ARTIFACTS %s · %d rows%s' % (a['state'], a['total'], ' · %d without regen' % len(r) if r else ''))
     rows_l = ['  %s → %s' % (x['file'], x['suggest']) for x in r]
+    rev_l = (['  · review: no active_account declared → courier-preflight <docs_dir> --set-active-account <name>']
+             if a.get('no_active_account') else [])  # advice only: never in `needed`
     why = lacks(e['markers'], p['found']) if e['markers'] else []
     mid = ['EXECUTE n/a (no execute.md)' if e['state'] == 'n/a' else
            'EXECUTE %s%s' % (e['state'], ' · lacks ' + ', '.join(why) if why else '')]
@@ -678,17 +687,18 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
         fmt = lambda x, n: ' '.join('%s=%d' % kv for kv in x.items()) + ' · lines=%d' % n['execute_lines']
         inv_l = ['INVARIANTS ' + fmt(inv, stats)] + ['INVARIANTS %s %s' % (m['module'], fmt(m['invariants'], m['stats'])) for m in mods]
     last = 'RENOVATE: needed(%s)' % ','.join(needed) if needed else 'RENOVATE: up-to-date'
-    fits = lambda: len(pre + rows_l + mid + rules_l + after + mod_l + inv_l) + 1 <= MAX_LINES
-    if not fits() and rows_l:  # shed order: registry rows, module lines, RULES findings, module INVARIANTS (the root one stays)
-        rows_l = ['  … %d rows without regen (use --json)' % len(rows_l)]
+    fits = lambda: len(pre + rows_l + rev_l + mid + rules_l + after + mod_l + inv_l) + 1 <= MAX_LINES
+    if not fits() and (rows_l or rev_l):  # shed order: registry rows (+ the review line), module lines, RULES findings, module INVARIANTS (the root one stays)
+        rows_l = ['  … %d rows without regen (use --json)' % len(rows_l)] if rows_l else []
+        rev_l = []
     if not fits() and mod_l:
         mod_l = ['  … %d modules, %d need work (use --json)' % (len(mods), sum(bool(m['needed']) for m in mods))]
     if not fits() and rules_l:
         rules_l = ['  … %d findings (use --json)' % len(ru['findings'])]
     if not fits():
-        room = MAX_LINES - len(pre + rows_l + mid + rules_l + after + mod_l) - 1
+        room = MAX_LINES - len(pre + rows_l + rev_l + mid + rules_l + after + mod_l) - 1
         inv_l = inv_l[:room - 1] + ['INVARIANTS … %d module lines not shown (use --json)' % (len(inv_l) - room + 1)]
-    return pre + rows_l + mid + rules_l + after + mod_l + inv_l + [last]
+    return pre + rows_l + rev_l + mid + rules_l + after + mod_l + inv_l + [last]
 
 
 def emit(args, data, lines, code):

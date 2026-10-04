@@ -8,7 +8,7 @@ All paths are relative to `<docs_dir>`. The preflight accepts the folder or the 
 | Field | Meaning |
 |---|---|
 | `close_markers` | Docs whose change means "closing" a module (default `task.md`, `execute.md`, `detailed-plan.md`). The guard and `--module` use them to find each row's module root. |
-| `active_account` | Which claude.ai account the `url` field belongs to (a localized alias, `cuenta_activa`, is read too). The brief's `ACCOUNT` (default `auto`) is resolved against it; `--set-active-account NAME` renames: `url` ← `url_<NAME>`, the old `url` → `url_<old active>`, `url_<NAME>` removed, and `active_account` ← NAME (rows without `url_<NAME>` are left as they are). |
+| `active_account` | Which claude.ai account the `url` field belongs to (a localized alias, `cuenta_activa`, is read too). The brief's `ACCOUNT` (default `auto`) is resolved against it; `--set-active-account NAME` renames: `url` ← `url_<NAME>`, the old `url` → `url_<old active>`, `url_<NAME>` removed, and `active_account` ← NAME (rows without `url_<NAME>` are left as they are). On a registry with no `active_account` and no `url_<NAME>` family anywhere it only declares: writes `active_account: NAME`, exit 0. Renovate flags a registry with rows but no declared account as `review`. |
 | `last_session_account` | Informational, top-level: the account the last seal ran under, written by every `--mark-published`, with or without `--account`. `--account auto` resolves to it, else to `active_account`. It is a hint, never a URL: a stale value costs one failed probe (procedure step 2b), never a wrong link. Never edit it by hand. |
 | `artifacts` | The rows below. Unknown top-level and row fields are preserved untouched. |
 

@@ -31,7 +31,13 @@ canonical link of the registry's `active_account`, `url_<account>` the link of a
     (else to the active account) and the report header prints `account: <resolved> (auto)`;
   - --block-only (and the `=== LINKS ===` section of the default report) is the block the main session
     pastes: per row the url of the resolved account's family, falling back to the canonical `url`
-    (with a stderr warning) when the family has none.
+    (with a stderr warning) when the family has none;
+  - --set-active-account NAME on a registry that declares no account (neither `active_account` nor
+    `cuenta_activa`) and has no `url_<NAME>` family only DECLARES it (writes `active_account`, rows
+    untouched, exit 0; a second run exits 2); with families, or with an account already declared,
+    it swaps/renames as above (exit 2 when nothing can move);
+  - --summary under --account NAME|auto ends with ` · account: <resolved> (named|auto)`; without
+    --account the line is unchanged.
 
 Fixtures are generic (account names "acmecorp" and "alt", example.com links, no private
 paths). The script under test defaults to the courier_preflight.py next to this file; pass
@@ -41,6 +47,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -171,6 +178,11 @@ def sha(path):
         return hashlib.sha256(fh.read()).hexdigest()
 
 
+def strip_account(out):
+    """A --summary line without its trailing ` · account: <name> (named|auto)` (printed under --account since 0.15.2)."""
+    return re.sub(r" · account: \S+ \((?:named|auto)\)$", "", out.rstrip("\n")) + "\n"
+
+
 def batch_files(out):
     """Files named in a 'batch1=a,b;batch2=c' line."""
     return [f for part in out.strip().split(";") if "=" in part for f in part.split("=", 1)[1].split(",") if f]
@@ -194,7 +206,8 @@ def case_default_uses_url_and_active_account_equals_default(ctx, t):
     for flag in ("--block-only", "--batches", "--summary"):
         base, same = ctx.run(d, flag), ctx.run(d, flag, "--account", ACTIVE)
         t.eq(same.rc, 0, f"{flag} --account {ACTIVE} exit code")
-        t.eq(same.out, base.out, f"{flag} --account {ACTIVE} output == default")
+        norm = strip_account if flag == "--summary" else (lambda x: x)  # the summary tags the account since 0.15.2
+        t.eq(norm(same.out), base.out, f"{flag} --account {ACTIVE} output == default")
     same = ctx.run(d, "--account", ACTIVE)
     t.eq(table_rows(same.out), rows, f"work table with --account {ACTIVE} == default")
     # a stamp under the active account updates `url`, never url_alt
@@ -420,8 +433,8 @@ def case_last_session_account(ctx, t):
     t.eq(rows.get("deck.html", {}).get("STATE"), "other-account", "auto: the row without url_alt is other-account")
     t.eq(ctx.run(d, "--account", "auto", "--block-only").out, ctx.run(d, "--account", OTHER, "--block-only").out,
          "--account auto == --account alt for --block-only")
-    t.eq(ctx.run(d, "--account", "auto", "--summary").out, ctx.run(d, "--account", OTHER, "--summary").out,
-         "--account auto == --account alt for --summary")
+    t.eq(strip_account(ctx.run(d, "--account", "auto", "--summary").out), strip_account(ctx.run(d, "--account", OTHER, "--summary").out),
+         "--account auto == --account alt for --summary (apart from the account tag)")
     t.eq(ctx.run(d, "--account", "auto", "--batches").out, ctx.run(d, "--account", OTHER, "--batches").out,
          "--account auto == --account alt for --batches")
     # a plain run is not influenced by the key
@@ -505,6 +518,78 @@ def case_block_only_uses_session_account(ctx, t):
          f"--account {ACTIVE} block == default block")
 
 
+def case_declare_active_account(ctx, t):
+    files = ("plans.html", "prompts.html")
+    # (a) no active_account/cuenta_activa and no url_<name> family: --set-active-account only declares it
+    d = ctx.registry("d1", files=files, alt_for=())
+    ctx.write_registry(d, ctx.load(d)["artifacts"], active=None)
+    before = ctx.load(d)
+    t.ok("active_account" not in before and "cuenta_activa" not in before, "fixture: the registry declares no account")
+    t.ok(not any(k.startswith("url_") for a in before["artifacts"] for k in a), "fixture: no row has a url_<name> family")
+    rows_before = json.dumps(before["artifacts"], ensure_ascii=False)
+    r = ctx.run(d, "--set-active-account", ACTIVE)
+    t.eq(r.rc, 0, f"--set-active-account {ACTIVE} (declare) exit code")
+    t.has(r.out, f"declared active_account: {ACTIVE}", "the output reports the declaration")
+    after = ctx.load(d)
+    t.eq(after.get("active_account"), ACTIVE, "top-level active_account == acmecorp")
+    t.eq(set(after), {"active_account", "artifacts"}, "only active_account was added at the top level")
+    t.eq(json.dumps(after["artifacts"], ensure_ascii=False), rows_before, "rows byte-identical (no swap, no url_<name> keys)")
+    t.ok(not os.path.exists(os.path.join(d, LOCK)), "lock file removed")
+    r = ctx.run(d, "--set-active-account", ACTIVE)
+    t.eq(r.rc, 2, "second --set-active-account (already the active account) exits 2")
+    t.eq(ctx.load(d), after, "the second run changes nothing")
+    # an account that is already declared (either spelling) is never re-declared as another one
+    for key in ("active_account", "cuenta_activa"):
+        d = ctx.registry(f"d1-{key}", files=files, alt_for=())
+        ctx.write_registry(d, ctx.load(d)["artifacts"], active=None, extra={key: ACTIVE})
+        raw = ctx.load(d)
+        r = ctx.run(d, "--set-active-account", OTHER)
+        t.eq(r.rc, 2, f"{key} declared + no url_{OTHER} family: --set-active-account {OTHER} still exits 2")
+        t.eq(ctx.load(d), raw, f"{key} declared + no url_{OTHER} family: the registry is untouched")
+    # (b) with families the swap/rename works as before (regression guard)
+    d = ctx.registry("d2", files=files)
+    r = ctx.run(d, "--set-active-account", OTHER)
+    t.eq(r.rc, 0, "with url_alt families: --set-active-account alt exit code")
+    t.ok("declared active_account" not in r.out, "with families the output is the swap report, not a declaration")
+    data = ctx.load(d)
+    t.eq(data.get("active_account"), OTHER, "with families: active_account == alt")
+    for a in data["artifacts"]:
+        t.eq(a.get("url"), ALT[a["file"]], f"{a['file']}: url is the former url_alt")
+        t.eq(a.get(f"url_{ACTIVE}"), CORP[a["file"]], f"{a['file']}: url_{ACTIVE} holds the former canonical link")
+    d = ctx.registry("d2b", files=files)  # no account declared but families exist: still the swap path
+    ctx.write_registry(d, ctx.load(d)["artifacts"], active=None)
+    r = ctx.run(d, "--set-active-account", OTHER)
+    t.eq(r.rc, 0, "no account declared but url_alt families exist: exit code")
+    t.ok("declared active_account" not in r.out, "no account declared but families exist: the swap report, not a declaration")
+    data = ctx.load(d)
+    t.eq(data.get("active_account"), OTHER, "no account declared but families exist: active_account == alt")
+    t.eq({a["file"]: a.get("url") for a in data["artifacts"]}, {f: ALT[f] for f in files}, "no account declared but families exist: urls swapped")
+    # (c) --summary tags the resolved account under --account, and only then
+    d = ctx.registry("d3", files=files)
+    plain = ctx.run(d, "--summary")
+    t.eq(plain.rc, 0, "--summary exit code")
+    t.has(plain.out, "courier-preflight: 2 rows", "plain --summary is the usual one-line contract")
+    t.lacks(plain.out, "· account:", "--summary without --account has no account text")
+    t.eq(plain.out, strip_account(plain.out), "--summary without --account is unchanged")
+    named = ctx.run(d, "--summary", "--account", OTHER)
+    t.eq(named.rc, 0, "--summary --account alt exit code")
+    t.eq(len(named.out.splitlines()), 1, "--summary --account alt is still one line")
+    t.ok(named.out.rstrip("\n").endswith(f" · account: {OTHER} (named)"), f"--summary --account alt ends with ' · account: alt (named)', got {named.out[-60:]!r}")
+    t.eq(strip_account(named.out).startswith("courier-preflight: "), True, "--summary --account alt keeps the courier-preflight prefix")
+    act = ctx.run(d, "--summary", "--account", ACTIVE)
+    t.ok(act.out.rstrip("\n").endswith(f" · account: {ACTIVE} (named)"), f"--summary --account acmecorp ends with ' · account: acmecorp (named)', got {act.out[-60:]!r}")
+    auto = ctx.run(d, "--summary", "--account", "auto")
+    t.ok(auto.out.rstrip("\n").endswith(f" · account: {ACTIVE} (auto)"),
+         f"--summary --account auto (no last_session_account: the active one) ends with ' · account: acmecorp (auto)', got {auto.out[-60:]!r}")
+    ctx.write_registry(d, ctx.load(d)["artifacts"], extra={"last_session_account": OTHER})
+    auto = ctx.run(d, "--summary", "--account", "auto")
+    t.eq(auto.rc, 0, "--summary --account auto (last_session_account: alt) exit code")
+    t.ok(auto.out.rstrip("\n").endswith(f" · account: {OTHER} (auto)"), f"--summary --account auto ends with ' · account: alt (auto)', got {auto.out[-60:]!r}")
+    t.eq(len(auto.out.splitlines()), 1, "--summary --account auto is still one line")
+    plain = ctx.run(d, "--summary")
+    t.lacks(plain.out, "· account:", "last_session_account present: --summary without --account still has no account text")
+
+
 CASES = [
     ("default_uses_url_and_active_account_equals_default", case_default_uses_url_and_active_account_equals_default),
     ("account_selects_url_other_account", case_account_selects_url_other_account),
@@ -516,6 +601,7 @@ CASES = [
     ("set_active_account_family", case_set_active_account_family),
     ("last_session_account", case_last_session_account),
     ("block_only_uses_session_account", case_block_only_uses_session_account),
+    ("declare_active_account", case_declare_active_account),
 ]
 
 
