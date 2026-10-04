@@ -1,5 +1,42 @@
 # Changelog — adcm-toolkits
 
+## 0.15.0 — 2026-10-03
+
+Lessons from the first three real renovations.
+
+- `plans-regen.py`: an inline-code `<!--` no longer opens an HTML comment that swallows the
+  rest of the document (two real trackers lost 60–85 % of their detailed plan); wave ids
+  without a digit or with a lowercase suffix (`WX`, `WSKILL-ARCH`, `W2a`, `WC-V2`) get their
+  badge, Gantt row and task cards; free-text wave references resolve against the wave map's
+  known ids first (digit-bearing ids stay as a fallback for maps that are incomplete); a link
+  whose URL is a code span can no longer inject attributes (XSS);
+  `--check` exits 3 on a hand-maintained layout (keep `regen: none`); `--init` on an existing
+  file needs `--force`. New `plans-regen-selftest.py`.
+- `prompts-regen.py`: lowercase-suffix ids; multiple deliveries per wave (`## Entrega|Delivery`
+  headings, one `<pre>` + copy button each; single-delivery waves render byte-identically);
+  status badges no longer show a literal `<strong>`; `--closed summary` (default) renders
+  closed waves as a title + badge + note instead of the full prompt, so the page stays under
+  the courier's re-issue size and keeps its URL (`--closed full` = the previous render);
+  `--init` without its template exits 2 instead of a traceback; `--init --check` creates
+  nothing. New `prompts-regen-selftest.py`.
+- `status_digest.py` finds `courier_preflight.py` from a brain copy (newest installed plugin
+  as a last resort); `courier_preflight.py` is now the seventh script copied into
+  `<docs_dir>/scripts/`; `renovate_check.py` flags brain scripts that read templates from a
+  plugin cache path (`cache-dep`), which break when the cache is purged.
+- `courier_preflight.py --account NAME` / `--mark-published … --account` /
+  `--set-active-account`: per-account URLs (`url_<account>`, `active_account`) are first-class;
+  the courier never re-issues on another account unless the brief says
+  `REISSUE ON OTHER ACCOUNT: yes` (brief field `ACCOUNT:`); the re-issue threshold moves from
+  300 KB to 600 KB (`--threshold-kb 600`): compacting closed waves alone left pending-heavy
+  trackers (400–520 KB) above 300 KB, so they would still get a new URL at every close.
+  New `courier-preflight-selftest.py`.
+- Policies made unambiguous: the agent budget is **20 per session** (planning run, each wave's
+  clean session and a renovation are separate sessions); a ⚠gate verifier that must produce a
+  report returns it under `REPORT:` and the main session saves it verbatim (third explicit
+  exception to the pure-orchestrator rule); renovate's generator checks apply only to rows
+  whose `regen` uses the generators; census drift caused by renovate is a ≤20-line SCOPE fix,
+  not a re-plan.
+
 ## 0.14.2 — 2026-10-03
 
 - `renovate_check.py` gains the **RULES** block: it resolves the project's auto-memory

@@ -9,7 +9,7 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
 `task.md` never translate.
 -->
 # {{project_name}} — Execution protocol ({{initiative_title}})
-> **Protocol:** adcm-toolkits 0.14.2
+> **Protocol:** adcm-toolkits 0.15.0
 
 > **What this is.** The operating manual of the build. It defines HOW the catalog in
 > `detailed-plan.md` gets executed: **wave sessions** (not 1 task = 1 session),
@@ -38,7 +38,9 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
    `adcm-toolkits:executor` called with `model: opus` and the loop does NOT close without **adversarial
    verification** by ANOTHER agent, an `adcm-toolkits:auditor` (the reserved one — never the
    executor itself, never the orchestrator's tier) that did NOT see the
-   implementation, given only the diff + the DoD + that wave's attack checklist (§6).
+   implementation, given only the diff + the DoD + that wave's attack checklist (§6). Its
+   brief carries `REPORT PATH: {{docs_dir}}/qa/gate-<w>.md`: it returns the full report under
+   `REPORT:` and the orchestrator saves it verbatim (a mechanical save, not an edit).
    This covers the simplifier too: it edits code, so it is an implementer — the
    orchestrator re-runs the DoD over its edits, and on ⚠gate waves the simplifier is
    neither the executor nor the reserved verifier, and runs BEFORE the verification.
@@ -68,7 +70,7 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
    **Escalation ladder** Sonnet → Opus → orchestrator: the 2nd failure of the SAME
    DoD line moves the task one tier up as a new agent carrying the attempt log.
    One counter per session, `model` explicit on every call or an `adcm-toolkits:*` type
-   (a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the main session is one tier down; types fix the TOOL SET, the tier rules still set the model), `SendMessage` to a live agent costs 0. Ultracode changes the orchestration (Workflow per phase + adversarial
+   (a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the main session is one tier down; types fix the TOOL SET, the tier rules still set the model), `SendMessage` to a live agent costs 0. Ultracode changes the orchestration (Workflow per stage + adversarial
    cross-check), never roles or count. Exceeding 20 is a protocol violation; the
    logbook records `agents used: n/20 (opus a · sonnet b)` with each agent's role
    (investigate / execute / review / simplify / verify / capture / courier) and every escalation.
@@ -78,7 +80,9 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
    brief. On the orchestrator's own last-rung fixes (≤~20 lines,
    when a brief would cost more than the change): every one is LOGGED in the
    `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an
-   unlogged orchestrator edit is a protocol violation, not a shortcut. The orchestrator
+   unlogged orchestrator edit is a protocol violation, not a shortcut. Saving a sub-agent's
+   RETURN verbatim to the path its brief names (gate reports `qa/gate-<w>.md`, digests) is a
+   mechanical save, not an edit. The orchestrator
    is otherwise PURE: it never reads files in bulk, never edits at scale, never renders,
    browses or publishes, and every `Agent`/`Workflow` call names its `model` (Plan and
    Explore agents included) or is an `adcm-toolkits:*` type. The user's phrase `sin tanto lío` (that one task) or
@@ -328,7 +332,7 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    `sonnet` fixed; normally 1 courier, each extra batch = 1 more of the 20, 0 Opus quota). The courier runs each registry
    row's `regen` (`plans-regen.py` for `plans.html`, `prompts-regen.py` for
    `prompts.html`, both copied with their `.tmpl` to `{{docs_dir}}/scripts/`), republishes
-   every stale artifact to its SAME URL — or re-issues it as a new one above ~300 KB —
+   every stale artifact to its SAME URL — or re-issues it as a new one above ~600 KB —
    stamps `published_at`/`version`/`sha256` in `{{docs_dir}}/artifacts.json`, commits
    that file, returns the media paths (`MEDIA: unsent`) and a table plus the links block. `prompts.html`
    changes whenever a §7 header flips or a prompt is regenerated, so BOTH pages are

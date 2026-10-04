@@ -17,8 +17,8 @@ comment policy, and a code-simplifier pass that closes every wave.
 > parallel, own worktrees); one packaged `code-simplifier` pass (model: opus) closes
 > every wave and one `adcm-toolkits:courier` per batch (normally 1; each 1 of the 20, 0 Opus quota) delivers
 > its artifacts and links; an escalation ladder Sonnet → Opus → Fable kicks in on
-> the 2nd failure of the same DoD line; budget 20 sub-agents per analysis phase
-> and per wave session, with the Opus quota of 10 reserving two slots — the gate
+> the 2nd failure of the same DoD line; budget 20 sub-agents per session
+> (a planning run, each wave session and a renovation count separately), with the Opus quota of 10 reserving two slots — the gate
 > verifier and the simplify pass — ultracode included.** Every generated wave prompt
 > carries that budget, those roles, one executor brief per task and the wave's
 > simplifier brief as a hard limit, and the logbook records the agents actually used
@@ -113,7 +113,7 @@ analysis is faster, cheaper and far more precise.
   brief → Sonnet executes → the orchestrator verifies, escalates and integrates → Opus
   reviews regression → checkpoint commit + the code-simplifier pass → re-run the full
   DoD), one pre-filled executor brief per task and one simplifier brief per wave.
-  Ultracode changes the orchestration (a Workflow per phase + an adversarial
+  Ultracode changes the orchestration (a Workflow per stage + an adversarial
   cross-check), not the roles or the count: the 20-agent budget applies in every
   effort level.
 

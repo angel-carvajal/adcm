@@ -16,12 +16,20 @@ Only the inner HTML of <article id="doc-proposal|master|detailed|timeframe"> is 
 <head>, styles, hero, theme and script stay byte-identical (the script builds the TOC
 client-side from each article's .sec > h2, so there is no TOC markup to rewrite).
 The shell is built from `plans-html.tmpl` (next to this script) automatically when <out> is
-missing; `--init` also rebuilds it when <out> has no doc-* articles (a legacy hand-render).
-On an existing shell `--init` is a no-op: only the article bodies are patched.
+missing. An EXISTING <out> is never rewritten from the template unless you pass `--init --force`
+(a hand-maintained page has no doc-* articles: keep its regen `none`, or rebuild it that way).
+`--init` alone on an existing <out> exits 1 and leaves the file untouched.
 
 Rules: `## x` -> <section class="sec" id="<p|m|d|t>-slug"><h2>; `## Wave|Ola <ID> ...` ->
 id "<prefix>-<id>" + status badge (.ok/.pending/.blocked) from the task.md wave map, and
-"⚠" -> badge.gate; `### T-...`/`### Tn` in the detailed plan -> .task card. Timeframe
+"⚠" -> badge.gate; `### T-...`/`### Tn` in the detailed plan -> .task card. Wave ids are
+`[A-Z][A-Za-z0-9]*(-[A-Za-z0-9]+)*` (W0, WX, W2a, WC-V2, WSKILL-ARCH, WO-1, W18). The wave map takes
+each id from the Wave/Ola column of its header (the first bold id-shaped token of the row only when
+the header has no such column). In free text (Gantt, task ids) only ids known from the wave map or a
+wave heading, or a digit-bearing id like W7, are recognised, longest first, so prose never yields a
+false id and `W2a … W3` keeps W2a. HTML comments (docs and task.md) are removed, but a `<!--` inside
+an inline code span or a fenced block is literal text and never opens one. Links with a quote,
+whitespace or code span in the URL, and non-http(s)/mailto schemes, stay plain text. Timeframe
 §0/§1 are located by their leading number ("1. T", "1) T" or "1 T"; first match wins).
 §0+§1 become one "Schedule" section: §0 table, pure-CSS Gantt, §1 table. Weeks come from
 §1's week column ("1-2", "Wk 3"), else §4 (one row = one period, wave ids in its waves
@@ -32,9 +40,11 @@ code, blockquotes, inline code/bold/italic/strike/links).
 
 Usage:
   python3 plans-regen.py <out.html> --brain <docs_dir> [--lang es|en] [--project NAME]
-      [--docs proposal=F,master=F,detailed=F,timeframe=F] [--init] [--check]
---check writes nothing: exit 1 if a source (or task.md) is newer than <out> or the
-regenerated articles differ, else 0.
+      [--docs proposal=F,master=F,detailed=F,timeframe=F] [--init [--force]] [--check]
+--check writes nothing. Exit 0 = fresh; 1 = stale (a source or task.md is newer than <out>, the
+regenerated articles differ, or <out> is missing); 3 = <out> exists but is hand-maintained (no
+doc-* articles; message on stderr): keep its regen `none` or pass --init --force.
+--init --force rewrites an existing <out> from the template; --init alone refuses (exit 1).
 """
 import argparse
 import html
@@ -49,8 +59,10 @@ NAMES = {'proposal': ('propuesta-ejecutiva', 'executive-proposal'), 'master': ('
 PREFIX = {'proposal': 'p', 'master': 'm', 'detailed': 'd', 'timeframe': 't'}
 GL = '✅⛔⏸🔄☐'
 STATUS = {'✅': ('ok', 0), '⛔': ('blocked', 1), '⏸': ('blocked', 2), '🔄': ('pending', 3), '☐': ('pending', 4)}
-WID = r'[A-Z][A-Z0-9]*-?\d[A-Z0-9-]*'
-WID_AT = rf'(?<![\w-])({WID})(?![\w])'
+WID = r'[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*'
+WID_DIGIT = r'[A-Z][A-Z0-9]*-?\d[A-Z0-9-]*'  # prose-safe shape (W7): recognised in free text even when not in the wave map
+BOLD = re.compile(r'\*\*(?:(?:Wave|Ola)\s+)?([^\s*—–:,(]+)[^*]*\*\*')
+CODE_SPAN = re.compile(r'(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)')
 STREAMS = ['var(--primary)', '#22C55E', '#F59E0B', '#EC4899', '#06B6D4']
 LANG = {
     'es': {'nav': ['Propuesta ejecutiva', 'Plan maestro', 'Plan detallado'],
@@ -74,6 +86,20 @@ def slug(s):
     s = unicodedata.normalize('NFKD', s.lower()).encode('ascii', 'ignore').decode()
     return re.sub(r'[^a-z0-9]+', '-', s).strip('-')[:60] or 'sec'
 
+def is_wid(tok):
+    """A wave id by shape, for a token the wave map does not vouch for: WID with a digit (W2a, WC-V2) or an
+    all-caps W… id (WX, WSKILL-ARCH); never a word like "Summary" or an acronym like "API"."""
+    return bool(re.fullmatch(WID, tok)) and (any(c.isdigit() for c in tok) or bool(re.fullmatch(r'W[A-Z]*(?:-[A-Z]+)*', tok)))
+
+def known_alt(known):
+    """Regex alternation of the known wave ids, longest first, escaped ("" when there are none)."""
+    return '|'.join(re.escape(k) for k in sorted(set(known), key=lambda k: (-len(k), k)))
+
+def wid_at(known):
+    """Compiled free-text matcher: a known id (longest first) or a digit-bearing id, never glued to other letters."""
+    alt = known_alt(known)
+    return re.compile(rf'(?<![\w-])({alt + "|" if alt else ""}{WID_DIGIT})(?![A-Za-z0-9])')
+
 # ---------------------------------------------------------------- inline markdown
 def inline(s):
     keep, hrefs = [], []
@@ -83,10 +109,12 @@ def inline(s):
         return f'\x00{len(keep) - 1}\x00'
 
     def link(m):
-        u = m.group(2).replace('"', '%22')
+        u = m.group(2)
+        if re.search(r'[\x00"\'\s]', u):
+            return m.group(0)  # a code-span placeholder, quote or space in the URL could break out of href: plain text
         if re.match(r'[a-z][a-z0-9+.-]*:', u, re.I) and not re.match(r'(?:https?|mailto):', u, re.I):
             return m.group(0)  # javascript: and friends stay plain text
-        hrefs.append(u)
+        hrefs.append(attr(html.unescape(u)))  # u is already esc()'d: unescape first so attr() does not double-escape
         return f'<a href="\x01{len(hrefs) - 1}\x01">{m.group(1)}</a>'
 
     s = esc(re.sub(r'`([^`]+)`', code, s))
@@ -235,18 +263,46 @@ def blocks(lines):
             i = j
     return '\n'.join(out)
 
+def cut_comments(ln, cmt):
+    """(visible text of one line, still inside a comment). A `<!--` opens a comment only outside inline code spans."""
+    out, pos = [], 0
+    while pos < len(ln):
+        if cmt:
+            end = ln.find('-->', pos)
+            if end < 0:
+                break
+            pos, cmt = end + 3, False
+            continue
+        op = ln.find('<!--', pos)
+        if op < 0:
+            out.append(ln[pos:])
+            break
+        span = CODE_SPAN.search(ln, pos)
+        if span and span.start() < op:  # the code span starts first: its `<!--` is literal text
+            out.append(ln[pos:span.end()])
+            pos = span.end()
+            continue
+        out.append(ln[pos:op])
+        pos, cmt = op + 4, True
+    return ''.join(out), cmt
+
+def uncomment(text):
+    """Lines of text without HTML comments; fenced blocks and inline code spans are never scanned.
+    Lines swallowed by a comment are dropped, but the visible rest of every line (empty for those) feeds the fence state."""
+    out, fence, cmt = [], None, False
+    for ln in text.split('\n'):
+        swallowed = cmt and '-->' not in ln
+        if fence is None and (cmt or not FENCE.match(ln.strip())):
+            ln, cmt = cut_comments(ln, cmt)
+        fence = fence_next(ln, fence)
+        if not swallowed:
+            out.append(ln)
+    return out
+
 def split_sections(text):
     """[(heading, [lines])] per '## ' outside fences; H1/preamble dropped, HTML comments removed."""
-    secs, fence, cmt = [], None, False
-    for ln in text.split('\n'):
-        if fence is None:
-            if cmt:
-                if '-->' not in ln:
-                    continue
-                cmt, ln = False, ln.split('-->', 1)[1]
-            ln = re.sub(r'<!--.*?-->', '', ln)
-            if '<!--' in ln:
-                cmt, ln = True, ln.split('<!--', 1)[0]
+    secs, fence = [], None
+    for ln in uncomment(text):
         nxt = fence_next(ln, fence)
         if fence is None and nxt is None and ln.startswith('## '):
             secs.append((ln[3:].strip(), []))
@@ -256,9 +312,22 @@ def split_sections(text):
     return secs
 
 # ---------------------------------------------------------------- statuses + headings
+TASK_ID = re.compile(r'T-?[A-Za-z0-9-]*\d[A-Za-z0-9-]*')
+
+def wave_cell_id(cell):
+    """Wave id held by the wave-map's Wave/Ola cell: its first bold token, else the leading plain token
+    ("W6", "Wave W6 — Title"); a plain word that is not of id shape ("Pagos") is a title, not an id."""
+    m = BOLD.search(cell)
+    if m and re.fullmatch(WID, m.group(1)):
+        return m.group(1)
+    m = re.match(rf'(?:(?:Wave|Ola)\s+)?({WID})(?![A-Za-z0-9])', plain(cell))
+    return m.group(1) if m and is_wid(m.group(1)) else None
+
 def wave_map(task_text):
-    """{wave id: glyph} from task.md's wave-map table (the table whose header says Wave/Ola)."""
-    out, in_map = {}, False
+    """{wave id: glyph} from task.md's wave-map table (the table whose header says Wave/Ola).
+    The id comes from the header's Wave/Ola column; only a header without one falls back to the first
+    bold id-shaped token in the row's first three cells (never a task id like T-W7-01)."""
+    out, in_map, wcol = {}, False, None
     for ln in task_text.split('\n'):
         c = cells(ln)
         if not ln.lstrip().startswith('|'):
@@ -266,8 +335,13 @@ def wave_map(task_text):
         elif not is_sep(c):
             if not in_map:
                 in_map = bool(re.search(r'\b(wave|ola)\b', ln, re.I)) and not re.search(f'[{GL}]', ln)
+                wcol = next((i for i, h in enumerate(c) if re.search(r'\b(?:wave|ola)\b', plain(h), re.I)), None)
                 continue
-            wid = next((m.group(1) for x in c[:3] for m in [re.search(rf'\*\*(?:(?:Wave|Ola)\s+)?({WID})\*\*', x)] if m), None)
+            if wcol is not None and wcol < len(c):
+                wid = wave_cell_id(c[wcol])
+            else:
+                wid = next((m.group(1) for x in c[:3] for m in [BOLD.search(x)]
+                            if m and is_wid(m.group(1)) and not TASK_ID.fullmatch(m.group(1))), None)
             g = next((m.group(1) for x in c for m in [re.match(rf'\s*([{GL}])', x)] if m), None)
             if wid and g:
                 out.setdefault(wid, g)
@@ -290,13 +364,18 @@ def gate_badge(note):
         return ''
     return ' <span class="badge gate"' + (f' title="{attr(note)}"' if note else '') + '>⚠ gate</span>'
 
+def wave_heading(title, waves):
+    """(word, id, rest) when the title reads "Wave|Ola <id> ..." with an id from the wave map or of id shape, else None."""
+    m = re.match(r'(Ola|Wave)\s+([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)(?!\w)\s*(.*)$', plain(title))
+    return m.groups() if m and (m.group(2) in waves or is_wid(m.group(2))) else None
+
 def section_heading(title, waves, L):
     """(h2 inner HTML, plain title, wave id or None)."""
     title, gnote = gate_cut(title)
-    m = re.match(rf'(Ola|Wave)\s+({WID})\b\s*(.*)$', plain(title))
-    if not m:
+    hd = wave_heading(title, waves)
+    if not hd:
         return inline(title) + gate_badge(gnote), plain(title), None
-    word, wid, rest = m.groups()
+    word, wid, rest = hd
     g = re.search(f'[{GL}]', rest)
     if g and not rest[:g.start()].strip(' —–-:·'):  # "Wave W4 ✅ — Title": the glyph leads
         name, note = re.sub(r'^[\s—–:-]+', '', rest[g.end():]), ''
@@ -314,7 +393,10 @@ def sec_html(seen, base, h2, inner):
     seen.add(sid)
     return f'<section class="sec" id="{sid}">\n<h2>{h2}</h2>\n{inner}\n</section>'
 
-def task_cards(body, task_txt, L):
+def task_cards(body, task_txt, L, known=()):
+    tid_re = r'T-?[A-Za-z0-9-]*\d[A-Za-z0-9-]*'
+    if known_alt(known):  # digit-less wave ids too: "T-WX-A"
+        tid_re = rf'(?:{tid_re}|T-(?:{known_alt(known)})(?:-[A-Za-z0-9]+)*(?![A-Za-z0-9]))'
     chunks, fence = [[]], None
     for ln in body:
         if ln.startswith('### ') and fence is None:
@@ -323,7 +405,7 @@ def task_cards(body, task_txt, L):
         fence = fence_next(ln, fence)
     out = [blocks(chunks[0])]
     for ch in chunks[1:]:
-        m = re.match(rf'(?:([{GL}])\s*)?(T-?[A-Za-z0-9-]*\d[A-Za-z0-9-]*)\s*(?:([{GL}])\s*)?(?:[—–:-]+\s*|\s+)?(.*)$', ch[0][4:].strip())
+        m = re.match(rf'(?:([{GL}])\s*)?({tid_re})\s*(?:([{GL}])\s*)?(?:[—–:-]+\s*|\s+)?(.*)$', ch[0][4:].strip())
         if not m:
             out.append(blocks(ch))
             continue
@@ -335,11 +417,11 @@ def task_cards(body, task_txt, L):
                    f'<h4>{inline(ttl)}</h4>\n{blocks(ch[1:])}\n</div>')
     return '\n'.join(out)
 
-def render_doc(key, secs, waves, task_txt, L):
+def render_doc(key, secs, waves, task_txt, L, known=()):
     seen, out = set(), []
     for title, body in secs:
         h2, ptxt, wid = section_heading(title, waves, L)
-        inner = task_cards(body, task_txt, L) if key == 'detailed' else blocks(body)
+        inner = task_cards(body, task_txt, L, known) if key == 'detailed' else blocks(body)
         out.append(sec_html(seen, f'{PREFIX[key]}-{wid.lower() if wid else slug(ptxt)}', h2, inner))
     return '\n'.join(out)
 
@@ -354,18 +436,18 @@ def weeks_of(cell):
 def col_of(hdr, *keys):
     return next((i for i, h in enumerate(hdr) if any(k in h.lower() for k in keys)), None)
 
-def wave_ids(cell, known):
+def wave_ids(cell, known, wat):
     out = []
-    for m in re.finditer(WID_AT, plain(cell)):
+    for m in wat.finditer(plain(cell)):
         w = next((c for c in (m.group(1), m.group(1).split('-')[0]) if c in known), None)
         if w and w not in out:
             out.append(w)
     return out
 
-def gantt(sec0, sec1, sec3, sec4, waves, L):
+def gantt(sec0, sec1, sec3, sec4, waves, L, wat):
     rows = first_table(sec1)
     ws = [{'id': m.group(1), 'row': r, 'label': re.sub(rf'\s*[{GL}]', '', plain(r[0]))}
-          for r in rows[1:] for m in [re.search(WID_AT, plain(r[0]))] if m]
+          for r in rows[1:] for m in [wat.search(plain(r[0]))] if m]
     if not ws:
         return ''
     known = [w['id'] for w in ws]
@@ -379,14 +461,14 @@ def gantt(sec0, sec1, sec3, sec4, waves, L):
     t4 = first_table(sec4)
     c4 = col_of(t4[0], 'wave', 'ola', 'running', 'curso') if t4 else None
     for k, r in enumerate(t4[1:], 1):
-        ids = wave_ids(r[c4 if c4 is not None else min(1, len(r) - 1)], known)
+        ids = wave_ids(r[c4 if c4 is not None else min(1, len(r) - 1)], known, wat)
         per.append({'k': k, 'lab': plain(r[0]), 'ids': ids})
         if not ids and re.search(r'buffer|colch|margen|holgura|reserve', ' '.join(r), re.I):
             buf.append(k)
     for w in ws:
         ps = [p['k'] for p in per if w['id'] in p['ids']]
         w['span'] = weeks_of(at(w, 'wk')) or ((min(ps), max(ps)) if ps else None)
-        w['deps'] = wave_ids(at(w, 'dep'), known)
+        w['deps'] = wave_ids(at(w, 'dep'), known, wat)
     byid = {}
     for w in ws:
         byid.setdefault(w['id'], w)
@@ -447,7 +529,7 @@ def gantt(sec0, sec1, sec3, sec4, waves, L):
         r = r + [''] * 4
         wk = weeks_of(re.sub(r'(?i)^.*?\b(?:weeks?|wks?|semanas?)\s*(\d+).*$', r'\1', plain(r[cw])))
         k = wk[0] if wk else next((p['k'] for p in per if p['lab'] and p['lab'] == plain(r[cw])), None)
-        ids = (wave_ids(r[cb], known) if cb is not None else []) or [w['id'] for w in ws if w['span'][1] == k]
+        ids = (wave_ids(r[cb], known, wat) if cb is not None else []) or [w['id'] for w in ws if w['span'][1] == k]
         if k and ids:
             m = miles.setdefault((known.index(ids[0]) + 2, k), [[], False])
             m[0].append(plain(r[1]))
@@ -465,15 +547,16 @@ def gantt(sec0, sec1, sec3, sec4, waves, L):
              'var(--border-strong) 0 3px,transparent 3px 6px)"></span>Buffer</span>')
     return ''.join(g) + f'</div><div class="g-legend">{keys}</div>'
 
-def render_timeframe(secs, waves, L):
+def render_timeframe(secs, waves, L, known=()):
     first, seen, out = {}, set(), []  # the leading number only LOCATES §0/§1/§3/§4 (first match); order stays the document's
     for k, (t, _) in enumerate(secs):
         m = re.match(r'\s*(\d+)(?:\s*[.)]|\s)', t)  # "1. Title", "1) Title" and "1 Title"
         if m:
             first.setdefault(int(m.group(1)), k)
     part = lambda n: secs[first[n]][1] if n in first else []
-    g = gantt(part(0), part(1), part(3), part(4), waves, L)
-    if not g and re.search(WID_AT, plain(' '.join(part(1)))):
+    wat = wid_at(known)
+    g = gantt(part(0), part(1), part(3), part(4), waves, L, wat)
+    if not g and wat.search(plain(' '.join(part(1)))):
         print('  warning: timeframe §1 has wave ids but no Gantt was produced (is §1 a table whose first column starts with the wave id?)', file=sys.stderr)
     merged = {first[n] for n in (0, 1) if n in first} if g else set()
     for k, (t, body) in enumerate(secs):
@@ -534,25 +617,34 @@ def main():
     ap.add_argument('--lang', choices=['es', 'en'], help='UI strings language (default: the existing HTML\'s lang, else es when the ES doc names are found, else en)')
     ap.add_argument('--project', help='project name for the shell with --init (default: the master-plan H1 prefix, else the brain parent dir name)')
     ap.add_argument('--docs', help='explicit sources: proposal=F,master=F,detailed=F,timeframe=F (relative to --brain)')
-    ap.add_argument('--init', action='store_true', help='also rebuild the shell from plans-html.tmpl when <out> has no doc-* articles (a missing <out> is always initialized)')
-    ap.add_argument('--check', action='store_true', help='exit 1 if a source is newer than <out> or the regenerated articles differ; write nothing')
+    ap.add_argument('--init', action='store_true', help='rebuild the shell from plans-html.tmpl; on an EXISTING <out> it needs --force (a missing <out> is always initialized)')
+    ap.add_argument('--force', action='store_true', help='with --init: allow rewriting an existing <out> from the template (a hand-maintained page loses its layout)')
+    ap.add_argument('--check', action='store_true', help='write nothing; exit 0 fresh, 1 stale (source newer or articles differ), 3 <out> is hand-maintained (no doc-* articles)')
     a = ap.parse_args()
     brain, out = a.brain, pathlib.Path(a.out)
     src = resolve_docs(brain, a.docs)
     prev = re.search(r'<html lang="(es|en)"', out.read_text(encoding='utf-8')) if out.exists() else None
     lang = a.lang or (prev.group(1) if prev else 'es' if src['proposal'].name.startswith('propuesta') else 'en')
     L = LANG[lang]
+    cur = out.read_text(encoding='utf-8') if out.exists() else None
+    fresh = cur is None  # a missing output is initialized without --init (stored regen commands work on a fresh brain)
+    hand = not fresh and not all(f'id="doc-{k}"' in cur for k in NAMES)
+    if hand and a.check:
+        print('hand-maintained layout (no doc-* articles): keep regen none or pass --init --force', file=sys.stderr)
+        sys.exit(3)
+    if not fresh and a.init and not a.force and not a.check:
+        sys.exit(f'{out} already exists: --init needs --force to rewrite it from plans-html.tmpl (nothing written)')
+    if hand and not a.init:
+        sys.exit(f'{out} has no doc-* articles (pass --init --force to rebuild it from plans-html.tmpl)')
     txt = {k: p.read_text(encoding='utf-8') for k, p in src.items()}
     task_path = brain / 'task.md'
-    task_txt = task_path.read_text(encoding='utf-8') if task_path.exists() else ''
+    task_txt = '\n'.join(uncomment(task_path.read_text(encoding='utf-8'))) if task_path.exists() else ''
     waves = wave_map(task_txt)
-    articles = {k: render_timeframe(split_sections(txt[k]), waves, L) if k == 'timeframe'
-                else render_doc(k, split_sections(txt[k]), waves, task_txt, L) for k in NAMES}
-    cur = out.read_text(encoding='utf-8') if out.exists() else None
-    shell = cur is None or not all(f'id="doc-{k}"' in cur for k in NAMES)
-    fresh = cur is None  # a missing output is initialized without --init (stored regen commands work on a fresh brain)
-    if shell and not fresh and not a.init:
-        sys.exit(f'{out} has no doc-* articles (pass --init to rebuild it from plans-html.tmpl)')
+    secs = {k: split_sections(txt[k]) for k in NAMES}
+    known = set(waves) | {h[1] for ss in secs.values() for t, _ in ss for h in [wave_heading(gate_cut(t)[0], waves)] if h}
+    articles = {k: render_timeframe(secs[k], waves, L, known) if k == 'timeframe'
+                else render_doc(k, secs[k], waves, task_txt, L, known) for k in NAMES}
+    shell = fresh or (not a.check and (hand or (a.init and a.force)))
     old = cur
     if shell:
         tmpl = pathlib.Path(__file__).resolve().parent / 'plans-html.tmpl'

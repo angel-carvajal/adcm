@@ -8,7 +8,7 @@ All paths are relative to `<docs_dir>`. The preflight accepts the folder or the 
 | Field | Meaning |
 |---|---|
 | `close_markers` | Docs whose change means "closing" a module (default `task.md`, `execute.md`, `detailed-plan.md`). The guard and `--module` use them to find each row's module root. |
-| `active_account` | Which claude.ai account the `url` field belongs to (a localized alias, `cuenta_activa`, is read too). Informational. |
+| `active_account` | Which claude.ai account the `url` field belongs to (a localized alias, `cuenta_activa`, is read too). The brief's `ACCOUNT` is compared with it; `--set-active-account NAME` renames: `url` ← `url_<NAME>`, the old `url` → `url_<old active>`, `url_<NAME>` removed, and `active_account` ← NAME (rows without `url_<NAME>` are left as they are). |
 | `artifacts` | The rows below. Unknown top-level and row fields are preserved untouched. |
 
 ## Row fields that already existed
@@ -16,13 +16,14 @@ All paths are relative to `<docs_dir>`. The preflight accepts the folder or the 
 | Field | Meaning |
 |---|---|
 | `file` | Path of the HTML. Exact match key for every write. |
-| `url` | Canonical URL on the ACTIVE account. The courier only ever uses this one. |
+| `url` | Canonical URL on the ACTIVE account (`active_account`). Used unless the preflight runs with `--account NAME`. |
 | `title`, `favicon` | Text and emoji of the link in the close block. |
 | `in_close_block` | `false` keeps the row out of the block (default `true`). |
 | `regen` | Command that regenerates the HTML from its sources, run from `<docs_dir>`. A first token ending in `.py` gets a `python3` prefix. |
 | `files` | Supporting files published beside the page (the Artifact tool's `files` map). |
 | `previous_url`, `reissued` | Set by a re-issue: the old URL and a dated note. |
-| `url_<account>` | URL on another account. Never used for publishing; the preflight lists them as "not used". |
+| `url_<account>` | URL of the row on another account. With `--account NAME` (≠ `active_account`) the table, `--block-only` and `--batches` use `url_NAME`; a row without it is `other-account` and is never published by itself. `--mark-published … --account NAME` writes `url_NAME` (new on a re-issue) and leaves `url` alone. Read also accepts the alias `url_cuenta_NAME`; writes always use `url_NAME`. |
+| per-account family `<field>_<N>` | `previous_url_<N>`, `reissued_<N>`, `sha256_<N>`, `published_at_<N>`, `published_bytes_<N>`, `version_<N>`: written by `--mark-published --account N`, read by `--account N` (it checks THESE stamps, not the unsuffixed ones; a missing stamp reads stale). `--set-active-account N` moves the whole family together with `url`. |
 
 ## Row fields owned by the courier
 
@@ -60,8 +61,9 @@ uses `task.md` and the four plan documents found beside it, in either language s
 | `new` | The row has no `url`. |
 | `fresh` | `sha256` equals the file's hash, or `published_at` is not older than the file's mtime — and no source is newer than the HTML. |
 | `regen-due` | Would be fresh, but a source is newer than the HTML. With `regen`: the courier runs it, then publishes by size; without: REGEN reads `needs-regen`. |
-| `stale-reissue>300KB` | Not fresh and `max(size, published_bytes)` is above `--threshold-kb`. |
+| `stale-reissue>600KB` | Not fresh and `max(size, published_bytes)` is above `--threshold-kb`. |
 | `stale-inplace` | Any other not-fresh row. A row with no seal is stale; the first run seals it. |
+| `other-account` | `--account NAME` was given, NAME ≠ `active_account` and the row has no `url_NAME`: not published unless the brief says `REISSUE ON OTHER ACCOUNT: yes`. |
 
 REGEN column: `regen: <cmd>` when the row has `regen`; `regen (due): <cmd>` when it has `regen` and
 a source is newer than the HTML (state `regen-due`: the courier runs step 2, then publishes by

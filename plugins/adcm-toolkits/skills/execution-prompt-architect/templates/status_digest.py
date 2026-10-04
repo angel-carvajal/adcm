@@ -16,7 +16,9 @@ Usage
                  `ENTRY K/N @La-b · <status>`; K beyond N is a usage error
   --json         same data as one JSON object; its "text" key holds the plain lines
   --courier P    courier_preflight.py to run; default <script_dir>/../../artifact-courier/scripts/
-                 courier_preflight.py, then <brain>/scripts/courier_preflight.py
+                 courier_preflight.py, then <brain>/scripts/courier_preflight.py, then the newest
+                 installed adcm-toolkits copy (highest version dir in the plugin cache of
+                 $CLAUDE_CONFIG_DIR, else of ~/.claude*; the path is built from parts on purpose)
 
 Exit codes
   0 ok        header, wave map and logbook section parsed
@@ -45,6 +47,7 @@ the heading line of LAST LOG, then everything except the never-cut lines: STATUS
 LAST LOG, PENDING-HUMAN, ARTIFACTS and DIGEST (printed even when --lines is smaller).
 """
 import argparse
+import glob
 import json
 import os
 import re
@@ -52,7 +55,7 @@ import subprocess
 import sys
 import unicodedata
 
-__version__ = "0.13.0"
+__version__ = "0.15.0"
 
 KNOWN = "✅⛔⏸🔄☐🔀🔬"  # keep in sync with plans-regen.py GL ('✅⛔⏸🔄☐'), which this set extends
 GLYPH_ORDER = KNOWN[0] + KNOWN[3] + KNOWN[1:3] + KNOWN[4:]  # display order: done, doing, blocked, paused, ...
@@ -587,6 +590,22 @@ def git_info(path):
     return info
 
 
+def installed_courier():
+    """Newest installed plugin copy of courier_preflight.py, or None (highest version dir wins)."""
+    env = os.environ.get('CLAUDE_CONFIG_DIR')
+    roots = [os.path.expanduser(env)] if env else sorted(glob.glob(os.path.expanduser('~/.claude*')))
+    found = []
+    for root in roots:
+        pat = os.path.join(glob.escape(root), 'plugins', 'cache', '*', 'adcm-toolkits', '*',
+                           'skills', 'artifact-courier', 'scripts', 'courier_preflight.py')
+        for path in glob.glob(pat):
+            if os.path.isfile(path):
+                ver = os.path.basename(os.path.normpath(os.path.join(os.path.dirname(path), '..', '..', '..')))
+                if re.fullmatch(r'\d+(?:\.\d+)+', ver):  # hash or other dirs never win
+                    found.append((tuple(int(x) for x in ver.split('.')), path))
+    return max(found)[1] if found else None
+
+
 def artifacts_info(brain, module, courier_arg):
     def res(state, code, line):
         return {'state': state, 'exit': code, 'line': line}
@@ -599,7 +618,7 @@ def artifacts_info(brain, module, courier_arg):
     else:
         cands = [os.path.normpath(os.path.join(here, '..', '..', 'artifact-courier', 'scripts', 'courier_preflight.py')),
                  os.path.join(brain, 'scripts', 'courier_preflight.py')]
-    courier = next((p for p in cands if os.path.isfile(p)), None)
+    courier = next((p for p in cands if os.path.isfile(p)), None) or (None if courier_arg else installed_courier())
     if courier is None:
         return res('not-found', None, 'preflight not found (pass --courier)')
     rc, out, _ = run([sys.executable, courier, brain, '--summary'] + (['--module', module] if module else []),

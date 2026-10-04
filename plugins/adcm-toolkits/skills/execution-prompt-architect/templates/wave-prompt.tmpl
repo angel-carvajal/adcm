@@ -155,13 +155,14 @@ type, even under Fable —, 0 of the Opus quota (see GUARDRAILS & CLOSE). No plu
 session → `Agent(subagent_type: "general-purpose", model: "<tier>")` with the same brief.
 Model rule: a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the main session is one tier down; types fix the TOOL SET, the tier rules still set the model.
 Follow-ups to a live agent (SendMessage) cost 0; a new agent costs 1. In ultracode: Workflow
-scripts per phase (investigate → implement → review) with ≤20 agent() calls in
+scripts per stage (investigate → implement → review) with ≤20 agent() calls in
 total, `isolation: 'worktree'` on parallel executors, no unbounded loops or panels.
 The 21st agent is a protocol violation — stop and ask. Log `agents used: n/20 (opus
 a · sonnet b) · escalations` at close. You are a PURE orchestrator
 (`references/orchestrator-rule.md` of the skill `execution-prompt-architect`): you do
 not read files in bulk, edit at scale, render, browse or publish — only the ≤~20-line
-logged fixes — and every `Agent`/`Workflow` call, Plan and Explore agents included,
+logged fixes and the verbatim save of a sub-agent's RETURN to the path its brief names
+(gate reports `qa/gate-<w>.md`, digests) — and every `Agent`/`Workflow` call, Plan and Explore agents included,
 names its `model` or is an `adcm-toolkits:*` type. The user's `sin tanto lío` (that task) or `modo directo` (until
 `modo orquestador`) switches it off.
 {{ALWAYS spell out the cycle with real IDs and scopes, e.g.:
@@ -198,7 +199,9 @@ verification — the verifier attacks the bytes that ship and is never the simpl
 Before closing: MANDATORY adversarial
 verification — launch ANOTHER `adcm-toolkits:auditor` (the reserved one) that did NOT see
 the implementation, give it only the diff + the DoD + the attack checklist for
-{{Wx}} in execute.md §6. Every finding is fixed and re-verified before close."}}
+{{Wx}} in execute.md §6, with `REPORT PATH: {{docs_dir}}/qa/gate-{{Wx}}.md` in its brief: the
+auditor returns the full report under `REPORT:` and you save it verbatim (a mechanical save;
+log `gate report: <path>`). Every finding is fixed and re-verified before close."}}
 {{If advisory (NO-gate but the task spec or risk profile asks for an independent
 review): "Wave is NO-gate, with ADVISORY review — launch ONE `adcm-toolkits:auditor`
 (`sonnet` if the quota is spent) that did NOT see the implementation, give it the

@@ -1,13 +1,14 @@
 # RENOVATE BRIEF (fill every {{...}}; this file is the Agent prompt; ONE brief per needed block)
-# Agent(subagent_type: "adcm-toolkits:executor") (no such type in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief). Order: ARTIFACTS → EXECUTE → TASK → RULES, root brain first, modules after; CONTEXT last. 1 of the 20, 0 Opus quota.
+# Agent(subagent_type: "adcm-toolkits:executor") (no such type in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief). Order: SCRIPTS (cache-dep) → ARTIFACTS → EXECUTE → TASK → RULES, root brain first, modules after; CONTEXT last. 1 of the 20, 0 Opus quota.
 
-BLOCK: {{ARTIFACTS | EXECUTE | TASK | RULES | CONTEXT}}   Module: {{modules/<m> | none}}
+BLOCK: {{SCRIPTS | ARTIFACTS | EXECUTE | TASK | RULES | CONTEXT}}   Module: {{modules/<m> | none}}
 
 TASK: Bring the block above of {{docs_dir}} to the checker's target protocol (`renovate_check.py --version`).
   renovate_check.py reported: {{output of renovate_check.py --brain <docs_dir> [--module <m>]}}
   INVARIANTS snapshot (must stay identical): {{INVARIANTS line of --invariants}}
 
 FILES (only those of the block):
+  SCRIPTS   only the `*.py`/`*.sh` the check lists as `cache-dep` (the one SCRIPTS case; copies are the orchestrator's).
   EXECUTE   {{docs_dir}}/execute.md: surgical Edit only; §7 only PENDING waves (not ✅/🔀: ☐ 🔄 ⛔ ⏸).
   TASK      {{docs_dir}}/task.md (the module's own when set).
   ARTIFACTS {{docs_dir}}/artifacts.json, only through `courier_preflight.py --set-regen`.
@@ -15,13 +16,11 @@ FILES (only those of the block):
   CONTEXT   only the `auto` files of the project's context skill; cpcg STEP 4.5 `--update`.
 SKILLS: `adcm-toolkits:execution-prompt-architect` (CONTEXT also `code-project-context-generator`).
 
-DELIVERABLE: the current text of {{skill_dir}}/templates/execute.md.tmpl, in the file's language; markers stay
-  verbatim even in a Spanish brain: `LAST LOG`, `> **Protocol:**`, `adcm-toolkits:*`, `- SKILLS:`.
-  EXECUTE: §1.7 roles with the `adcm-toolkits:*` types and the per-call `model` rule · §2 the `status_digest.py
-  --brain` line · §2b `**Next:**` / `**blocked**` · §4 resume via the digest · §7 one `- SKILLS:` line per pending
-  wave · the line `> **Protocol:** adcm-toolkits <target>` (write it, or update it in place).
-  TASK: the canonical `## DoD-human pending` table, only when the check says `missing`; open rows of a legacy
-  section are migrated into it, the legacy section is not deleted.
+DELIVERABLE: the current text of {{skill_dir}}/templates/execute.md.tmpl, in the file's language; markers stay verbatim even in a Spanish brain (`LAST LOG`, `> **Protocol:**`, `adcm-toolkits:*`, `- SKILLS:`).
+  SCRIPTS: edit each `plugins/cache/…` template path to the local `scripts/*.tmpl` copy; prove `plans-regen.py --check` /
+  `prompts-regen.py --check` (only the ones the script uses) exit 0, byte-identical output.
+  EXECUTE: §1.7 roles with the `adcm-toolkits:*` types and the per-call `model` rule · §2 the `status_digest.py --brain` line · §2b `**Next:**` / `**blocked**` · §4 resume via the digest · §7 one `- SKILLS:` line per pending wave · the line `> **Protocol:** adcm-toolkits <target>` (write it, or update it in place).
+  TASK: the canonical `## DoD-human pending` table, only when the check says `missing`; open rows of a legacy section migrate into it, the legacy section stays.
   ARTIFACTS: one `--set-regen` per row, with the command the check suggested; `blocked:` → STOP; no publish.
   RULES: `fix` findings only. Memory files: APPEND at the end `**Superseded (protocol <target>, <YYYY-MM-DD>):**
   <correction> (line N: "<snippet>")`, never edit or delete an existing line; a MEMORY.md finding gets only ` · ⚠ superseded

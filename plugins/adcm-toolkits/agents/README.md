@@ -5,7 +5,7 @@ Six sub-agent types that fix the default model and the tool set of a delegation,
 | name | model | tools | preload | use when |
 |---|---|---|---|---|
 | `courier` | sonnet | all except Edit, Write, NotebookEdit, Agent | `artifact-courier` | delivery close: republish, seal registry, links block |
-| `auditor` | opus | Read, Grep, Glob, Bash | none | regression review or gate check; verdict ship or fix-first; never edits |
+| `auditor` | opus | Read, Grep, Glob, Bash | none | regression review or gate check; verdict ship or fix-first, full report under `REPORT:` when the brief names a path; never edits |
 | `executor` | sonnet | all | none | implement one scoped brief and prove its DoD |
 | `executor-frontend` | sonnet | all | `frontend-design` | the same for UI work, using the `.design/` pack when present |
 | `researcher` | sonnet | all except Edit, Write, NotebookEdit | none | sourced investigation or browsing; pass `model: opus` per call for a deeper pass |

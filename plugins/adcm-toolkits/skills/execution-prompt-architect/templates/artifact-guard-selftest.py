@@ -29,6 +29,9 @@ URL_ROOT = "https://claude.ai/code/artifact/00000000-root"
 URL_MOD = "https://claude.ai/code/artifact/00000000-module"
 ART_ROOT = {"file": "plans.html", "url": URL_ROOT, "title": "Brain Plans", "favicon": "📒"}
 ART_MOD = {"file": "modules/m/plans.html", "url": URL_MOD, "title": "Module Plans", "favicon": "🧩"}
+# A row that also lives on another claude.ai account: `url` is the canonical link, `url_alt` the other account's.
+URL_ALT = "https://claude.ai/code/artifact/00000000-other-account"
+ART_ALT = dict(ART_ROOT, url_alt=URL_ALT)
 
 
 def iso(epoch):
@@ -195,6 +198,18 @@ def make_cases(now):
          dict(mtimes={"plans.html": now + 600}, text=closing_text,
               stamp={"plans.html": {"published_at": iso(now - 50), "version": "v2"}}),
          expect_silent, None),
+        # Session on the other account: the closing message lists the row's `url_alt` link, not `url`:
+        # the guard accepts it (fail-open stays; it never blocks over a link it cannot tell apart).
+        ("url_alt_account",
+         dict(arts=[ART_ALT], mtimes=fresh_file, text="Wave closed.\n\n" + block(dict(ART_ALT, url=URL_ALT)),
+              stamp={"plans.html": {"published_at": iso(now - 50), "version": "v2"}}),
+         expect_silent, None),
+        # ...but a link that is neither of the row's URLs is still a missing link.
+        ("url_alt_account_unrelated_link_blocks",
+         dict(arts=[ART_ALT], mtimes=fresh_file,
+              text="Wave closed.\n\n" + block(dict(ART_ROOT, url="https://claude.ai/code/artifact/00000000-unrelated")),
+              stamp={"plans.html": {"published_at": iso(now - 50), "version": "v2"}}),
+         lambda rc, out: expect_block(rc, out, "Brain Plans"), None),
         ("fail_open",
          dict(bad_registry=True, bad_transcript=True),
          expect_silent, None),

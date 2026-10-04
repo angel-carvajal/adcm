@@ -13,7 +13,7 @@ decides/integrates. It does NOT execute the task itself:
 - no reading `task.md`, `execute.md` or plan docs to learn the state of a project — the
   status digest answers it (see "Session start").
 
-## Exceptions (two, nothing else)
+## Exceptions (three, nothing else)
 
 1. **The ≤20-line shortcut.** A fix of about 20 lines or fewer when writing the brief
    would cost more than the change. Every one is logged in the `task.md` logbook
@@ -25,6 +25,8 @@ decides/integrates. It does NOT execute the task itself:
 
    In direct mode the main session does everything itself. Never infer it from tone or
    from the task looking small.
+3. **Verbatim saves.** Saving a sub-agent's RETURN unchanged to the path the brief names
+   (gate reports `qa/gate-<w>.md`, digests) is a mechanical save, not an edit.
 
 ## Session start: the status digest
 

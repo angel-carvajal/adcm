@@ -287,7 +287,7 @@ def check(hook_input):
             for a in required:
                 if all(a["url"] != x["url"] for x in union):
                     union.append(a)
-            missing = [a for a in required if a["url"] not in turn_text]
+            missing = [a for a in required if not any(u in turn_text for u in urls_of(a))]
             if missing:
                 all_missing.append((mod, missing))
 
@@ -301,6 +301,12 @@ def check(hook_input):
         if all_missing or probs:
             links = {"union": union, "missing": all_missing, "probs": probs}
     return stale, links
+
+
+def urls_of(a):
+    """La `url` de la fila más todo `url_<cuenta>`: una sesión bajo otra cuenta pega su propio bloque."""
+    vals = [a.get("url")] + [v for k, v in a.items() if isinstance(k, str) and k.startswith("url_")]
+    return [v for v in vals if isinstance(v, str) and v]
 
 
 def fmt_link(a):
@@ -318,7 +324,7 @@ def links_format_problems(turn_text, required):
     último link; nunca varias URLs en una línea. Se evalúa la COLA del texto (el bloque =
     corrida de líneas-link que termina en la última línea con una URL requerida), así una
     mención en prosa más arriba no cuenta ni estorba. Devuelve lista de problemas."""
-    urls = [a["url"] for a in required if a.get("url")]
+    urls = [u for a in required for u in urls_of(a)]
     lines = [l.rstrip() for l in turn_text.rstrip().split("\n")]
     hits = [i for i, l in enumerate(lines) if any(u in l for u in urls)]
     if not hits:
@@ -339,7 +345,7 @@ def links_format_problems(turn_text, required):
             probs.append("varios links en la misma línea (uno por línea): " + l.strip()[:80])
     block_text = "\n".join(block)
     for a in required:
-        if a["url"] not in block_text:
+        if not any(u in block_text for u in urls_of(a)):
             probs.append(f"{fmt_link(a)} no está en el bloque final (aparece más arriba, en prosa)")
     return probs
 

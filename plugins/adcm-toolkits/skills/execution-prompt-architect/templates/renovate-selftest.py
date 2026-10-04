@@ -5,7 +5,7 @@ Usage:
   python3 renovate-selftest.py [--checker PATH] [--only NAME] [--keep]
 
 Builds one throwaway `tempfile` tree per case (brains holding execute.md, task.md,
-artifacts.json, scripts/ and a fake skill dir `skilltpl/templates/` whose six template files
+artifacts.json, scripts/ and a fake skill dir `skilltpl/templates/` whose seven template files
 have known content), runs the checker as a subprocess (`--brain <dir> --skill-dir <tmp>/skilltpl
 [flags]`, PYTHONDONTWRITEBYTECODE=1, HOME=<tmp>) and prints `PASS|FAIL|SKIP <case> [- why]`.
 Exit code 1 when any case FAILs.
@@ -27,10 +27,10 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RELEASE = "0.14.2"  # what plugin.json, the template Protocol line and __version__ must all say
+RELEASE = "0.15.0"  # what plugin.json, the template Protocol line and __version__ must all say
 VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
-         "prompts-regen.py", "prompts-html.tmpl")
+         "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
 BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "context", "modules")
 KEYS = ("version", "target", "brain", "module", "protocol", "blocks", "needed", "invariants", "text")
@@ -439,7 +439,7 @@ def case_fresh_0141_up_to_date(ctx, t):
         t.eq(d.get("needed"), [], "needed")
         t.eq(d.get("module"), None, "module")
         t.eq(dig(d, "protocol", "found"), VERSION, "protocol.found")
-        t.eq(dig(d, "protocol", "inferred"), "0.14", "protocol.inferred")
+        t.eq(dig(d, "protocol", "inferred"), ".".join(RELEASE.split(".")[:2]), "protocol.inferred")
         t.eq([blk(d, "scripts", k) for k in ("state", "missing", "outdated", "copied")], ["ok", [], [], []], "scripts block")
         t.eq([blk(d, "artifacts", k) for k in ("state", "total", "rows_without_regen")], ["ok", 2, []], "artifacts block")
         t.eq(blk(d, "execute", "state"), "ok", "execute.state")
@@ -473,7 +473,7 @@ def case_legacy_08(ctx, t):
     t.eq(dig(d, "protocol", "found"), None, "protocol.found (prose 'adcm-toolkits 0.8.0' is not a Protocol line)")
     t.eq(dig(d, "protocol", "inferred"), "0.8", "protocol.inferred")
     t.eq(blk(d, "scripts", "state"), "missing", "scripts.state")
-    t.eq(sorted(blk(d, "scripts", "missing") or []), sorted(FILES), "scripts.missing lists the six files")
+    t.eq(sorted(blk(d, "scripts", "missing") or []), sorted(FILES), "scripts.missing lists the seven files")
     t.eq([blk(d, "scripts", "outdated"), blk(d, "scripts", "copied")], [[], []], "scripts outdated/copied")
     t.eq([blk(d, "artifacts", "state"), blk(d, "artifacts", "total")], ["missing", 2], "artifacts state/total")
     rows = [{"file": "plans.html", "suggest": plans_cmd("en")},
@@ -503,7 +503,8 @@ def case_legacy_011(ctx, t):
         t.eq(dig(d, "protocol", "inferred"), "0.11", "protocol.inferred (code-simplifier / prompts-regen mentioned)")
         t.eq(blk(d, "scripts", "outdated"), ["prompts-regen.py"], "scripts.outdated (same file name, different sha256)")
         t.eq(sorted(blk(d, "scripts", "missing") or []),
-             sorted(["status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl"]), "scripts.missing")
+             sorted(["status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl", "courier_preflight.py"]),
+             "scripts.missing")
         t.eq(blk(d, "scripts", "state"), "missing", "scripts.state (missing wins; outdated is informational)")
         t.eq([blk(d, "artifacts", "state"), blk(d, "artifacts", "total")], ["missing", 2], "artifacts state/total")
         t.eq(blk(d, "artifacts", "rows_without_regen"), [{"file": "plans.html", "suggest": plans_cmd("es")}],
@@ -566,7 +567,7 @@ def case_skills_partial(ctx, t):
     d = go("no protocol line", W3, {"protocol": None})
     if d:
         t.eq(dig(d, "protocol", "found"), None, "protocol.found")
-        t.eq(dig(d, "protocol", "inferred"), "0.14", "protocol.inferred (role types present)")
+        t.eq(dig(d, "protocol", "inferred"), "0.14", "protocol.inferred (role types present)")  # heuristic ladder: types → 0.14
         markers_check(t, d, protocol_line=False)
     d = go("types missing", W3, {"types": ("executor", "auditor", "researcher")})
     if d:
@@ -615,8 +616,8 @@ def case_copy_scripts(ctx, t):
     a, b = legacy_08(ctx, "brain", under="a"), legacy_08(ctx, "brain", under="b")
     d = both(ctx, t, a, "--copy-scripts", rc=1, twin=b, ro=False)
     if d:
-        t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(FILES), "scripts.copied lists the six files")
-        t.ok(files_ok(b) and files_ok(a), "the six files appear with the template content")
+        t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(FILES), "scripts.copied lists the seven files")
+        t.ok(files_ok(b) and files_ok(a), "the seven files appear with the template content")
         t.eq(d.get("needed"), ["artifacts", "execute", "task"], "needed after the copy")
     d = both(ctx, t, b, rc=1)
     if d:
@@ -630,13 +631,13 @@ def case_copy_scripts(ctx, t):
     d = both(ctx, t, c1, "--copy-scripts", rc=1, twin=c2, ro=False)
     if d:
         rest = [n for n in FILES if n != "prompts-regen.py"]
-        t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(rest), "scripts.copied (the five missing ones only)")
+        t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(rest), "scripts.copied (every missing file except the differing copy)")
         t.eq(blk(d, "scripts", "outdated"), ["prompts-regen.py"], "scripts.outdated")
         t.eq(blk(d, "scripts", "state"), "ok", "scripts.state (nothing missing; the differing copy is informational)")
         t.eq(d.get("needed"), ["artifacts", "execute", "task"], "needed (a differing copy never puts scripts in needed)")
         t.eq(read(os.path.join(c2, "scripts", "prompts-regen.py")), mine, "the differing copy is NOT overwritten")
         t.eq(read(os.path.join(c2, "scripts", "custom-builder.py")), keep["custom-builder.py"], "other scripts/ files untouched")
-        t.ok(files_ok(c2, rest), "the five missing files carry the template content")
+        t.ok(files_ok(c2, rest), "the other missing files carry the template content")
     t.tag = "(force) "
     d = both(ctx, t, c1, "--copy-scripts", "--force-outdated", rc=1, twin=c2, ro=False)
     if d:
@@ -644,6 +645,31 @@ def case_copy_scripts(ctx, t):
         t.eq(read(os.path.join(c2, "scripts", "prompts-regen.py")), tpl("prompts-regen.py"), "--force-outdated overwrites")
         t.eq(read(os.path.join(c2, "scripts", "custom-builder.py")), keep["custom-builder.py"], "other scripts/ files untouched")
         t.eq([blk(d, "scripts", "state"), blk(d, "scripts", "outdated")], ["ok", []], "scripts ok after the force")
+
+    # the real tree: courier_preflight.py lives in the sibling skill artifact-courier, not next to the templates
+    def mirror(sub):
+        base = os.path.join(ctx.root, sub, "skills")
+        tdir = os.path.join(base, "execution-prompt-architect", "templates")
+        for n in FILES:
+            if n != "courier_preflight.py":
+                put(os.path.join(tdir, n), tpl(n))
+        shutil.copy(ctx.checker, os.path.join(tdir, "renovate_check.py"))
+        put(os.path.join(base, "artifact-courier", "scripts", "courier_preflight.py"), tpl("courier_preflight.py"))
+        return os.path.join(base, "execution-prompt-architect")
+
+    for tag, sub, deeper in (("mirror, --skill-dir = templates/", "m1", "templates"), ("mirror, --skill-dir = skill root", "m2", "")):
+        t.tag = f"({tag}) "
+        epa = mirror(sub)
+        sd = os.path.join(epa, deeper) if deeper else epa
+        a, b = legacy_08(ctx, "brain", under=sub + "/a"), legacy_08(ctx, "brain", under=sub + "/b")
+        d = both(ctx, t, a, "--skill-dir", sd, "--copy-scripts", rc=1, twin=b, ro=False)
+        if d:
+            t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(FILES),
+                 "scripts.copied lists all seven files (courier_preflight.py from ../artifact-courier or ../../artifact-courier)")
+            t.ok(files_ok(a) and files_ok(b), "the seven files appear with the template content")
+        d = both(ctx, t, b, "--skill-dir", sd, rc=1)
+        if d:
+            t.eq([blk(d, "scripts", "state"), blk(d, "scripts", "missing")], ["ok", []], "second run: scripts ok")
 
 
 def case_context_names(ctx, t):
@@ -851,7 +877,7 @@ def case_audit_round2(ctx, t):
                 t.ok(any("prompts-regen.py" in str(x) for x in blk(d, "scripts", "failed") or [])
                      or anyline(d.get("text"), "symlink"), "the symlink is reported (scripts.failed or a 'symlink' mention)")
                 t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(n for n in FILES if n != "prompts-regen.py"),
-                     "the five regular missing files are still copied")
+                     "the other regular missing files are still copied")
     # (j) the 40-line cap trims artifact rows and module lines before the INVARIANTS lines
     t.tag = "(j 12 modules) "
     mods = {}
@@ -1254,6 +1280,71 @@ def case_rules_round2(ctx, t):
         ctx.env = old_env
 
 
+def case_scripts_cache_dep(ctx, t):
+    base = {n: tpl(n) for n in FILES}
+    bp = ("#!/usr/bin/env python3\nSRC = 'plugins/cache/x/adcm-toolkits/0.11.0/skills/execution-prompt-architect/templates/plans-html.tmpl'\n")
+    vf = ("#!/bin/sh\npython3 ~/.claude/plugins/cache/x/adcm-toolkits/0.11.0/skills/execution-prompt-architect/templates/"
+          "plans-regen.py --check\n")
+
+    def go(tag, name, scripts, extra=None, rc=1):
+        t.tag = f"({tag}) "
+        d = both(ctx, t, fresh(ctx, name, scripts=scripts, extra=extra), rc=rc)
+        return d
+
+    # (a) *.py in scripts/ and *.sh in .build/ that read the plugin cache: sorted brain-relative paths, scripts needed
+    d = go("a py + sh", "cd-a", dict(base, **{"build-plans.py": bp}), {".build/verify.sh": vf})
+    if d:
+        t.eq(blk(d, "scripts", "cache_dep"), [".build/verify.sh", "scripts/build-plans.py"],
+             "scripts.cache_dep (sorted brain-relative paths, not bare basenames)")
+        t.eq(d.get("needed"), ["scripts"], "needed")
+        line = next((x for x in d.get("text") or [] if x.startswith("SCRIPTS")), "")
+        t.ok("cache-dep:" in line and "scripts/build-plans.py" in line and ".build/verify.sh" in line,
+             f"SCRIPTS line names the cache-dep files by path, got {line!r}")
+    # (b) any occurrence counts, even in a comment line
+    d = go("b comment only", "cd-b", dict(base, **{"comment-only.py": "# see plugins/cache/x for the old path\nprint('ok')\n"}))
+    if d:
+        t.eq([blk(d, "scripts", "cache_dep"), d.get("needed")], [["scripts/comment-only.py"], ["scripts"]], "cache_dep / needed")
+    # (c) nothing to report: the field is an empty list, not absent
+    d = go("c clean", "cd-c", base, rc=0)
+    if d:
+        t.eq([blk(d, "scripts", "cache_dep"), d.get("needed")], [[], []], "cache_dep / needed")
+        t.ok(not anyline(d.get("text"), "cache-dep"), "no cache-dep mention in the plain output")
+    # (d) only *.py and *.sh count
+    d = go("d other extensions", "cd-d", dict(base, **{"notes.md": "mentions plugins/cache/x\n"}),
+           {".build/data.json": "{\"p\": \"plugins/cache/x\"}\n"}, rc=0)
+    if d:
+        t.eq(blk(d, "scripts", "cache_dep"), [], "cache_dep (a .md and a .json are not scripts)")
+    # (e) --copy-scripts (with or without --force-outdated) never touches those files
+    t.tag = "(e copy-scripts) "
+    scripts = {n: tpl(n) for n in FILES if n != "plans-html.tmpl"}
+    scripts["build-plans.py"] = bp
+    a = fresh(ctx, "cd-e", under="a", scripts=scripts, extra={".build/verify.sh": vf})
+    b = fresh(ctx, "cd-e", under="b", scripts=scripts, extra={".build/verify.sh": vf})
+    for flags in (("--copy-scripts",), ("--copy-scripts", "--force-outdated")):
+        d = both(ctx, t, a, *flags, rc=1, twin=b, ro=False)
+        if d:
+            t.eq(blk(d, "scripts", "cache_dep"), [".build/verify.sh", "scripts/build-plans.py"], f"cache_dep after {' '.join(flags)}")
+            t.eq([read(os.path.join(b, "scripts", "build-plans.py")), read(os.path.join(b, ".build", "verify.sh"))], [bp, vf],
+                 f"the cache-dep scripts are byte-identical after {' '.join(flags)}")
+            t.eq(read(os.path.join(b, "scripts", "plans-html.tmpl")), tpl("plans-html.tmpl"), "the missing template is still copied")
+    # (f) a cache-dep file with the same BASENAME in another directory must not block copying the missing template script
+    t.tag = "(f .build/plans-regen.py vs scripts/plans-regen.py) "
+    pr = ("#!/usr/bin/env python3\nSRC = 'plugins/cache/x/adcm-toolkits/0.11.0/skills/execution-prompt-architect/templates/plans-regen.py'\n")
+    scripts = {n: tpl(n) for n in FILES if n != "plans-regen.py"}
+    a = fresh(ctx, "cd-f", under="a", scripts=scripts, extra={".build/plans-regen.py": pr})
+    b = fresh(ctx, "cd-f", under="b", scripts=scripts, extra={".build/plans-regen.py": pr})
+    d = both(ctx, t, a, rc=1)
+    if d:
+        t.eq([blk(d, "scripts", "missing"), blk(d, "scripts", "cache_dep")], [["plans-regen.py"], [".build/plans-regen.py"]],
+             "read-only run: scripts/plans-regen.py missing, only .build/plans-regen.py is cache-dep")
+    d = both(ctx, t, a, "--copy-scripts", rc=1, twin=b, ro=False)
+    if d:
+        t.eq(blk(d, "scripts", "copied"), ["plans-regen.py"], "scripts.copied: the missing scripts/plans-regen.py is copied")
+        t.eq(blk(d, "scripts", "cache_dep"), [".build/plans-regen.py"], "cache_dep after the copy")
+        t.eq(read(os.path.join(b, "scripts", "plans-regen.py")), tpl("plans-regen.py"), "scripts/plans-regen.py has the template content")
+        t.eq(read(os.path.join(b, ".build", "plans-regen.py")), pr, "the cache-dep .build/plans-regen.py is untouched")
+
+
 CASES = [
     ("fresh_0141_up_to_date", case_fresh_0141_up_to_date),
     ("legacy_08", case_legacy_08),
@@ -1275,6 +1366,7 @@ CASES = [
     ("rules_targets", case_rules_targets),
     ("rules_cap", case_rules_cap),
     ("rules_round2", case_rules_round2),
+    ("scripts_cache_dep", case_scripts_cache_dep),
 ]
 
 

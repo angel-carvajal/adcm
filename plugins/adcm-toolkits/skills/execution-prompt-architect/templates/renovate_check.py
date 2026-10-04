@@ -2,7 +2,7 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json and scripts/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.14.2) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.15.0) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
 --copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
 from this report, never by this script.
@@ -13,9 +13,12 @@ Usage
                     [--invariants] [--json] [--version]
   --module REL      check <brain>/REL instead of the root (scripts stay n/a)
   --all-modules     also check modules/*/task.md; `modules` joins needed when one lacks anything
-  --skill-dir PATH  templates live in PATH/templates/<name>, then PATH/<name> (default: this script's dir)
+  --skill-dir PATH  templates live in PATH/templates/<name>, then PATH/<name>; courier_preflight.py (skill
+                    artifact-courier) in PATH/../artifact-courier/scripts, then PATH/../../artifact-courier/
+                    scripts (default PATH: this script's dir)
   --copy-scripts    copy the MISSING files of scripts/ from the templates; --force-outdated also
-                    overwrites files whose sha256 differs (a project copy may be customised)
+                    overwrites files whose sha256 differs (a project copy may be customised); files
+                    flagged cache-dep are never touched
   --memory-dir PATH memory dir to scan instead of the resolved one (see RULES); --no-rules skips RULES
   --invariants      counts renovation must not change: s7_wave_headers, h2_sections, logbook_entries,
                     wave_rows (fences and HTML comments ignored); the execute.md line count is
@@ -24,8 +27,12 @@ Usage
                     stats, text
 
 Blocks (ok | missing | partial | outdated | n/a)
-  SCRIPTS    the six files of scripts/; a file that differs from its template is a project copy
-             (`custom`, informational: only a missing file makes the block needed)
+  SCRIPTS    the seven files of scripts/; a file that differs from its template is a project copy
+             (`custom`, informational: only a missing file makes the block needed). `cache-dep` (fix):
+             a *.py or *.sh directly under scripts/ or .build/ whose text contains the plugin-cache
+             path reads a templates copy that a cache purge deletes; JSON `blocks.scripts.cache_dep`
+             lists the sorted brain-relative paths (`.build/y.sh`, `scripts/x.py`) and the block is
+             needed (point the script to the local scripts/*.tmpl copies)
   ARTIFACTS  registry rows without `regen` (`none` counts ok) with the suggested --set-regen command
   EXECUTE    role types, digest line, LAST LOG in section 4, Next/blocked labels in 2b, model rule,
              `> **Protocol:**` line, SKILLS line per pending wave of section 7
@@ -51,14 +58,16 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.14.2"
+__version__ = "0.15.0"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
-           "prompts-regen.py", "prompts-html.tmpl")
+           "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
+CACHE_MARK = "plugins" + "/cache/"  # built from parts: this file must not trip its own cache-dep check
+CACHE_FIX = "point the script to the local scripts/*.tmpl copies"
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
 BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "context", "modules")
-NEED = ("missing", "partial", "unparsed", "needed")
+NEED = ("missing", "partial", "unparsed", "needed", "cache-dep")
 FLAGS = (("digest_line", "digest-line"), ("last_log_s4", "last-log-s4"), ("next_label", "next-label"),
          ("blocked_label", "blocked-label"), ("model_rule", "model-rule"), ("protocol_line", "protocol-line"))
 DOCS_ES = ("propuesta-ejecutiva.md", "plan-maestro.md", "plan-detallado.md")
@@ -404,11 +413,29 @@ def review(tdir, lang):
             'needed': [b for b in ('artifacts', 'execute', 'task') if blocks[b]['state'] in NEED]}
 
 
+def cache_dep(brain):
+    """Sorted brain-relative paths (`.build/y.sh`, `scripts/x.py`) of the *.py|*.sh directly under scripts/ and
+    .build/ that mention the plugin cache."""
+    found = set()
+    for sub in ('scripts', '.build'):
+        d = os.path.join(brain, sub)
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for n in names:
+            if n.endswith(('.py', '.sh')) and CACHE_MARK in (read_text(os.path.join(d, n)) or ''):
+                found.add(sub + '/' + n)
+    return sorted(found)
+
+
 def scripts_block(brain, skill_dir, copy, force):
     """SCRIPTS block against the templates; --copy-scripts fills the gaps first and the state reflects the disk."""
     sdir = os.path.join(brain, 'scripts')
     root = os.path.join(os.path.realpath(brain), 'scripts')
-    paths = lambda n: (os.path.join(skill_dir, 'templates', n), os.path.join(skill_dir, n))
+    paths = lambda n: (os.path.join(skill_dir, 'templates', n), os.path.join(skill_dir, n),
+                       os.path.join(skill_dir, '..', 'artifact-courier', 'scripts', n),
+                       os.path.join(skill_dir, '..', '..', 'artifact-courier', 'scripts', n))
     source = lambda n: next((p for p in paths(n) if os.path.isfile(p)), None)
 
     def sha(path):
@@ -424,9 +451,11 @@ def scripts_block(brain, skill_dir, copy, force):
         return miss, old
 
     missing, outdated = scan()
-    copied, failed = [], []
+    copied, failed, dep = [], [], cache_dep(brain)
     for n in SCRIPTS if copy else ():
         dst = os.path.join(sdir, n)
+        if 'scripts/' + n in dep:  # a cache-dep file is edited by hand, never overwritten
+            continue
         if n in missing or (force and n in outdated):
             if os.path.islink(dst) or os.path.islink(sdir) or os.path.dirname(os.path.realpath(dst)) != root:
                 failed.append(n + ' (symlink)')  # never write through a link or out of scripts/
@@ -441,8 +470,9 @@ def scripts_block(brain, skill_dir, copy, force):
                 failed.append(n)
     if copied or failed:
         missing, outdated = scan()
-    return {'state': 'missing' if missing else 'ok', 'missing': missing,
-            'outdated': outdated, 'copied': copied, 'failed': failed}
+    dep = cache_dep(brain) if copied or failed else dep
+    return {'state': 'missing' if missing else 'cache-dep' if dep else 'ok', 'missing': missing,
+            'outdated': outdated, 'copied': copied, 'failed': failed, 'cache_dep': dep}
 
 
 # ---------------------------------------------------------------- RULES: obsolete notes in memory and CLAUDE.md
@@ -612,7 +642,9 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
     s, a, e, t, c = (b[k] for k in ('scripts', 'artifacts', 'execute', 'task', 'context'))
     pre.append('SCRIPTS n/a (root only)' if s['state'] == 'n/a' else 'SCRIPTS %s' % s['state'] + ''.join(
         ' · %s %s' % (lab, ', '.join(s[k])) for k, lab in (('missing', 'missing'), ('outdated', 'custom:'),
-                                                          ('copied', 'copied'), ('failed', 'failed')) if s[k]))
+                                                          ('copied', 'copied'), ('failed', 'failed'),
+                                                          ('cache_dep', 'cache-dep:')) if s[k])
+               + (' → ' + CACHE_FIX if s['cache_dep'] else ''))
     r = a['rows_without_regen']
     pre.append('ARTIFACTS n/a (no registry)' if a['state'] == 'n/a' else
                'ARTIFACTS unparsed (artifacts.json is not a registry)' if a['state'] == 'unparsed' else
@@ -687,7 +719,7 @@ def run(args):
                     'execute.md is not readable' if os.path.lexists(ex) else 'no execute.md')
     lang = 'es' if any(os.path.isfile(os.path.join(brain, n)) for n in DOCS_ES) else 'en'
     rev = review(tdir, lang)
-    scripts = ({'state': 'n/a', 'missing': [], 'outdated': [], 'copied': [], 'failed': []} if module else
+    scripts = ({'state': 'n/a', 'missing': [], 'outdated': [], 'copied': [], 'failed': [], 'cache_dep': []} if module else
                scripts_block(brain, skill_dir, args.copy_scripts, args.force_outdated))
     mods = []
     for rel in list_modules(brain) if args.all_modules else ():

@@ -19,7 +19,7 @@ compatibility: >
   Works with any Claude model. In Claude Code the code analysis fans out to
   sub-agents using the model/effort the user picks; in environments without
   sub-agents it degrades to sequential analysis. Sub-agent fan-out is budgeted at
-  20 per phase with fixed roles by model tier: the main session (Fable)
+  20 per session (a planning run, each clean wave session and a renovation count separately) with fixed roles by model tier: the main session (Fable)
   orchestrates and runs the DoD, Opus sub-agents investigate and audit (and
   implement ⚠gate waves), Sonnet sub-agents implement from executor briefs, with an
   escalation ladder Sonnet → Opus → Fable — in every effort level, ultracode
@@ -119,7 +119,9 @@ The types fix each role's `model` and tool set, so the brief does not have to (t
 adversarial verification is ANOTHER `adcm-toolkits:auditor` (the reserved one) that did not see the
 implementation. The simplify pass runs BEFORE that verification — the verifier
 attacks the bytes that ship, and it is never the simplifier. Ladder: Opus →
-orchestrator.
+orchestrator. The verifier's brief carries `REPORT PATH: {{docs_dir}}/qa/gate-<w>.md`: the
+auditor stays read-only and returns the full report under `REPORT:`, and the orchestrator
+saves it verbatim (exception 3 of `references/orchestrator-rule.md`).
 
 **Escalation ladder — Sonnet → Opus → orchestrator, 2 failures per rung.** When an
 executor fails the SAME DoD line twice, the task moves one tier up as a NEW agent
@@ -150,8 +152,8 @@ questions). A poor brief produces poor code: the brief carries the investigation
 executor never re-derives it. The comment ban is one FORBIDDEN line; the policy itself
 is inherited from `detailed-plan.md` §0 Conventions, never restated at length.
 
-**Accounting.** One counter per wave session and per analysis phase, starting at
-zero. Every delegated agent (`Agent` tool or Workflow `agent()`) adds 1 whatever
+**Accounting.** One counter per session (the planning run, each wave in its own clean
+session and a renovation are separate sessions, 20 each), starting at zero. Every delegated agent (`Agent` tool or Workflow `agent()`) adds 1 whatever
 its model; `SendMessage` to a live agent adds 0. Every call names its `model` OR is an
 `adcm-toolkits:*` type: a per-call `model` overrides the type's default: `researcher` +
 `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and
@@ -223,7 +225,7 @@ Ask the user (one AskUserQuestion call, three questions):
    - sonnet → **max** recommended
 
    The user is free to pick any level. `ultracode` means: orchestrate with Workflow
-   scripts — one per phase (investigate → implement → review), the orchestrator
+   scripts — one per stage (investigate → implement → review), the orchestrator
    auditing in between — with at most 20 `agent()` calls in total, every call with
    an explicit `model` by role and `isolation: 'worktree'` on parallel executors,
    structured outputs and one adversarial cross-check; other levels map to
@@ -276,8 +278,8 @@ may live").
 Analyze the project with the effort from Step 1, under the tiered protocol ("Agent
 roles"): the main session consolidates and decides; sub-agents investigate. Always
 fan out when the environment allows it — even outside ultracode — but **within the
-agent budget: at most 20 delegated agents for the WHOLE of Step 3** (counter starts
-at zero; agents 1–10 `opus`, 11–20 `sonnet`). The fan-out is bucketed, never
+agent budget: at most 20 delegated agents for the WHOLE of Step 3 — the planning
+session's 20** (counter starts at zero; agents 1–10 `opus`, 11–20 `sonnet`). The fan-out is bucketed, never
 one-agent-per-item. Indicative split (adapt, never exceed):
 
 - **1 architecture agent** (`adcm-toolkits:researcher` + `model: opus`; covers ALL repos — with several repos it
@@ -342,8 +344,8 @@ delegated. If the project genuinely does not fit (e.g. more than 20 repos/areas)
 STOP and ask (AskUserQuestion) whether the user authorizes a larger budget for THIS
 run, showing the planned count — never exceed it silently.
 
-Ultracode reference shape (the whole Step 3 is ONE workflow, ≤20 `agent()` calls,
-every call with an `adcm-toolkits:*` `agentType` and an explicit `model`):
+Ultracode reference shape (the whole Step 3 is ONE workflow, ≤20 `agent()` calls — the
+planning session's 20 — every call with an `adcm-toolkits:*` `agentType` and an explicit `model`):
 
 ```js
 // The same guard is reused by the wave workflows (implement / review phases).
@@ -438,7 +440,8 @@ reads to know what an old brain lacks. Every fact in
 the prompts must trace back to the analysis — never invent commands, paths or repo
 names; use the ones found in Step 3.
 
-Also copy BOTH `templates/status_digest.py` and `templates/status-brief.md` to
+Also copy `templates/status_digest.py`, `templates/status-brief.md` and `courier_preflight.py` (from the
+`artifact-courier` skill's `scripts/`, so the digest finds it from the brain) to
 `{{docs_dir}}/scripts/` here (no `.tmpl` needed; they are not part of Step 7, which is
 conditional on the HTML question): sessions without the plugin run
 `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}` at session start instead of
@@ -472,7 +475,8 @@ Non-negotiable rules:
    DoD-auto. On ⚠gate waves
    the executor is `adcm-toolkits:executor` + `model: opus`, the simplify pass runs BEFORE the mandatory **adversarial
    verification**, which is ANOTHER `adcm-toolkits:auditor` (the reserved one) that did NOT implement,
-   attacking the diff with that wave's attack checklist from §6. WORKFLOW embeds one
+   attacking the diff with that wave's attack checklist from §6 (its brief names `REPORT PATH:
+   {{docs_dir}}/qa/gate-<w>.md`; it returns the report under `REPORT:` and you save it verbatim). WORKFLOW embeds one
    `## Executor brief` block per task, pre-filled from SCOPE, plus the single
    `## Simplifier brief` block. Never emit a WORKFLOW where the main session
    implements first, where an executor self-approves, where the diff is audited by
@@ -537,8 +541,10 @@ at any close.
   markdown documents, with the Step 1 project name as `{{project_name}}`.
   Audience: stakeholders. It is GENERATED, never rendered by hand, by
   `templates/plans-regen.py` (`python3 plans-regen.py --brain <docs_dir> <out>
-  [--lang es|en] [--project NAME] [--init] [--check]`): `--init` instantiates the
-  shell from `templates/plans-html.tmpl` (kept next to the script); later runs
+  [--lang es|en] [--project NAME] [--init [--force]] [--check]`): `--init` instantiates the
+  shell from `templates/plans-html.tmpl` (kept next to the script) and `--init --force` is the only way
+  to replace an existing custom layout; `--check` exits 3 when the file has no `doc-*` articles (a
+  hand-maintained layout: keep `regen none`, or `--init --force`); later runs
   patch only the four document articles, so head, styles, theme and
   scripts stay byte-identical, and wave statuses derive from the `task.md` wave map.
 - **`prompts.html`**: the §7 wave prompts rendered as copy-paste cards, with a status
@@ -548,15 +554,17 @@ at any close.
   markers) — both the nav mark and the card badge derive from that same header, so
   `prompts.html` is REGENERATED by script and NEVER hand-edited. Regenerate it with
   `templates/prompts-regen.py` (`python3 prompts-regen.py --brain <docs_dir> [--lang
-  es|en] <comma-list-of-wave-ids> <out>`), whose HTML shell is
-  `templates/prompts-html.tmpl`.
+  es|en] [--closed summary|full] <comma-list-of-wave-ids> <out>`), whose HTML shell is
+  `templates/prompts-html.tmpl`. Closed (✅) waves render as one-line summaries by default
+  (`--closed summary`, no `<pre>` prompt, so the page stays under the ~600 KB re-issue size);
+  `--closed full` renders them as before.
 
 **Both generators are COPIED into `{{docs_dir}}/scripts/` at first generation, each
 with its template** — `plans-regen.py` + `plans-html.tmpl` and `prompts-regen.py` +
 `prompts-html.tmpl` (a script's `--init` looks for its `.tmpl` beside itself, so a
 script copied alone breaks) — so later sessions regenerate without the plugin
-installed (`status_digest.py` and `status-brief.md` already went there in Step 5, whatever
-the HTML answer). The copies are those of the plugin version the
+installed (`status_digest.py`, `status-brief.md` and `courier_preflight.py` already went there in Step 5,
+whatever the HTML answer). The copies are those of the plugin version the
 generated `execute.md` names in its `> **Protocol:** adcm-toolkits <plugin version>` line. The exact command goes into the `regen` field of the artifact's row in
 `artifacts.json`: for `plans.html` it is `python3 scripts/plans-regen.py --brain . --lang <lang> plans.html`
 WITHOUT `--init` (`plans-regen.py` auto-initializes the shell when the output file is missing);
@@ -590,7 +598,7 @@ before publishing): it is the
 single source of truth for the URLs, and the courier alone writes its publish stamps
 (`published_at`, `version`, `sha256`, `published_bytes`, and `previous_url` /
 `reissued` when an artifact is re-issued). The courier republishes to the SAME URL
-when the HTML changes — and re-issues an artifact above ~300 KB as a NEW artifact,
+when the HTML changes — and re-issues an artifact above ~600 KB as a NEW artifact,
 keeping the old URL in `previous_url` — and every close message ends with the links
 block it returns (execute.md §2b steps 5 and 7). Then install the deterministic
 guard: copy `templates/artifact-guard.py` to the owner's Claude profile (e.g. `~/.claude/hooks/artifact-guard.py`) and register
@@ -629,8 +637,8 @@ happen every session is not a note — it is a hook.
   record it in the logbook `Reuse:` field as a follow-up candidate and refresh the
   later-wave manifests at doc-sync.
 - **Deep by design, bounded by budget and roles — the agent budget is 20.** At
-  most 20 delegated agents per analysis phase (Step 3) and per executing wave
-  session, under the tiered protocol ("Agent roles"): the main session
+  most 20 delegated agents per session — the planning run (Step 3), each executing wave
+  session and a renovation are separate sessions, 20 each; the 21st asks the user — under the tiered protocol ("Agent roles"): the main session
   orchestrates, audits deliverables, writes executor briefs and runs the DoD — it
   never implements first and never spawns its own tier; `opus` investigates,
   audits, reviews regression, verifies gates and implements ⚠gate waves (quota 10,
@@ -643,7 +651,7 @@ happen every session is not a note — it is a hook.
   escalation Sonnet →
   Opus → orchestrator on the 2nd failure of the same DoD line; every call names
   its model or is an `adcm-toolkits:*` type. This holds in EVERY effort level — ultracode changes the orchestration
-  (Workflow per phase + adversarial cross-check), never the roles or the count.
+  (Workflow per stage + adversarial cross-check), never the roles or the count.
   Exceeding 20 is a protocol violation; it may only be raised by the user's
   explicit authorization for that single run, and the logbook records `agents
   used: n/20 (opus a · sonnet b) · escalations` with `simplify`, `courier` and (UI waves) `capture` among the agent roles. Depth comes from six documents +
@@ -674,8 +682,8 @@ happen every session is not a note — it is a hook.
   may flag indentation hell, leftover duplication and comment noise as maintainability
   findings. Every wave closes with ONE `code-simplifier` pass over its integrated diff
   before the final DoD-auto run.
-- **The orchestrator is pure.** In any substantive task the main session analyzes, writes briefs, launches sub-agents with an explicit `model` or an `adcm-toolkits:*` type (Plan and Explore agents included — without a `model` a Plan agent inherits the main session's model), reads their short RETURNs and decides; it does not read files in bulk, edit at scale, browse, render or publish. Two exceptions only: the ≤20-line shortcut already above (logged), and the user's escape hatch — `sin tanto lío` for that one task, `modo directo` until the user says `modo orquestador`. Full rule, brief format and tier table: `references/orchestrator-rule.md`.
+- **The orchestrator is pure.** In any substantive task the main session analyzes, writes briefs, launches sub-agents with an explicit `model` or an `adcm-toolkits:*` type (Plan and Explore agents included — without a `model` a Plan agent inherits the main session's model), reads their short RETURNs and decides; it does not read files in bulk, edit at scale, browse, render or publish. Three exceptions only: the ≤20-line shortcut already above (logged), the verbatim save of a sub-agent's RETURN to the path its brief names (gate reports, digests), and the user's escape hatch — `sin tanto lío` for that one task, `modo directo` until the user says `modo orquestador`. Full rule, brief format and tier table: `references/orchestrator-rule.md`.
 - **Session state comes from the digest, never from `task.md`.** To learn where a project stands the main session runs `status_digest.py --brain <docs_dir>` (the skill's canonical copy, else the brain's `scripts/` copy) and reads its ≤40 lines; it never reads `task.md`, `execute.md` or the plans for that. Exit 2 (tracker does not parse) → ONE `Agent(subagent_type: "adcm-toolkits:digester")` with `templates/status-brief.md` (1 of the 20, 0 Opus quota). The digest parses the logbook, so every entry keeps the `Next:`, `Blocked:` and `Agents used:` labels.
 - **Upgrades go through renovate.** Bringing an existing brain to the current protocol is `references/renovate.md` (checker, one executor per block, audit gate, courier) — never a hand-edit of `execute.md` from memory, never a re-plan of waves.
-- **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; the `artifact-courier` sub-agent (`adcm-toolkits:courier`, `sonnet` fixed by the type) runs each row's `regen`, republishes it to that SAME URL (re-issuing above ~300 KB), stamps the row and returns the links block — the main session never calls the Artifact tool, never reads or edits brain HTML (`plans.html`, `prompts.html`) and never assembles the block; it pastes the courier's block verbatim. Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered — and make sure the brain is reachable as `ai/ai-brain/` or `ai-brain/` from the code repos, or the hook never fires.
+- **Published HTML has one canonical URL and a registry.** Any generated HTML that is published as an artifact is recorded in `{{docs_dir}}/artifacts.json`; the `artifact-courier` sub-agent (`adcm-toolkits:courier`, `sonnet` fixed by the type) runs each row's `regen`, republishes it to that SAME URL (re-issuing above ~600 KB), stamps the row and returns the links block — the main session never calls the Artifact tool, never reads or edits brain HTML (`plans.html`, `prompts.html`) and never assembles the block; it pastes the courier's block verbatim. Install `templates/artifact-guard.py` as a Stop hook so this is enforced, not remembered — and make sure the brain is reachable as `ai/ai-brain/` or `ai-brain/` from the code repos, or the hook never fires.
 - **Closes are read on a phone.** Links in the close are plain Markdown bullets `- [emoji Title](url)` — never inside code fences, backticks, or 4-space indentation (that renders as dead, non-tappable text on mobile; the raw URL inside the Markdown link keeps Claude Code's footer quick-access badges working). The order of the close: narrative with repo paths and commit hashes → media (the main session sends the VISUAL CHECK screenshots the courier returns as `MEDIA: unsent`, a GIF when the feature spans several screens) → ONE short final message made of the pending DoD-human lines and then the courier's block (localhost, LAN, artifacts) as the LAST lines — no headings, no text inside the block and nothing after it. Paths, hashes and DoD-human go ABOVE the block, never after it: the guard rejects any text after the last link, and the owner must see media + links without scrolling back up.

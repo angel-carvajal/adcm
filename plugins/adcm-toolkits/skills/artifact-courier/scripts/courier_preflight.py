@@ -6,6 +6,8 @@ courier which rows need work:
 
   missing            the file does not exist on disk
   new                the row has no `url` yet (first publish, no `url` in the Artifact call)
+  other-account      only with --account NAME (NAME is not the registry's active account): the row
+                     has no `url_NAME`; it is never published on its own and stays out of batches
   fresh              `sha256` equals the file's hash, or `published_at` >= file mtime, and no
                      source document is newer than the file
   regen-due          would be fresh, but a source document is newer than the HTML: with `regen`
@@ -23,20 +25,45 @@ is only warned about.) --batch-kb (default 400) is the live + local byte budget 
 
 `--summary` is a one-line contract also read by status_digest.py.
 
+Accounts: `url` and its stamps (`sha256`, `published_at`, `published_bytes`, `version`, `previous_url`,
+`reissued`) belong to the registry's `active_account` (`cuenta_activa` is read too); a row may carry
+the same family for another claude.ai account with the account name as suffix: `url_<account>`,
+`sha256_<account>`, ... (the alias `url_cuenta_<account>`, likewise `cuenta_` on every key of the
+family, is read when the plain key is absent; writes always use the plain suffix). `--account NAME`
+with NAME different from the active account makes `url_NAME` the working url and the `_NAME` stamps
+the freshness evidence of the table, --block-only, --batches, --summary and the state machine (a
+missing `_NAME` stamp means stale, the canonical stamps are never used for it); rows without
+`url_NAME` are `other-account` (listed in an `OTHER-ACCOUNT:` line, left out of the batches; a row
+whose file is absent stays `missing`). With NAME equal to the active account, or without the flag,
+nothing changes: `url` and its stamps are used.
+
 Usage
   courier_preflight.py <docs_dir|artifacts.json> [--module REL]... [--only F,F]
-                       [--threshold-kb 300] [--batch-kb 400] [--page-kb 60]
+                       [--threshold-kb 600] [--batch-kb 400] [--page-kb 60] [--account NAME]
                        [--summary | --batches | --block-only [--include-hidden]]
   courier_preflight.py <docs_dir> --mark-published FILE URL VERSION
-                       [--previous-url OLD] [--reason TEXT]
+                       [--previous-url OLD] [--reason TEXT] [--account NAME]
                        (--previous-url must equal the row's current url, exit 2 otherwise;
-                        without it a changed url records the old one as previous_url)
+                        without it a changed url records the old one as previous_url;
+                        with --account NAME other than the active account ONLY the `_NAME` family
+                        is written: `url_NAME`, `sha256_NAME`, `published_at_NAME`,
+                        `published_bytes_NAME`, `version_NAME` and, on a changed url,
+                        `previous_url_NAME` and `reissued_NAME`; `url` and its stamps stay untouched)
   courier_preflight.py <docs_dir> --set-regen FILE COMMAND
+  courier_preflight.py <docs_dir> --set-active-account NAME
+                       (moves the registry to account NAME: on every row that has `url_NAME` the whole
+                        family (url, previous_url, reissued, sha256, published_at, published_bytes,
+                        version) goes `<key>_<old active>` <- `<key>`, `<key>` <- `<key>_NAME`, and
+                        the `_NAME` keys (alias keys too) are removed (<old active> = the current
+                        active account, `previous` when none is set); rows without `url_NAME` stay
+                        untouched and are listed;
+                        `active_account` (and `cuenta_activa` if present) = NAME; running it
+                        again with the old account restores every `url`)
   courier_preflight.py --pages SAVED_FILE [--page-kb 60] [--page-lines 450]
 
-Reading never writes anything. Only --mark-published and --set-regen write the registry
-(exclusive flock on `.artifacts.json.lock`, atomic tmp+fsync+replace, key order, indent and
-non-ASCII characters preserved; the transient lock file is always removed, also after die()).
+Reading never writes anything. Only --mark-published, --set-regen and --set-active-account write
+the registry (exclusive flock on `.artifacts.json.lock`, atomic tmp+fsync+replace, key order, indent
+and non-ASCII characters preserved; the transient lock file is always removed, also after die()).
 
 `module_root()` and `fmt_link()` mirror the artifact-guard Stop hook on purpose (the hook must
 stay self-contained, so the logic is duplicated, not imported).
@@ -53,12 +80,15 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
+__version__ = "0.15.0"
+
 REGISTRY_CANDIDATES = ("artifacts.json", "ai/ai-brain/artifacts.json", "ai-brain/artifacts.json")
 DEFAULT_MARKERS = ("task.md", "execute.md", "detailed-plan.md")
 KB = 1024
 CLOCK_SKEW = 60  # seconds: a published_at further in the future than this is ignored (as in the guard)
 LONG_LINE = 2000
 ACCOUNT_KEYS = ("active_account", "cuenta_activa")
+FAMILY = ("url", "previous_url", "reissued", "sha256", "published_at", "published_bytes", "version")  # per-account keys
 # Default `sources` for plans.html rows: the four documents, Spanish or English file names.
 DOC_SETS = (
     ("propuesta-ejecutiva", "executive-proposal"),
@@ -83,9 +113,20 @@ def iso_to_epoch(ts):
         return None
 
 
-def stamped_sha(a):
+def acct_get(a, base, acct=None):
+    """A row's `base` field for account `acct`: the plain key for the active account (acct None), else
+    `<base>_<acct>`, falling back to the Spanish alias `<base>_cuenta_<acct>` when the plain one is absent."""
+    if not acct:
+        return a.get(base)
+    for k in (f"{base}_{acct}", f"{base}_cuenta_{acct}"):
+        if k in a:
+            return a[k]
+    return None
+
+
+def stamped_sha(a, acct=None):
     """Registry sha256 normalised like the guard: strip, lower, drop a "sha256:" prefix."""
-    value = a.get("sha256")
+    value = acct_get(a, "sha256", acct)
     if not isinstance(value, str):
         return None
     value = value.strip().lower()
@@ -163,6 +204,18 @@ def now_stamp():
     return n.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (n.microsecond // 1000), n.strftime("%Y-%m-%d")
 
 
+def active_account(data):
+    return next((data[k] for k in ACCOUNT_KEYS if isinstance(data.get(k), str)), None)
+
+
+def other_account(data, name):
+    """NAME when it is an account other than the registry's active one, else None (the `url` field applies)."""
+    if not name:
+        return None
+    active = active_account(data)
+    return name if name.strip() != (active or "").strip() else None
+
+
 def regen_cmd(a):
     r = a.get("regen")
     if isinstance(r, str) and r.strip().lower() == "none":  # hand-maintained HTML: never regenerate
@@ -231,8 +284,9 @@ def needs_regen_text(file_, abs_file=None):
 
 # --------------------------------------------------------------------------- analysis
 
-def analyse(reg_dir, data, threshold_kb):
+def analyse(reg_dir, data, threshold_kb, account=None):
     markers = normalize_markers(data.get("close_markers"))
+    acct = other_account(data, account)
     limit = threshold_kb * KB
     now = time.time()
     rows = []
@@ -243,16 +297,19 @@ def analyse(reg_dir, data, threshold_kb):
         exists = os.path.isfile(absf)
         size = os.path.getsize(absf) if exists else 0
         mtime = os.path.getmtime(absf) if exists else None
-        url = a.get("url") if isinstance(a.get("url"), str) and a.get("url") else None
-        pb = a.get("published_bytes")
+        raw = acct_get(a, "url", acct)
+        url = raw if isinstance(raw, str) and raw else None
+        pb = acct_get(a, "published_bytes", acct)
         pb = pb if isinstance(pb, (int, float)) and not isinstance(pb, bool) else 0
         if not exists:
             state = "missing"
+        elif acct and not url:
+            state = "other-account"  # this row lives on the other account: not ours to publish
         elif not url:
             state = "new"
         else:
-            sha = stamped_sha(a)
-            pub = iso_to_epoch(a.get("published_at"))
+            sha = stamped_sha(a, acct)
+            pub = iso_to_epoch(acct_get(a, "published_at", acct))
             if pub is not None and pub > now + CLOCK_SKEW:
                 pub = None  # future stamp: not evidence of anything (mirrors the guard)
             if sha is not None and sha == file_sha256(absf):
@@ -273,8 +330,9 @@ def analyse(reg_dir, data, threshold_kb):
             except OSError:
                 continue
         hand = str(a.get("regen", "")).strip().lower() == "none"  # hand-maintained: sources ignored
-        needs_regen = src_newer and not regen and not hand
-        regen_due = src_newer and bool(regen)
+        foreign = state == "other-account"
+        needs_regen = src_newer and not regen and not hand and not foreign
+        regen_due = src_newer and bool(regen) and not foreign
         if src_newer and state == "fresh" and not hand:
             state = "regen-due"  # never "fresh": the page predates its sources (hand-maintained rows exempt)
         rows.append({
@@ -312,7 +370,7 @@ def make_batches(rows, batch_kb):
     missing rows go first, into batch 1; in-place rows then fill batch 1 up to the budget and
     spill into the following batches. A row above the budget gets a batch alone."""
     limit = batch_kb * KB
-    todo = [r for r in rows if r["state"] != "fresh" and
+    todo = [r for r in rows if r["state"] not in ("fresh", "other-account") and
             not (r["state"] == "missing" and not r["regen"] and not r["needs_regen"])]
     forced = [r for r in todo if r["state"].startswith(("stale-reissue", "new")) or r["needs_regen"]
               or r["regen_due"] or r["state"] == "missing"]
@@ -350,7 +408,8 @@ def report(args):
     reg = find_registry(args.target)
     reg_dir = os.path.dirname(reg)
     data = load_registry(reg)
-    rows = analyse(reg_dir, data, args.threshold_kb)
+    acct = other_account(data, args.account)
+    rows = analyse(reg_dir, data, args.threshold_kb, args.account)
 
     # Link block: module filter only (mirrors the guard's per-module block).
     block_rows = rows
@@ -389,6 +448,7 @@ def report(args):
     regen_n = sum(1 for r in work_rows if r["regen"])
     due = [r["file"] for r in work_rows if r["regen_due"]]
     need = [r["file"] for r in work_rows if r["needs_regen"]]
+    foreign = [r["file"] for r in work_rows if r["state"] == "other-account"]
 
     if args.block_only:
         lines = block
@@ -396,7 +456,8 @@ def report(args):
             lines = ["- " + fmt_link({**r["a"], "url": r["url"]}) for r in work_rows if r["url"]]
         print("\n".join(lines))
         for f in missing_url:
-            print(f"warn: {f} has no url, left out of the block", file=sys.stderr)
+            print(f"warn: {f} has no url_{acct}, left out of the block (other account)" if acct
+                  else f"warn: {f} has no url, left out of the block", file=sys.stderr)
         return 0
 
     if args.batches:
@@ -408,6 +469,8 @@ def report(args):
         for k in ("fresh", "stale-inplace", "stale-reissue", "new", "missing"):
             if counts.get(k):
                 parts.append(f"{k} {counts[k]}")
+        if foreign:
+            parts.append(f"other-account {len(foreign)}: {', '.join(foreign)}")
         if regen_n:
             parts.append(f"regen {regen_n}")
         if due:
@@ -421,11 +484,18 @@ def report(args):
         print("courier-preflight: " + " · ".join(parts))
         return 0
 
-    active = next((data[k] for k in ACCOUNT_KEYS if isinstance(data.get(k), str)), None)
-    ignored = sorted({k for r in rows for k in r["a"] if k.startswith("url_")})
+    active = active_account(data)
+    ignored = sorted({k for r in rows for k in r["a"] if k.startswith("url_") and k not in (f"url_{acct}", f"url_cuenta_{acct}")})
     print(f"registry: {reg}")
-    print(f"active account: {active or 'not set'} · publishing always uses `url`"
-          + (f" · {', '.join(ignored)}: not used" if ignored else ""))
+    if acct:
+        read = sorted({f"url_{acct}" if f"url_{acct}" in r["a"] else f"url_cuenta_{acct}" for r in rows if r["url"]},
+                      key=lambda k: "cuenta_" in k) or [f"url_{acct}"]
+        print(f"active account: {active or 'not set'} · --account {acct}: working on "
+              f"{' / '.join(f'`{k}`' for k in read)} (`url` is not used)"
+              + (f" · {', '.join(ignored)}: not used" if ignored else ""))
+    else:
+        print(f"active account: {active or 'not set'} · publishing always uses `url`"
+              + (f" · {', '.join(ignored)}: not used" if ignored else ""))
     print(f"threshold: {args.threshold_kb:g} KB (re-issue above) · batch: {args.batch_kb:g} KB (live + local bytes)")
     print()
     body = []
@@ -438,7 +508,7 @@ def report(args):
             rg = "needs-regen: " + needs_regen_text(r["file"], r["abs"])
         else:
             rg = "-"
-        pub = r["a"].get("published_at")
+        pub = acct_get(r["a"], "published_at", acct)
         pe = iso_to_epoch(pub)
         if pe is not None and pe > time.time() + CLOCK_SKEW:
             pub = f"{pub} (future: ignored)"
@@ -451,6 +521,9 @@ def report(args):
         ])
     for line in table(["FILE", "KB", "MTIME", "PUBLISHED_AT", "STATE", "REGEN", "URL"], body):
         print(line)
+    if foreign:
+        print(f"OTHER-ACCOUNT: {', '.join(foreign)} (no url_{acct}; left out of the batches, "
+              "published only with REISSUE ON OTHER ACCOUNT: yes)")
     if due:
         print("regen-due: run each row's regen first, then publish it in place or re-issued by size "
               "(re-run --summary after the regen to see the state)")
@@ -466,7 +539,8 @@ def report(args):
             print(f"warn: {r['file']} has {n} line(s) over {LONG_LINE} chars "
                   f"(the Read tool truncates them; see the retry rule in procedure.md)")
     for f in missing_url:
-        print(f"warn: {f} has no url yet, left out of the block (publish it as `new`)")
+        print(f"warn: {f} has no url_{acct}, left out of the block (other account)" if acct
+              else f"warn: {f} has no url yet, left out of the block (publish it as `new`)")
     for r in work_rows:
         if r["state"] == "missing":
             print(f"warn: {r['file']} does not exist on disk" + (" (regen may create it)" if r["regen"] else ""))
@@ -559,36 +633,96 @@ def mark_published(args):
         absf = os.path.join(reg_dir, file_)
         if not os.path.isfile(absf):
             die(f"{file_} does not exist on disk, nothing to stamp")
-        old = a.get("url") if isinstance(a.get("url"), str) and a.get("url") else None
+        acct = other_account(data, args.account)
+        ukey, pkey, rkey, ckey, tkey, vkey, bkey = (f"{b}_{acct}" if acct else b for b in (
+            "url", "previous_url", "reissued", "sha256", "published_at", "version", "published_bytes"))
+        cur_url = acct_get(a, "url", acct)
+        old = cur_url if isinstance(cur_url, str) and cur_url else None
         prev = args.previous_url
         if prev and old and prev != old:
-            die(f"--previous-url {prev} does not match the row's current url; the real old url is {old}")
+            die(f"--previous-url {prev} does not match the row's current {ukey}; the real old url is {old}")
         if not prev and old and old != url:
             prev = old
         if prev and prev == url:
             prev = None
         ts, day = now_stamp()
-        before = {k: a.get(k) for k in ("url", "published_at", "version", "sha256", "published_bytes", "previous_url", "reissued")}
-        a["url"] = url
-        a["published_at"] = ts
-        a["version"] = version
-        a["sha256"] = file_sha256(absf)
-        a["published_bytes"] = os.path.getsize(absf)
-        if "published" in a:
+        before = {k: a.get(k) for k in (ukey, tkey, vkey, ckey, bkey, pkey, rkey)}
+        before[ukey] = cur_url
+        a[ukey] = url
+        a[tkey] = ts
+        a[vkey] = version
+        a[ckey] = file_sha256(absf)
+        a[bkey] = os.path.getsize(absf)
+        if acct:  # first write migrates an alias family to the plain suffix: never two urls on one row
+            for b in FAMILY:
+                a.pop(f"{b}_cuenta_{acct}", None)
+        if "published" in a and not acct:
             cur = a["published"]
             a["published"] = ts if isinstance(cur, str) and len(cur) > 10 else day
         if prev:
             reason = args.reason or "re-issued as a new artifact"
-            a["previous_url"] = prev
-            a["reissued"] = f"{day}: {reason}. Antecedente: {prev}"
+            a[pkey] = prev
+            a[rkey] = f"{day}: {reason}. Antecedente: {prev}"
         after = {k: a.get(k) for k in before}
-        return before, after
+        return before, after, acct
 
-    before, after = update_registry(args.target, mutate)
-    print(f"stamped {file_}")
+    before, after, acct = update_registry(args.target, mutate)
+    print(f"stamped {file_}" + (f" (account {acct}: url_{acct})" if acct else ""))
     for k in after:
         if before[k] != after[k]:
             print(f"  {k}: {before[k]!r} -> {after[k]!r}")
+    return 0
+
+
+def suffix_for(old):
+    return (old or "").strip() or "previous"
+
+
+def set_active_account(args):
+    name = args.set_active_account
+
+    def mutate(reg_dir, data):
+        old = active_account(data)
+        if (old or "").strip() == name.strip():
+            die(f"{name!r} is already the active account, nothing to swap")
+        osuf = suffix_for(old)
+        swapped, kept = [], []
+        for a in data["artifacts"]:
+            if not isinstance(a, dict) or not isinstance(a.get("file"), str):
+                continue
+            other = acct_get(a, "url", name)
+            if not (isinstance(other, str) and other):
+                kept.append(a["file"])
+                continue
+            for b in FAMILY:  # rename: canonical <- _NAME, old canonical -> _<old active>, _NAME removed
+                new_v = acct_get(a, b, name)
+                had_new = any(k in a for k in (f"{b}_{name}", f"{b}_cuenta_{name}"))
+                had_old, old_v = b in a, a.get(b)
+                if had_new:
+                    a[b] = new_v
+                else:
+                    a.pop(b, None)
+                for k in (f"{b}_{name}", f"{b}_cuenta_{name}"):
+                    a.pop(k, None)
+                if had_old:
+                    a[f"{b}_{osuf}"] = old_v
+                else:
+                    a.pop(f"{b}_{osuf}", None)
+            swapped.append(a["file"])
+        if not swapped:
+            die(f"no row has `url_{name}`, nothing to swap (check the account name)")
+        data["active_account"] = name
+        if "cuenta_activa" in data:
+            data["cuenta_activa"] = name
+        return old, swapped, kept
+
+    old, swapped, kept = update_registry(args.target, mutate)
+    print(f"active account: {old or 'not set'} -> {name}")
+    print(f"moved the url_{name} family -> canonical keys and the canonical family -> _{suffix_for(old)} "
+          f"on {len(swapped)} row(s): {', '.join(swapped)}")
+    if kept:
+        print(f"warn: {len(kept)} row(s) without url_{name} left untouched (their `url` still belongs to "
+              f"{old or 'the previous account'}): {', '.join(kept)}")
     return 0
 
 
@@ -651,7 +785,8 @@ def main():
     p.add_argument("--module", action="append", default=[], metavar="REL",
                    help="only rows of this module (relative to the docs dir; '.' = root); repeatable")
     p.add_argument("--only", action="append", default=[], metavar="F,F", help="only these registry files (narrows the work table, the batches and the link block)")
-    p.add_argument("--threshold-kb", type=float, default=300, help="re-issue above this size (default 300)")
+    p.add_argument("--threshold-kb", type=float, default=600, help="re-issue above this size (default 600)")
+    p.add_argument("--version", action="version", version="courier_preflight.py " + __version__)
     p.add_argument("--batch-kb", type=float, default=400,
                    help="byte budget per courier batch: live + local bytes of its rows (default 400, i.e. "
                         "400 KB; a larger value gives fewer, bigger batches, a row above it gets a batch alone)")
@@ -664,6 +799,14 @@ def main():
     p.add_argument("--previous-url", metavar="OLD")
     p.add_argument("--reason", metavar="TEXT")
     p.add_argument("--set-regen", nargs=2, metavar=("FILE", "COMMAND"))
+    p.add_argument("--account", metavar="NAME",
+                   help="claude.ai account the session publishes under; when it is not the registry's "
+                        "active_account the working url is url_NAME (table, --block-only, --batches, "
+                        "--summary, state machine; rows without it are `other-account`), and "
+                        "--mark-published seals url_NAME and leaves url alone")
+    p.add_argument("--set-active-account", metavar="NAME",
+                   help="move the registry to account NAME: swap url <-> url_NAME on every row that has it "
+                        "and set active_account (and cuenta_activa if present)")
     p.add_argument("--pages", metavar="SAVED_FILE")
     p.add_argument("--page-kb", type=float, default=60)
     p.add_argument("--page-lines", type=int, default=450)
@@ -673,6 +816,14 @@ def main():
         return pages(args)
     if not args.target:
         p.error("target (docs dir or artifacts.json) is required")
+    for flag in ("account", "set_active_account"):
+        v = getattr(args, flag)
+        if v is not None and not re.fullmatch(r"[\w.-]+", v):
+            p.error(f"--{flag.replace('_', '-')} needs a name made of letters, digits, `_`, `.` or `-`")
+    if args.set_active_account:
+        if args.account or args.mark_published or args.set_regen:
+            p.error("--set-active-account is exclusive (no --account, --mark-published or --set-regen)")
+        return set_active_account(args)
     if args.mark_published:
         return mark_published(args)
     if args.set_regen:
