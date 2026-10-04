@@ -152,6 +152,9 @@ Start a clean session in EXECUTION mode (auto-accept edits — e.g. `claude
 (# SCOPE); the only re-planning trigger is a diverging census.
 Load the skill `{{project_context_skill}}`, read
 `{{docs_dir}}/execute.md` (this protocol).
+Then run `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`: this wave's
+deps ✅, no foreign `[PARTIAL]` open; never read task.md whole. Exit 2 → one sonnet with
+`{{docs_dir}}/scripts/status-brief.md`; without an Agent tool, stop and report.
 
 # GOAL — Wave <Wx>: <titles>
 Work EXACTLY the tasks <IDs> (specs: detailed-plan.md — read them in full; they are
@@ -247,13 +250,14 @@ Closing a wave (DoD-auto green) — and every later status change (e.g. {{owner}
 merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit:
 
 1. **`task.md`** — logbook entry with the extended schema (date of execution ·
-   branch/MR · tasks closed · **files touched** · **manifest drift** · notes · wall
+   branch/MR · tasks closed · **blocked** · **files touched** · **manifest drift** · notes · wall
    clock · **reuse** (helpers consumed/extracted · consumers rewired · dup census
    before → after · unplanned duplication found → follow-up | none) · **simplifier**
    (carrier: packaged | fallback sub-agent · ran over `{{checkpoint_sha}}..HEAD` · files
    touched · DoD re-verified | reverted (why) | not run (why)) · **agents used n/20 (opus a · sonnet b)** with roles investigate /
    execute / review / simplify / verify / capture / courier (record the NUMBER of couriers: 1, or more
-   when the delivery ran in several batches) · **escalations**) AND the
+   when the delivery ran in several batches) · **escalations** · **Next:** exact next
+   command/prompt, or "wave closed") AND the
    wave-map status flip.
 2. **`execute.md` §7** — this wave's prompt header flip (`☐` → `✅ DONE (date)` /
    `🔄` / `⛔`).
@@ -356,8 +360,10 @@ commits and (b) a `[PARTIAL]` logbook entry with: internal tasks closed, exact s
 progress, which executor tier held each open task and on which rung of the ladder
 (attempt log), unmerged worktrees, whether the simplify pass already ran and over
 which checkpoint commit (so the resuming session neither repeats nor skips it), and
-the next command to run. The resuming session
-reads the `[PARTIAL]` entry, checks out the branch and continues the loop from that
+its `**Next:**` line (the next command to run). The resuming session
+runs `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}` (LAST LOG gives the
+`[PARTIAL]` entry's next/blocked/agents and its `@La-b` range; `--entry K` — K from LAST
+LOG/prev — prints it in full), checks out the branch and continues the loop from that
 rung — it does NOT restart, and it does NOT re-brief tasks whose worktree is intact.
 
 ## 5. Wave map (identity; fine ORDER is set by task.md)

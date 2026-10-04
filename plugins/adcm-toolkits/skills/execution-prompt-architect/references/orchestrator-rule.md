@@ -9,7 +9,9 @@ decides/integrates. It does NOT execute the task itself:
 - no reading files in bulk (a sub-agent reads; the RETURN carries what matters), no
   editing at scale, no browsing, scraping or screenshotting;
 - no rendering or regenerating HTML, no calling the Artifact tool, no assembling the
-  links block (the `artifact-courier` does all of it).
+  links block (the `artifact-courier` does all of it);
+- no reading `task.md`, `execute.md` or plan docs to learn the state of a project — the
+  status digest answers it (see "Session start").
 
 ## Exceptions (two, nothing else)
 
@@ -23,6 +25,18 @@ decides/integrates. It does NOT execute the task itself:
 
    In direct mode the main session does everything itself. Never infer it from tone or
    from the task looking small.
+
+## Session start: the status digest
+
+When the user opens or resumes a project ('where did we leave off', 'dónde nos quedamos',
+'project status'), the main session runs `python3 <path> --brain <docs_dir> [--module
+modules/<mod>]` — `<path>` is `execution-prompt-architect/templates/status_digest.py` or the
+brain copy `<docs_dir>/scripts/status_digest.py` — and reads only its ≤40 lines. Exit 0 ok · 1
+partial (digest printed, `DIGEST: partial(<parts>)`): the digest is enough, spawn the fallback
+only if the missing part matters · 2 unparsed: always ONE `Agent(subagent_type:
+"general-purpose", model: "sonnet")` with `execution-prompt-architect/templates/status-brief.md`
+(1 of the 20, 0 Opus quota) · 64 usage error. `--entry [K]` prints the K-th newest logbook entry
+in full (≤40 lines).
 
 ## `model` on EVERY delegated call
 

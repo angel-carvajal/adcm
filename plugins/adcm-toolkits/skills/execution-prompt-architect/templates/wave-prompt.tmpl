@@ -42,6 +42,9 @@ Load the skill `{{project_context_skill}}`, read
 `{{docs_dir}}/execute.md` (this protocol). {{Wave-specific preamble: extra skills to
 load, repos to open, state assumptions — e.g. "W2 must be merged" — and what to do if
 an assumption fails.}}
+Then run `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`: this wave's
+deps ✅, no foreign `[PARTIAL]` open; never read task.md whole. Exit 2 → one sonnet with
+`{{docs_dir}}/scripts/status-brief.md`; without an Agent tool, stop and report.
 
 # GOAL — Wave {{Wx}}: {{task_titles}}
 Work EXACTLY the tasks {{IDs}} (specs: `{{docs_dir}}/detailed-plan.md` §{{section}} —
@@ -253,7 +256,7 @@ wave could violate.}} When the simplify pass has run and the FULL DoD-auto is gr
 AFTER it: {{delivery per execute.md §3 —
 open MR / commit without push}}, then run the FULL doc-sync at close (`execute.md`
 §2b — "append the logbook" means ALL of it): logbook entry in `{{docs_dir}}/task.md`
-(TODAY's date — never hardcoded — + branch/MR + tasks closed + **files touched +
+(TODAY's date — never hardcoded — + branch/MR + tasks closed + **blocked** (ids + pending DoD-human) + **files touched +
 manifest drift** + notes + wall clock + **reuse** (helpers consumed/extracted ·
 consumers rewired · dup census before → after · unplanned duplication found →
 follow-up | none) + **simplifier** (carrier: packaged | fallback sub-agent · ran over
@@ -262,7 +265,7 @@ follow-up | none) + **simplifier** (carrier: packaged | fallback sub-agent · ra
 an unlogged one is a protocol violation) + **agents used n/20 (opus a · sonnet
 b)**, one line per agent with its model, role (investigate / execute / review /
 simplify / verify / capture / courier — with the NUMBER of couriers) and scope + **escalations** (none, or
-ID: tier → tier with the reason)), status flip in task.md's wave map AND this
+ID: tier → tier with the reason) + **Next** (exact next command/prompt, or "wave closed")), status flip in task.md's wave map AND this
 prompt's `execute.md §7` header (✅ / ⛔ if blocked on a DoD-human), mark {{IDs}} ✅ in
 `detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
 refresh the Scope manifests of LATER waves whose surfaces this wave changed (and

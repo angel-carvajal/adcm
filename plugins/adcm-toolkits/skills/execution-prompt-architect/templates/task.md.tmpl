@@ -1,9 +1,12 @@
 <!--
-Template: task.md — the STATE: wave map + burn + logbook.
+Template: task.md — the STATE: wave map + DoD-human pending + burn + logbook.
 This is the only document that mutates during execution. Wave prompts append to the
 logbook at close. Never hardcode dates — entries use the date of the day they run.
 Generate in the user's language; keep the document name task.md — it never
 translates (tooling addresses it).
+`scripts/status_digest.py` reads the wave map, the DoD-human pending table and the logbook
+labels (`Next:`, `Blocked:`, `Agents used:`) — keep their names; sessions read this file
+only through that digest.
 -->
 # {{project_name}} — Task tracker: {{initiative_title}}
 
@@ -21,6 +24,15 @@ translates (tooling addresses it).
 
 Status legend: ☐ pending · 🔄 in progress · ⛔ blocked (DoD-human pending) · ✅ done.
 
+## DoD-human pending
+
+| # | Item | Owner | Blocks | Due |
+|---|---|---|---|---|
+| 1 | {{what a human must do or confirm}} | {{owner}} | {{wave or task it blocks}} | {{due date}} |
+
+Resolved rows stay in the table, struck through with ✅ (`~~…~~ ✅`); never delete them.
+No pending items → keep the header row only (no placeholder or `—` rows).
+
 ## Weekly burn
 
 Every {{weekday}}: waves planned vs closed. **If burn < 70% → cut scope of the next
@@ -37,6 +49,7 @@ Append one entry per wave session (including `[PARTIAL]` ones — see `execute.m
 
 - **Branch/MR:** {{branch_or_mr}}
 - **Tasks closed:** {{ids}} · **Blocked:** {{ids + pending DoD-human}}
+- **Next:** {{exact next command/prompt, or "wave closed"}}
 - **Files touched:** {{list, or "per manifest" when it matched the Scope manifest exactly}}
 - **Manifest drift:** {{none | each deviation: expected vs found, census actual vs
   expected, which detailed-plan manifests (incl. later waves) were updated}}

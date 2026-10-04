@@ -1,5 +1,28 @@
 # Changelog — adcm-toolkits
 
+## 0.13.0 — 2026-10-03
+
+- `execution-prompt-architect`: new `templates/status_digest.py` (stdlib, deterministic) answers
+  "where did we leave off" from `task.md` in ≤40 lines — project, git state, wave counts and the
+  waves in progress / blocked / ready, the newest logbook entry (date, wave, `[PARTIAL]`, next,
+  blocked, agents used), pending human actions in any of the four shapes real trackers use,
+  and the artifact preflight line. Exit 0 ok · 1 partial · 2 unparsed · 64 usage. `--entry K`
+  prints one logbook entry in full; `--json` for tools. Tolerates ES/EN headings in the same
+  file, extra glyphs with tags, non-numeric wave ids, malformed rows, unsorted logbooks and
+  leftover template placeholders.
+- `templates/status-brief.md`: the Sonnet fallback brief used only when the digest exits 2.
+- `templates/status-digest-selftest.py`: 28 synthetic cases (RED→GREEN), including the
+  silent-failure traps two audit rounds found: rows without a glyph, a mid-line `<!--`,
+  undated or indented headings, an unrecognised or header-only pending section, `W2a` vs
+  `W2`, "Blocked: None of …" kept as a blocker, and CLI hardening (minimum width, line
+  floor with NEXT always kept, `--entry` cap, `..` in `--module`, git timeouts).
+- The main session never reads `task.md`, `execute.md` or the plans to learn project state:
+  session-start section in SKILL.md, hard rule, `orchestrator-rule.md`, §2/§4 of
+  `execute.md.tmpl` and the wave prompt all point to the digest; the script is copied to
+  `<docs_dir>/scripts/` at planning time.
+- `task.md.tmpl`: logbook entries carry a `Next:` label and new trackers get a canonical
+  `## DoD-human pending` table, so the digest needs no heuristics on new projects.
+
 ## 0.12.2 — 2026-10-03
 
 - `artifact-courier`: verified that sub-agents have no `SendUserFile` tool (they do have the

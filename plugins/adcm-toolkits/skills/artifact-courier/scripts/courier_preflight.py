@@ -21,6 +21,8 @@ local bytes when re-issued or new. Re-issue, new, regen-due and needs-regen rows
 (A missing row with neither `regen` nor any source document has nothing a courier can do: it
 is only warned about.) --batch-kb (default 400) is the live + local byte budget per batch.
 
+`--summary` is a one-line contract also read by status_digest.py.
+
 Usage
   courier_preflight.py <docs_dir|artifacts.json> [--module REL]... [--only F,F]
                        [--threshold-kb 300] [--batch-kb 400] [--page-kb 60]
