@@ -28,6 +28,11 @@ decides/integrates. It does NOT execute the task itself:
 3. **Verbatim saves.** Saving a sub-agent's RETURN unchanged to the path the brief names
    (gate reports `qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout, digests) is a mechanical save, not an edit.
 
+## Merge and links
+
+- **Claude never merges.** A wave ends with its MR open, pipeline green, simplify pass done and assigned to the Reviewer (`> **Reviewer:**` in execute.md); the merge is a DoD-human item and wave N+1 starts only after MR N is merged (merge policy: wait). This applies to the waves' code MRs — the docs repo (ai-brain, any of its three positions) and the marketplaces commit and push to main directly.
+- The links block appears exactly once per delivery close — in the orchestrator's final message, after the last courier RETURN. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker; with several couriers (batches, `SendMessage` replies) only the last RETURN's block is pasted. No agent other than the courier returns URLs.
+
 ## Session start: the status digest
 
 When the user opens or resumes a project ('where did we leave off', 'dónde nos quedamos',
@@ -56,9 +61,9 @@ agents load at the next session or on `/reload-plugins`.
 
 | Tier | Agent type | Does | Never |
 |---|---|---|---|
-| Main session (orchestrator) | — | Decides design and scope, audits deliverables, writes briefs, runs the DoD, integrates | Executes, reads in bulk, renders, publishes, browses |
-| `opus` (quota 10 per session; 2 reserved) | `adcm-toolkits:auditor` (reviews, gate verifier) · `adcm-toolkits:researcher` + `model: opus` (investigations) · `adcm-toolkits:executor` + `model: opus` (⚠gate waves) | Investigates, audits, reviews regression, verifies gates, implements ⚠gate waves | Decides scope |
-| `sonnet` | `adcm-toolkits:executor` · `adcm-toolkits:executor-frontend` (UI waves) · `adcm-toolkits:researcher` (default; also the capture role: browser, no edits) · `adcm-toolkits:courier` · `adcm-toolkits:digester` | Executes, renders, publishes (courier), researches, captures, runs scripts, digests status | Self-approves |
+| Main session (orchestrator) | — | Decides design and scope, audits deliverables, writes briefs, runs the DoD, integrates | Executes, reads in bulk, renders, publishes, browses, merges an MR / pushes code to the default branch, prints links in progress turns |
+| `opus` (quota 10 per session; 2 reserved) | `adcm-toolkits:auditor` (reviews, gate verifier) · `adcm-toolkits:researcher` + `model: opus` (investigations) · `adcm-toolkits:executor` + `model: opus` (⚠gate waves) | Investigates, audits, reviews regression, verifies gates, implements ⚠gate waves | Decides scope; merges an MR / pushes code to the default branch |
+| `sonnet` | `adcm-toolkits:executor` · `adcm-toolkits:executor-frontend` (UI waves) · `adcm-toolkits:researcher` (default; also the capture role: browser, no edits) · `adcm-toolkits:courier` · `adcm-toolkits:digester` | Executes, renders, publishes (courier), researches, captures, runs scripts, digests status | Self-approves; merges an MR / pushes code to the default branch; returns URLs (only the courier does) |
 | `haiku` | `general-purpose` + `model: haiku` | Inventory-only tasks: listing, counting, grepping, file-existence checks | Anything that needs judgement |
 
 The types fix the tool set; the tier rules above still set the model of each call. When
@@ -81,5 +86,5 @@ of the answer). The brief carries the investigation; the sub-agent never re-deri
 
 A sub-agent returns a compact structured text: files touched, commands run with their
 real output, rulings and open questions. It never returns HTML or whole files — the
-artifact is the file on disk or the published URL, not the message. A bare "done" is not
+artifact is the file on disk, not the message. RETURN carries file paths and summaries, never URLs or a links block; only the courier returns links. A bare "done" is not
 a RETURN. The orchestrator reads the RETURN, verifies the DoD-slice itself and decides.

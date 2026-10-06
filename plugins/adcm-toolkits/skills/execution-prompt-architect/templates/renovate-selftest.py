@@ -13,7 +13,9 @@ Exit code 1 when any case FAILs.
 Every run is asserted twice (plain + --json with the same flags): exit code, <= 40 plain lines,
 last line `RENOVATE: up-to-date | needed(a,b) | unparsed (...)` consistent with the exit code
 and with json.needed, json.text == plain stdout lines, and the brain tree untouched unless the
-case passes --copy-scripts. Fixtures are generic (Acme, modules/billing, example.com); their
+case passes --copy-scripts. The informational HOOKS block (merge-guard.py / artifact-guard.py under
+$CLAUDE_CONFIG_DIR/hooks, else ~/.claude/hooks) never enters needed; every case runs with both hooks
+installed and current unless it says otherwise (case_hooks_review). Fixtures are generic (Acme, modules/billing, example.com); their
 artifacts.json declares `active_account` unless a case drops it on purpose (the ARTIFACTS block
 adds a `review: no active_account declared` line and `no_active_account: true` when it is missing).
 The checker under test defaults to the renovate_check.py next to this file.
@@ -29,7 +31,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RELEASE = "0.15.2"  # what plugin.json, the template Protocol line and __version__ must all say
+RELEASE = "0.16.0"  # what plugin.json, the template Protocol line and __version__ must all say
 VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
@@ -49,6 +51,16 @@ RULE_ES = ("   Los tipos `adcm-toolkits:*` fijan el conjunto de herramientas; el
            "manda sobre el del tipo.")
 RULE_BAD_ES = "   Los tipos `adcm-toolkits:*` fijan las herramientas; el `model` se elige en la sesión."
 RULE_BAD_EN = "   One counter per session, `model` explicit on every call or an `adcm-toolkits:*` type."
+REVIEWER_OK = "@dev (gitlab)"  # a real `@handle (gitlab|github)` value of the header's Reviewer line
+REVIEWER_PENDING = "_pending — owner sets it_"  # the template placeholder
+MERGE_RULE = ("Every wave ends in an MR/PR for the Reviewer named in the header; Claude never merges: the Reviewer "
+              "merges, and the next wave starts only after that merge.")
+MERGE_OLD = "| NO-gate | commit without push for review |"  # the pre-0.16 §3 row
+AUTO_MERGE = "NO-gate waves: auto-merge the MR when the pipeline is green."  # the retired policy text
+AUTO_MERGE_S7 = "Wave policy: auto-merge the MR if pipeline green."  # the retired text as a §7 prompt carries it
+LINKS_ONCE = "The courier's links block is pasted exactly once per delivery close, as the last lines of the final message."
+GUARD_TPL = "# fake template artifact-guard.py (selftest v1)\n"
+MERGE_GUARD = "# merge-guard hook (selftest)\n"
 ES_EX = {"es": True, "nxt": "Siguiente", "blk": "bloqueadas"}
 ES_TK = {"es": True, "nxt": "Siguiente"}
 
@@ -106,6 +118,9 @@ class Ctx:
         self.skill = os.path.join(root, "skilltpl")
         for n in FILES:
             self.write("skilltpl/templates/" + n, tpl(n))
+        self.write("skilltpl/templates/artifact-guard.py", GUARD_TPL)  # the hook template (not a scripts/ file)
+        self.write("cfg/hooks/artifact-guard.py", GUARD_TPL)  # default: both hooks installed, the guard current
+        self.write("cfg/hooks/merge-guard.py", MERGE_GUARD)
         self.env = dict(os.environ)
         self.env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8",
                          "PYTHONUTF8": "1", "HOME": root,
@@ -215,12 +230,13 @@ def both(ctx, t, brain, *flags, rc=0, twin=None, ro=True):
         t.ok(not gone, f"json lacks keys {gone}")
         t.eq(d.get("target"), VERSION, "json target")
         got = set((d.get("blocks") or {}).keys())
-        t.ok(set(BLOCKS) - {"rules"} <= got <= set(BLOCKS), f"json blocks keys, got {sorted(got)}")
+        t.ok(set(BLOCKS) - {"rules"} <= got <= set(BLOCKS) | {"hooks"}, f"json blocks keys, got {sorted(got)}")
         m = re.fullmatch(r"RENOVATE: needed\((.*)\)", last)
         t.eq(d.get("needed"), m.group(1).split(",") if m else [], "json needed == last plain line")
         need = d.get("needed") or []
         t.ok("context" not in need and need == sorted(need, key=lambda n: BLOCKS.index(n) if n in BLOCKS else 99),
              f"needed never holds context and follows the block order, got {need}")
+        t.ok("hooks" not in need, f"needed never holds hooks (informational block), got {need}")
         if "--module" not in flags:
             t.eq(os.path.realpath(d.get("brain") or ""), os.path.realpath(jb), "json brain")
     if before is not None:
@@ -277,11 +293,15 @@ def opening(p, where="s2"):
 
 EXEC_DEFAULTS = dict(protocol=VERSION, types=TYPES, digest=True, last_log="s4", nxt="Next", blk="blocked",
                      rule=True, skills=(), ctx="business-init-acme", prose=(), es=False, trap=False, sim=False,
-                     wrap=False, hdrs={}, outside=(), appendix=())
+                     wrap=False, hdrs={}, outside=(), appendix=(),
+                     reviewer=True, merge_rule=True, links_once=True, automerge=False, s7text={})
 
 
 def exec_doc(waves, **o):
-    """execute.md carrying the REAL marker lines of the 0.14.1 template, each one switchable."""
+    """execute.md carrying the REAL marker lines of the 0.16.0 template, each one switchable. reviewer: True (a real
+    handle) | False (no Reviewer line) | a raw value string (e.g. REVIEWER_PENDING); merge_rule / links_once: the 0.16.0
+    sentences of §3 / §2b (off: the pre-0.16 §3 row / no sentence); automerge: the retired policy text inside §3;
+    s7text: {wave id: line} added inside that wave's §7 prompt block."""
     p = {**EXEC_DEFAULTS, **o}
     ty, es = set(p["types"]), p["es"]
     L = []
@@ -289,7 +309,12 @@ def exec_doc(waves, **o):
         L += ["<!--", "Draft notes, not part of the protocol.", "## Ghost section", "### Wave W0 ghost", "-->"]
     L += ["# Acme — Execution protocol (Billing revamp)", ""]
     if p["protocol"]:
-        L += [f"> **Protocol:** adcm-toolkits {p['protocol']}", ""]
+        L += [f"> **Protocol:** adcm-toolkits {p['protocol']}"]
+    if p["reviewer"]:
+        val = REVIEWER_OK if p["reviewer"] is True else p["reviewer"]
+        L += [f"> **Reviewer:** {val} · **Merge policy:** wait"]  # the line right after the Protocol line
+    if p["protocol"] or p["reviewer"]:
+        L += [""]
     L += ["> **What this is.** The operating manual of the build. It defines HOW the catalog in",
           "> `detailed-plan.md` gets executed: wave sessions, self-verified loops with the DoD-auto",
           "> as the exit criterion. The copy-paste prompts per wave are at the end (§7).", ""]
@@ -323,9 +348,13 @@ def exec_doc(waves, **o):
           f"1. **`task.md`** — logbook entry (date of execution · branch/MR · tasks closed · {blk_} ·",
           f"   files touched · notes · wall clock · agents used n/20 · escalations · {nxt} exact next",
           "   command/prompt, or \"wave closed\") AND the wave-map status flip.",
-          "2. **`execute.md` §7** — this wave's prompt header flip.", "",
-          "## 3. Delivery / merge policy", "", "| Wave type | Delivery |", "|---|---|",
-          "| NO-gate | commit without push for review |", ""]
+          "2. **`execute.md` §7** — this wave's prompt header flip.", ""]
+    if p["links_once"]:
+        L += [LINKS_ONCE, ""]
+    L += ["## 3. Delivery / merge policy", ""]
+    L += [MERGE_RULE, ""] if p["merge_rule"] else ["| Wave type | Delivery |", "|---|---|", MERGE_OLD, ""]
+    if p["automerge"]:
+        L += [AUTO_MERGE, ""]
     s4 = "The resuming session runs `python3 docs/scripts/status_digest.py --brain docs`" if p["digest"] is True \
         else "The resuming session reads the logbook"
     if p["last_log"] == "s4":
@@ -351,6 +380,8 @@ def exec_doc(waves, **o):
         L += ["- DOD-SLICE: pytest -q → exit 0", "", "## Simplifier brief", "- FILES: src/invoice.py"]
         if p["trap"] and i == 1:
             L.append("### Wave W9 (quoted inside a fence)")
+        if w in p["s7text"]:
+            L.append(p["s7text"][w])
         L += ["```", ""]
     if p["appendix"]:
         L += list(p["appendix"])
@@ -383,14 +414,15 @@ def task_doc(waves, pending="canonical", nxt="Next", n_log=2, es=False):
 
 
 def fresh(ctx, name, waves=W3, ex=None, tk=None, rows=None, under="", **kw):
-    """A fully up-to-date 0.14.1 brain: SKILLS on every pending wave unless `skills` says otherwise."""
+    """A fully up-to-date current-protocol brain: SKILLS on every pending wave unless `skills` says otherwise."""
     ex = dict(ex or {})
     ex.setdefault("skills", {w for w, g in waves if g not in DONE})
     return ctx.brain(name, execute=exec_doc(waves, **ex), task=task_doc(waves, **(tk or {})),
                      art=ok_rows(ids=[w for w, _ in waves]) if rows is None else rows, under=under, **kw)
 
 
-LEGACY_FLAGS = dict(protocol=None, types=(), digest=False, last_log=None, nxt=None, blk=None, rule=False)
+LEGACY_FLAGS = dict(protocol=None, types=(), digest=False, last_log=None, nxt=None, blk=None, rule=False,
+                    reviewer=False, merge_rule=False, links_once=False)
 
 
 def legacy_08(ctx, name, under="", scripts="none"):
@@ -427,7 +459,7 @@ def count_h2(text):
 
 
 MARKERS_ON = {"digest_line": True, "last_log_s4": True, "next_label": True, "blocked_label": True,
-              "model_rule": True, "protocol_line": True}
+              "model_rule": True, "protocol_line": True, "reviewer_line": True, "merge_rule": True, "links_once": True}
 
 
 def markers_check(t, d, **want):
@@ -544,13 +576,13 @@ def case_legacy_011(ctx, t):
         t.eq(dig(d, "protocol", "inferred"), "0.13", "protocol.inferred")
         t.eq(blk(d, "execute", "state"), "partial", "execute.state")
         markers_check(t, d, types={k: False for k in TYPES}, next_label=False, blocked_label=False,
-                      model_rule=False, protocol_line=False)
+                      model_rule=False, protocol_line=False, reviewer_line=False, merge_rule=False, links_once=False)
         t.eq(d.get("needed"), ["execute"], "needed")
 
 
 def case_skills_partial(ctx, t):
     def go(tag, waves, ex):
-        """One 0.14.1 brain with exactly one thing wrong in execute.md: needed == [execute], partial."""
+        """One current brain with exactly one thing wrong in execute.md: needed == [execute], partial."""
         t.tag = f"({tag}) "
         d = both(ctx, t, fresh(ctx, "b-" + re.sub(r"\W+", "-", tag), waves, ex=ex), rc=1)
         if d:
@@ -571,17 +603,98 @@ def case_skills_partial(ctx, t):
     if d:
         t.eq(blk(d, "execute", "markers", "skills_lines"), {"have": 2, "pending_waves": 3},
              "skills_lines (⛔ ⏸ 🔄 are pending; ✅ 🔀 are not)")
-    d = go("no protocol line", W3, {"protocol": None})
+    d = go("no protocol line", W3, {"protocol": None, "reviewer": False})  # the Reviewer line belongs right after the Protocol line
     if d:
         t.eq(dig(d, "protocol", "found"), None, "protocol.found")
         t.eq(dig(d, "protocol", "inferred"), "0.14", "protocol.inferred (role types present)")  # heuristic ladder: types → 0.14
-        markers_check(t, d, protocol_line=False)
+        markers_check(t, d, protocol_line=False, reviewer_line=False)
     d = go("types missing", W3, {"types": ("executor", "auditor", "researcher")})
     if d:
         markers_check(t, d, types={"courier": False, "digester": False})
     d = go("LAST LOG outside s4", W3, {"last_log": "s2"})
     if d:
         markers_check(t, d, last_log_s4=False)
+
+
+def exec_line(d):
+    return next((x for x in (d.get("text") or []) if x.startswith("EXECUTE")), "")
+
+
+def case_merge_markers(ctx, t):
+    """0.16.0: the Reviewer header line, the §3 `Claude never merges` rule, the §2b `exactly once per delivery close` rule."""
+    names = {"reviewer_line": "reviewer-line", "merge_rule": "merge-rule", "links_once": "links-once"}  # json key -> FLAGS text
+    option = {"reviewer_line": "reviewer", "merge_rule": "merge_rule", "links_once": "links_once"}  # json key -> exec_doc switch
+
+    def go(tag, ex, rc=1):
+        """One current brain with exactly one thing different in execute.md (rc 1: needed == [execute], partial)."""
+        t.tag = f"({tag}) "
+        d = both(ctx, t, fresh(ctx, "m-" + re.sub(r"\W+", "-", tag), W3, ex=ex), rc=rc)
+        if d and rc:
+            t.eq(d.get("needed"), ["execute"], "needed")
+            t.eq(blk(d, "execute", "state"), "partial", "execute.state")
+        return d
+
+    pending_line = lambda d: next((x for x in (d.get("text") or []) if "reviewer pending" in x), None)
+    # (a) each marker off alone: needed == [execute], that marker False, `lacks` names it and only it
+    for key, name in names.items():
+        d = go(f"{key} off", {option[key]: False})
+        if d:
+            markers_check(t, d, **{key: False})
+            line = exec_line(d)
+            t.ok(name in line, f"EXECUTE line names {name}, got {line!r}")
+            t.ok(not [n for k, n in names.items() if k != key and n in line], f"EXECUTE line names only {name}, got {line!r}")
+            t.ok(pending_line(d) is None, "no 'reviewer pending' line when there is no Reviewer line at all")
+    # (b) the retired policy text inside §3 is named, even next to the fixed sentence
+    d = go("auto-merge text in §3", {"automerge": True})
+    if d:
+        t.ok("auto-merge" in exec_line(d), f"EXECUTE line names auto-merge, got {exec_line(d)!r}")
+        t.eq([blk(d, "execute", "markers", k) for k in ("reviewer_line", "links_once")], [True, True],
+             "the other 0.16.0 markers stay True")
+    # (c) ...but only inside §3: the same words in the intro prose are history, not policy
+    t.tag = "(auto-merge outside §3) "
+    d = both(ctx, t, fresh(ctx, "m-outside", W3, ex={"prose": ["Auto-merge of the MR was retired: Claude never opens a merge on its own."]}))
+    if d:
+        t.eq(d.get("needed"), [], "needed (an 'auto-merge' outside §3 is not flagged)")
+        markers_check(t, d)
+    # (c2) a pending wave's §7 prompt is what a session actually runs: the retired text there is named too (✅ waves are history)
+    for g in "☐🔄⛔⏸":
+        t.tag = f"(auto-merge text in the §7 prompt of a {g} wave) "
+        d = both(ctx, t, fresh(ctx, f"m-s7-{ord(g)}", [("W1", "✅"), ("W2", g), ("W3", "☐")],
+                               ex={"s7text": {"W2": AUTO_MERGE_S7}}), rc=1)
+        if d:
+            t.eq(d.get("needed"), ["execute"], "needed")
+            t.eq(blk(d, "execute", "state"), "partial", "execute.state")
+            t.eq(blk(d, "execute", "markers", "auto_merge"), True, "markers.auto_merge")
+            t.ok("auto-merge" in exec_line(d), f"EXECUTE line names auto-merge, got {exec_line(d)!r}")
+            markers_check(t, d)
+    t.tag = "(auto-merge text only in a ✅ / 🔀 wave §7) "
+    for g in "✅🔀":
+        d = both(ctx, t, fresh(ctx, "m-s7-done-" + str(ord(g)), [("W1", g), ("W2", "☐"), ("W3", "🔄")],
+                               ex={"s7text": {"W1": AUTO_MERGE_S7}}))
+        if d:
+            t.eq(d.get("needed"), [], f"needed (a {g} wave's retired text is history)")
+            t.eq(blk(d, "execute", "markers", "auto_merge"), False, "markers.auto_merge")
+            markers_check(t, d)
+    # (d) a pending Reviewer is advice: a review line, never needed
+    d = go("reviewer pending", {"reviewer": REVIEWER_PENDING}, rc=0)
+    if d:
+        markers_check(t, d)
+        t.eq(d.get("needed"), [], "needed (a placeholder Reviewer never makes a brain needed)")
+        ln = pending_line(d)
+        t.ok(ln is not None and "review:" in ln and "reviewer pending → owner sets @handle" in ln,
+             f"plain output has a 'review: reviewer pending → owner sets @handle' line, got {ln!r}")
+    d = go("reviewer pending + merge-rule off", {"reviewer": REVIEWER_PENDING, "merge_rule": False})
+    if d:
+        markers_check(t, d, merge_rule=False)
+        t.ok(pending_line(d) is not None, "the review line is printed next to a real execute finding")
+        t.ok("reviewer-line" not in exec_line(d), f"a placeholder value still counts as the Reviewer line, got {exec_line(d)!r}")
+    # (e) a real handle (either forge): nothing to say
+    for forge in ("gitlab", "github"):
+        d = go(f"reviewer @dev ({forge})", {"reviewer": f"@dev ({forge})"}, rc=0)
+        if d:
+            markers_check(t, d)
+            t.ok(pending_line(d) is None, "a real @handle prints no 'reviewer pending' line")
+            t.eq(d.get("needed"), [], "needed")
 
 
 def case_modules(ctx, t):
@@ -1400,11 +1513,113 @@ def case_scripts_cache_dep(ctx, t):
         t.eq(read(os.path.join(b, ".build", "plans-regen.py")), pr, "the cache-dep .build/plans-regen.py is untouched")
 
 
+def hooks_lines(d):
+    """The plain `review:` lines about the two hooks."""
+    return [x for x in (d.get("text") or []) if "review:" in x and ("merge-guard" in x or "artifact-guard" in x)]
+
+
+def hooks_state(d):
+    return [blk(d, "hooks", "merge_guard"), blk(d, "hooks", "artifact_guard")]
+
+
+def case_hooks_review(ctx, t):
+    """The informational HOOKS block: <hooks_dir>/merge-guard.py present, artifact-guard.py equal to the template."""
+    template = os.path.join(ctx.skill, "templates", "artifact-guard.py")
+    old_env = ctx.env
+
+    def install(name, merge=True, guard=None):
+        """A config dir <root>/<name> (CLAUDE_CONFIG_DIR for the next runs); guard: 'copy' | 'edited' | None."""
+        cfg = os.path.join(ctx.root, name)
+        os.makedirs(cfg, exist_ok=True)
+        if merge:
+            put(os.path.join(cfg, "hooks", "merge-guard.py"), MERGE_GUARD)
+        if guard == "copy":
+            os.makedirs(os.path.join(cfg, "hooks"), exist_ok=True)
+            shutil.copy(template, os.path.join(cfg, "hooks", "artifact-guard.py"))
+        elif guard == "edited":
+            put(os.path.join(cfg, "hooks", "artifact-guard.py"), (read(template) or "") + "# local edit\n")
+        ctx.env = dict(old_env, CLAUDE_CONFIG_DIR=cfg)
+
+    try:
+        # (a) both hooks absent: two review lines, JSON says so, the brain is still up to date
+        t.tag = "(a both absent) "
+        install("hk-a", merge=False)
+        d = both(ctx, t, fresh(ctx, "hk-a"))
+        if d:
+            ln = hooks_lines(d)
+            t.eq(len(ln), 2, f"two review lines about the hooks, got {ln!r}")
+            t.ok(sum("merge-guard" in x for x in ln) == 1 and sum("artifact-guard" in x for x in ln) == 1,
+                 f"one review line per hook, got {ln!r}")
+            t.eq(hooks_state(d), [False, "missing"], "blocks.hooks (merge_guard, artifact_guard)")
+            t.eq(d.get("needed"), [], "needed (HOOKS is informational: RENOVATE: up-to-date stays)")
+        # (b) the guard copied from the template is ok; only merge-guard.py is missing
+        t.tag = "(b guard ok, no merge-guard) "
+        install("hk-b", merge=False, guard="copy")
+        d = both(ctx, t, fresh(ctx, "hk-b"))
+        if d:
+            ln = hooks_lines(d)
+            t.ok(len(ln) == 1 and "merge-guard" in ln[0], f"one review line, about merge-guard, got {ln!r}")
+            t.eq(hooks_state(d), [False, "ok"], "blocks.hooks")
+            t.eq(d.get("needed"), [], "needed")
+        # (c) both installed, the guard equals the template: nothing to review
+        t.tag = "(c both ok) "
+        install("hk-c", guard="copy")
+        d = both(ctx, t, fresh(ctx, "hk-c"))
+        if d:
+            t.eq(hooks_lines(d), [], "no review line about the hooks")
+            t.eq(hooks_state(d), [True, "ok"], "blocks.hooks")
+            t.eq(d.get("needed"), [], "needed")
+        # (d) a modified copy of the guard is outdated (informational: a project may customise it)
+        t.tag = "(d guard edited) "
+        install("hk-d", guard="edited")
+        d = both(ctx, t, fresh(ctx, "hk-d"))
+        if d:
+            ln = hooks_lines(d)
+            t.ok(len(ln) == 1 and "artifact-guard" in ln[0], f"one review line, about artifact-guard, got {ln!r}")
+            t.eq(hooks_state(d), [True, "outdated"], "blocks.hooks")
+            t.eq(d.get("needed"), [], "needed")
+        # (e) without CLAUDE_CONFIG_DIR the hooks dir is ~/.claude/hooks (HOME is the temp root)
+        t.tag = "(e ~/.claude/hooks) "
+        ctx.env = {k: v for k, v in old_env.items() if k != "CLAUDE_CONFIG_DIR"}
+        put(os.path.join(ctx.root, ".claude", "hooks", "merge-guard.py"), MERGE_GUARD)
+        shutil.copy(template, os.path.join(ctx.root, ".claude", "hooks", "artifact-guard.py"))
+        d = both(ctx, t, fresh(ctx, "hk-e"))
+        if d:
+            t.eq(hooks_lines(d), [], "no review line (both hooks found under ~/.claude/hooks)")
+            t.eq(hooks_state(d), [True, "ok"], "blocks.hooks")
+        os.remove(os.path.join(ctx.root, ".claude", "hooks", "merge-guard.py"))
+        d = both(ctx, t, fresh(ctx, "hk-e2"))
+        if d:
+            t.eq(hooks_state(d), [False, "ok"], "blocks.hooks after removing merge-guard.py from ~/.claude/hooks")
+            t.eq(len(hooks_lines(d)), 1, "one review line (merge-guard)")
+        # (f) HOOKS never enters needed, even next to a real finding; a pending reviewer stays advice too
+        t.tag = "(f hooks off + execute finding) "
+        install("hk-f", merge=False)
+        d = both(ctx, t, fresh(ctx, "hk-f", ex={"merge_rule": False, "reviewer": REVIEWER_PENDING}), rc=1)
+        if d:
+            t.eq(d.get("needed"), ["execute"], "needed holds execute for its own reason only")
+            t.eq(len(hooks_lines(d)), 2, "both hook review lines are still printed")
+            t.ok(anyline(d.get("text"), "reviewer pending"), "and the pending reviewer line")
+        # (g) the 40-line cap holds with both hook lines in play, and the JSON keeps the block
+        t.tag = "(g 40-line cap) "
+        mods = {}
+        for i in range(1, 13):
+            mods.update(module_files(f"modules/m{i:02d}"))
+        d = both(ctx, t, fresh(ctx, "hk-g", rows=[art(f"page{i}.html") for i in range(1, 11)], extra=mods),
+                 "--all-modules", "--invariants", rc=1)
+        if d:
+            t.eq(hooks_state(d), [False, "missing"], "blocks.hooks stays in the JSON under the cap")
+            t.ok(any(x.startswith("INVARIANTS s7_wave_headers=") for x in d.get("text") or []), "root INVARIANTS line kept")
+    finally:
+        ctx.env = old_env
+
+
 CASES = [
     ("fresh_0141_up_to_date", case_fresh_0141_up_to_date),
     ("legacy_08", case_legacy_08),
     ("legacy_011", case_legacy_011),
     ("skills_partial", case_skills_partial),
+    ("merge_markers", case_merge_markers),
     ("modules", case_modules),
     ("regen_none_ok", case_regen_none_ok),
     ("copy_scripts", case_copy_scripts),
@@ -1423,6 +1638,7 @@ CASES = [
     ("rules_cap", case_rules_cap),
     ("rules_round2", case_rules_round2),
     ("scripts_cache_dep", case_scripts_cache_dep),
+    ("hooks_review", case_hooks_review),
 ]
 
 

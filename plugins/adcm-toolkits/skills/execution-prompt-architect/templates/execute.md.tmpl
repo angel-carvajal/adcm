@@ -7,9 +7,12 @@ Generate in the user's language; keep GOAL/TASKS/SCOPE/LOOP/VISUAL CHECK/WORKFLO
 GUARDRAILS & CLOSE in English — they are protocol keywords. Keep the document names
 of the container's chosen set (project-structure.md rule 9); `execute.md` and
 `task.md` never translate.
+`{{reviewer_handle}}` ({{forge}}: `gitlab|github`) come from the planning question "Reviewer and forge";
+unknown → the whole value is `_pending — owner sets it_` (no forge) and the final message's "Para ti" lists it.
 -->
 # {{project_name}} — Execution protocol ({{initiative_title}})
-> **Protocol:** adcm-toolkits 0.15.2
+> **Protocol:** adcm-toolkits 0.16.0
+> **Reviewer:** {{reviewer_handle}} ({{forge}}) · **Merge policy:** wait
 
 > **What this is.** The operating manual of the build. It defines HOW the catalog in
 > `detailed-plan.md` gets executed: **wave sessions** (not 1 task = 1 session),
@@ -153,6 +156,9 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
     installed, the same `## Simplifier brief` goes to ONE `adcm-toolkits:executor` with
     `model: <auditor tier>` (the auditor type has no Edit) — same model, cost, cap and RETURN — and the logbook `Simplifier:` field records which
     carrier ran.
+12. **Claude never merges.** A wave ends with its MR open, pipeline green and simplify
+    pass done, assigned to the Reviewer (`> **Reviewer:**` above); the merge is a
+    DoD-human item and wave N+1 starts only after MR N is merged (§3).
 
 ## 2. Canonical wave-prompt template
 
@@ -254,16 +260,16 @@ FORBIDDEN · RETURN>
 Touch nothing outside the tasks' scope — the scope IS the Scope manifest, so the
 shared helper and its named consumers ARE in scope when the manifest lists them. No
 secrets in code/commits. When the simplify pass has run and the DoD-auto is green
-AFTER it: <delivery per §3>, then run the FULL doc-sync at close (§2b — "append the
+AFTER it: <open the MR and assign it to the Reviewer — never merge it (§3)>, then run the FULL doc-sync at close (§2b — "append the
 logbook" means ALL of it) and COMMIT AND PUSH it; only then delegate the delivery
 close to one `adcm-toolkits:courier` per batch (normally 1; `sonnet` fixed, §2b step 7) and finish with the
-pending DoD-human lines and, AS THE LAST LINES, the courier's links block.
+pending DoD-human lines (the MR to merge among them) and, AS THE LAST LINES, the links block of the LAST courier RETURN (once per close, §2b).
 ```
 
 ## 2b. Doc-sync at close (mandatory — "append the logbook" means ALL of this)
 
-Closing a wave (DoD-auto green) — and every later status change (e.g. {{owner}}
-merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit:
+Closing a wave (DoD-auto green) — and every later status change (e.g. the Reviewer
+merges the wave's MR) — updates ALL plan docs in ONE pass, one Conventional commit:
 
 1. **`task.md`** — logbook entry with the extended schema (date of execution ·
    branch/MR · tasks closed · **blocked** · **files touched** · **manifest drift** · notes · wall
@@ -285,7 +291,7 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    duplicating it again.
 4. **`execute.md` §7** — regenerate the prompt of any later wave whose manifest
    changed in (3): its `# SCOPE` must match detailed-plan.
-5. **Delivery message — ENDS with the courier's links block, no filler.** The links
+5. **Delivery message — ENDS with the links block of the last courier RETURN, no filler.** The links
    come from the `artifact-courier` (step 7), never from the main session: its returned
    block holds (a) the wave's viewable result when it renders, ALWAYS AS TWO LINES —
    the `localhost` URL FIRST ({{owner}} validates from iTerm on the Mac) and the
@@ -301,7 +307,7 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    **Order of the final message**: repo paths and commit hashes (one line each —
    reference, not delivery) and the pending DoD-human lines go ABOVE the links block,
    never after it: the guard rejects any text after the last link. The block itself is
-   the courier's `=== LINKS ===` tail pasted verbatim as the LAST lines — no headings,
+   the last courier RETURN's `=== LINKS ===` tail pasted verbatim as the LAST lines — no headings,
    no text inside it.
    **Format — links must be TAPPABLE on a phone**: each link is a plain Markdown
    bullet `- [emoji Title](url)` — NEVER inside a code fence, inline backticks, or
@@ -315,7 +321,8 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    narrative comes first, then the files, then a SHORT final message — the pending
    DoD-human lines and then the block — so on a phone {{owner}} sees the media and
    links without scrolling back up; nothing follows the block.
-   The `artifact-guard` Stop hook blocks the close when the block is missing.
+   The `artifact-guard` Stop hook blocks the close when a courier RETURN reached the turn and
+   its block is missing from the final message.
 6. **Project context skill — DELTA refresh**: with the logbook's files-touched list,
    update only the affected references of `{{project_context_skill}}` (usage-map
    consumer counts, folder inventories, entry hints if new surfaces were born) and
@@ -341,8 +348,8 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    the shared link stale (lesson learned: a wave closed with the published plan still
    showing "pending"). New artifact ⇒ new row in `artifacts.json` (without `url`) in
    the same session: the courier publishes it. If the courier's RETURN carries
-   `ERRORS`, send ONE `SendMessage` to the SAME courier (cost 0) and report; never
-   publish yourself. The `artifact-guard` Stop hook blocks the close while a registered
+   `ERRORS`, send ONE `SendMessage` to the SAME courier (cost 0) and report — its new
+   RETURN supersedes the earlier block; never publish yourself. The `artifact-guard` Stop hook blocks the close while a registered
    artifact is stale — it trusts the courier's stamps.
 8. {{If this plan family coexists with an INCUMBENT protocol (the project already
    keeps its own live TASKS/EXECUTION docs): state explicitly which docs THIS family
@@ -356,17 +363,21 @@ merges a ⚠gate) — updates ALL plan docs in ONE pass, one Conventional commit
    unpushed logbook is invisible to the next session and to {{owner}} from another
    machine (lesson learned: a whole wave's docs once sat uncommitted for days).
 
-⚠gate nuance: at session exit the wave is "verified, pending {{owner}}", not ✅;
-re-run this doc-sync when {{owner}} pushes/merges.
+The links block appears exactly once per delivery close — in the orchestrator's final message, after the last courier RETURN. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker; with several couriers (batches, `SendMessage` replies) only the last RETURN's block is pasted. No agent other than the courier returns URLs.
+
+Merge nuance (every wave, ⚠gate or not): at session exit the wave is "verified, pending
+merge by the Reviewer", not ✅; re-run this doc-sync when the Reviewer merges its MR.
 
 ## 3. Delivery / merge policy
 
 | Wave type | Delivery |
 |---|---|
-| NO-gate | {{e.g. auto-merge the MR if pipeline green and DoD-auto passed / commit without push for review}} — only once the simplify pass ran and the DoD-auto was re-run green AFTER it |
-| ⚠gate ({{gate_wave_ids}}) | **No merge** — {{owner}} reviews after the simplify pass and the adversarial verification |
+| NO-gate | MR opened, pipeline green, simplify pass done, assigned to the Reviewer — never merged by Claude |
+| ⚠gate ({{gate_wave_ids}}) | MR opened, pipeline green, simplify pass done, assigned to the Reviewer — never merged by Claude — plus the adversarial verification before the review |
 
-Nothing is delivered — MR opened, merged, or committed for review — on a diff the
+**Claude never merges.** A wave ends with its MR open, pipeline green, simplify pass done and assigned to the Reviewer (`> **Reviewer:**` above); the merge is a DoD-human item and wave N+1 starts only after MR N is merged (merge policy: wait). This applies to the waves' code MRs — the docs repo (ai-brain, any of its three positions) and the marketplaces commit and push to main directly.
+
+Nothing is delivered — MR opened or committed for review — on a diff the
 simplify pass has not seen, or on a DoD that predates it (§1.11).
 
 ## 4. Checkpoint / resume

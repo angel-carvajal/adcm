@@ -1184,6 +1184,32 @@ def case_audit_round3(ctx, t):
             need(t, d.get("text"), pre)
 
 
+def case_pending_mr_row(ctx, t):
+    """0.16.0: a wave that waits for its Reviewer leaves `MR !N reviewed and merged` in DoD-human pending."""
+    row = "| W2 | MR !14 reviewed and merged | @dev | ☐ |"
+    done = "| W1 | ~~MR !13 reviewed and merged~~ ✅ | @dev | ✅ |"
+    nxt = "| W3 | MR !15 reviewed and merged | @dev | ☐ |"
+    for tag, hdr in (("4 columns", "| Wave | Item | Owner | Status |\n|---|---|---|---|"),
+                     ("canonical header", "| # | Item | Owner | Blocks | Due |\n|---|---|---|---|---|")):
+        t.tag = f"({tag}) "
+        sec = f"## DoD-human pending\n\n{hdr}\n{done}\n{row}\n{nxt}"
+        d = both(ctx, t, ctx.brain("mr-" + tag.replace(" ", "-"), simple(sec)))
+        if not d:
+            continue
+        pending_checks(t, d, "table/Ítem-Dueño", 2, 3)
+        items = dig(d, "pending", "items") or []
+        open_ = [i.get("text") for i in items if not i.get("resolved")]
+        t.eq(open_, ["MR !14 reviewed and merged", "MR !15 reviewed and merged"], "open items (the struck-through row is resolved)")
+        t.has(str(dig(d, "pending", "section")), "DoD-human pending", "pending.section")
+        txt = d.get("text") or []
+        k = next((n for n, x in enumerate(txt) if x.startswith("PENDING-HUMAN")), None)
+        t.ok(k is not None and txt[k].startswith("PENDING-HUMAN 2/3 open"), f"PENDING-HUMAN line is 2/3 open, got {txt[k] if k is not None else None!r}")
+        under = txt[k + 1:] if k is not None else []
+        t.ok(any("MR !14" in x for x in under), "the MR !14 row is listed under PENDING-HUMAN")
+        t.ok(any("MR !15" in x for x in under), "the MR !15 row is listed under PENDING-HUMAN")
+        t.ok(not any("MR !13" in x for x in under), "the resolved MR !13 row is not listed")
+
+
 CASES = [
     ("en_template_exact", case_en_template_exact),
     ("es_aliases", case_es_aliases),
@@ -1213,6 +1239,7 @@ CASES = [
     ("pending_unrecognised", case_pending_unrecognised),
     ("hardening", case_hardening),
     ("audit_round3", case_audit_round3),
+    ("pending_mr_row", case_pending_mr_row),
 ]
 
 

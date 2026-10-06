@@ -43,9 +43,13 @@ Start a clean session in EXECUTION mode (auto-accept edits — e.g. `claude
 (# SCOPE below); re-planning would duplicate the investigation this prompt already
 carries. The only re-planning trigger is a diverging census (see # SCOPE).
 Load the skill `{{project_context_skill}}`, read
-`{{docs_dir}}/execute.md` (this protocol). {{Wave-specific preamble: extra skills to
-load, repos to open, state assumptions — e.g. "W2 must be merged" — and what to do if
-an assumption fails.}}
+`{{docs_dir}}/execute.md` (this protocol). PRECONDITION (omit on the first wave): the
+previous wave's MR is merged — check the forge first: `glab mr view {{prev_branch}} --output json`
+→ state `merged`, or `gh pr view {{prev_branch}} --json state,mergedAt` → `MERGED`; fallback `git fetch && git
+merge-base --is-ancestor {{prev_branch}} origin/{{base_branch}}` (false "not merged" after a squash merge or
+a deleted branch). Not merged → ⛔ stop, leave the DoD-human `MR !N reviewed and merged` and never merge it yourself.
+{{Wave-specific preamble: extra skills to load, repos to open, other state assumptions
+and what to do if one fails.}}
 Then run `status-digest --brain {{docs_dir}}` (bare; without the plugin: `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`): this wave's
 deps ✅, no foreign `[PARTIAL]` open; never read task.md whole. Exit 2 → one `adcm-toolkits:digester` with
 `{{docs_dir}}/scripts/status-brief.md` (fallback under AGENT BUDGET & ROLES); without an Agent tool, stop and report.
@@ -267,8 +271,8 @@ per batch (normally 1; each extra batch = 1 more of the 20, 0 Opus quota), ladde
 {{Wave-specific hard limits: "do NOT upgrade dependency X", "do NOT
 touch folder Y (Wave 3's scope)", inviolable decisions from master-plan §8 that this
 wave could violate.}} When the simplify pass has run and the FULL DoD-auto is green
-AFTER it: {{delivery per execute.md §3 —
-open MR / commit without push}}, then run the FULL doc-sync at close (`execute.md`
+AFTER it: open the MR (pipeline green), assign it to `{{reviewer_handle}}` and NEVER merge it
+(execute.md §3), then run the FULL doc-sync at close (`execute.md`
 §2b — "append the logbook" means ALL of it): logbook entry in `{{docs_dir}}/task.md`
 (TODAY's date — never hardcoded — + branch/MR + tasks closed + **blocked** (ids + pending DoD-human) + **files touched +
 manifest drift** + notes + wall clock + **reuse** (helpers consumed/extracted ·
@@ -280,7 +284,7 @@ an unlogged one is a protocol violation) + **agents used n/20 (opus a · sonnet
 b)**, one line per agent with its model, role (investigate / execute / review /
 simplify / verify / capture / courier — with the NUMBER of couriers) and scope + **escalations** (none, or
 ID: tier → tier with the reason) + **Next** (exact next command/prompt, or "wave closed")), status flip in task.md's wave map AND this
-prompt's `execute.md §7` header (✅ / ⛔ if blocked on a DoD-human), mark {{IDs}} ✅ in
+prompt's `execute.md §7` header (⛔ while the MR awaits the Reviewer's merge or another DoD-human, ✅ once merged), mark {{IDs}} ✅ in
 `detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
 refresh the Scope manifests of LATER waves whose surfaces this wave changed (and
 regenerate their §7 prompts), and delta-refresh the project context skill for the
@@ -299,20 +303,23 @@ several screens). It runs each registry row's `regen` (`plans-regen.py`,
 `artifacts.json`, returns the media paths (`MEDIA: unsent`) for you to send, `curl`s localhost and the LAN IP, and returns a table
 plus a `=== LINKS ===` block. You never open or edit the HTML, never call the Artifact
 tool and never assemble the links yourself; if its RETURN has `ERRORS`, one
-`SendMessage` to the SAME courier (cost 0) and report — never publish yourself.
+`SendMessage` to the SAME courier (cost 0) and report — its new RETURN supersedes the earlier
+block; never publish yourself.
 CLOSE MESSAGE, in this order: (1) the narrative, with repo paths and commit hashes,
 one line each — reference, not delivery; (2) the media, sent by you from the courier's `MEDIA: unsent` list (a short
 final message follows it, so {{owner}} sees files + links on a phone without
-scrolling back up); (3) the FINAL message: the pending DoD-human lines marking those
-tasks blocked until {{owner}} confirms —
-- {{ID}}: {{human_only_actions, or "none → completed when its DoD-auto passes"}}
-— and then, as its LAST lines, everything after `=== LINKS ===` in the courier's
+scrolling back up); (3) the FINAL message: the pending DoD-human lines (`Para ti`) marking those
+tasks blocked until the Reviewer merges and {{owner}} confirms —
+- MR !N → review and merge ({{reviewer_handle}})
+- {{ID}}: {{other human_only_actions, or omit the line when none}}
+— and then, as its LAST lines, everything after `=== LINKS ===` in the LAST courier
 RETURN, pasted verbatim: `localhost` FIRST ({{owner}} validates from iTerm on the Mac),
 the LAN IP after it (never one without the other — the LAN IP changes with the network
 and arrives dead, `localhost` does not), then the canonical artifacts. Paths, hashes
 and DoD-human go ABOVE the block, never after it: the `artifact-guard` Stop hook
-rejects any text after the last link, and a block missing from the close.
+rejects any text after the last link, and a close whose courier block is missing.
 FORMAT: every link is a plain Markdown bullet `- [emoji Title](url)` — never inside
 a code fence, backticks, or 4-space indentation ({{owner}} taps these on a phone;
 code-formatted links are dead text); no headings or text inside the block. The raw URL
 inside the Markdown link keeps Claude Code's quick-access footer badges working too.
+The links block appears exactly once per delivery close — in the orchestrator's final message, after the last courier RETURN. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker; with several couriers (batches, `SendMessage` replies) only the last RETURN's block is pasted. No agent other than the courier returns URLs.

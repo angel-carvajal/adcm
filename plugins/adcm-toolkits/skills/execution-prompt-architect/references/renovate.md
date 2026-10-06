@@ -21,6 +21,16 @@ For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES:
 "adcm-toolkits:executor")` (sonnet) with `{{skill_dir}}/templates/renovate-brief.md`, the check output and the snapshot.
 - Order, sequential: SCRIPTS (cache-dep) → ARTIFACTS → EXECUTE → TASK → RULES. Modules after the root.
 - EXECUTE keeps the brain's gate-report path (`qa/<wave>/gate-*.md` when `qa/` has per-wave folders) when aligning §1/§7.
+  Since 0.16.0 `lacks` can name `reviewer-line`, `merge-rule`, `links-once` or the retired merge policy (`auto-` + `merge`, in §3 only).
+  The executor writes the template's text: the `> **Reviewer:** <handle> (<forge>) · **Merge policy:** wait` line under the Protocol line,
+  §1 principle 12, §3 (2-row table + the `**Claude never merges.**` paragraph), the §2b paragraph `exactly once per delivery close` (steps
+  5/7 consistent: no guard-built block, no links every turn) and, in §7, only the ☐ 🔄 ⛔ ⏸ prompts (precondition previous MR merged,
+  delivery = open the MR + assign the Reviewer, never merge, close = links once + a `Para ti` line `MR !N → review and merge (<reviewer>)`).
+  Reviewer unknown → `_pending — owner sets it_`: `review: reviewer pending → owner sets @handle` (never `needed`); "Para ti" asks for it.
+- HOOKS (informational, never `needed`; JSON `blocks.hooks`): `review: merge-guard hook missing …` / `review: artifact-guard hook missing |
+  outdated …` name what `$CLAUDE_CONFIG_DIR/hooks` (else `~/.claude/hooks`) lacks, or an artifact-guard that differs from
+  `templates/artifact-guard.py` (`unknown`, no line, when that template is not beside the checker). Renovation never installs hooks: the
+  final message hands the owner a scratchpad install script to run with `!`.
 - ARTIFACTS `review: no active_account declared` is not in `needed`: the final message gives the owner
   `courier-preflight <docs_dir> --set-active-account <name>` (declarative when no `url_<name>` family exists).
 - RULES (`needed` on `fix` findings): the checker resolves its targets itself (project memory dir from
@@ -46,7 +56,7 @@ Findings go back to the SAME executor (`SendMessage`, cost 0).
 - Doc-sync in the brain's own repo: the logbook entry `[REFRESH] protocol <target>` (with its `Next:` line) appended as
   the ≤20-line orchestrator shortcut (logged), then commit + push.
 - ONE `Agent(subagent_type: "adcm-toolkits:courier")` with the `artifact-courier` skill's `templates/courier-brief.md`,
-  `REGEN: yes`; its links block goes last in the final message. Rows never sealed (decks, demos) are republished and sealed once.
+  `REGEN: yes`; the LAST courier RETURN's links block goes last in the final message, once. Rows never sealed (decks, demos) are republished and sealed once.
 
 ## 5. Idempotency, budget, drift
 Repeating the phrase on a renovated brain prints `RENOVATE: up-to-date`, 0 agents. Typical budget 3-5 of this session's 20

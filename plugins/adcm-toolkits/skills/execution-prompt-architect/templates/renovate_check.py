@@ -2,7 +2,7 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json and scripts/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.15.2) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.16.0) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
 --copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
 from this report, never by this script.
@@ -39,7 +39,13 @@ Blocks (ok | missing | partial | outdated | n/a)
              --set-active-account <name>` (never needed; JSON `blocks.artifacts.no_active_account`,
              shed with the registry rows under the 40-line cap)
   EXECUTE    role types, digest line, LAST LOG in section 4, Next/blocked labels in 2b, model rule,
-             `> **Protocol:**` line, SKILLS line per pending wave of section 7
+             `> **Protocol:**` line, SKILLS line per pending wave of section 7; since 0.16.0 also the
+             `> **Reviewer:**` header line (reviewer-line), `Claude never merges` inside section 3
+             (merge-rule), `exactly once per delivery close` in section 2b (links-once); the retired
+             automatic-merge policy text inside section 3 or the section 7 prompt of a pending wave (not a ✅ one) is
+             named in `lacks` (`auto-` followed by `merge`). A Reviewer
+             value that is still the placeholder adds `· review: reviewer pending → owner sets @handle`
+             (never needed; JSON `markers.reviewer_pending`)
   TASK       `## DoD-human pending` (canonical) or an equivalent legacy section
   RULES      obsolete protocol notes (STALE_RULES) in the project's auto-memory (+ MEMORY.md hooks) and in
              CLAUDE.md/AGENTS.md/README.md of the container: only `fix` findings make it needed. Targets:
@@ -48,6 +54,12 @@ Blocks (ok | missing | partial | outdated | n/a)
              CLAUDE.md and AGENTS.md in the container, <container>/ai and DOCS_DIR; DOCS_DIR/README.md.
              Notes already corrected (`Superseded (protocol`, `<!-- renovate:`) are ignored. Root run only.
   CONTEXT    code-project-context skill named by execute.md (informational, never needed)
+  HOOKS      informational, never needed: the hooks dir ($CLAUDE_CONFIG_DIR/hooks, else ~/.claude/hooks)
+             holds merge-guard.py and an artifact-guard.py equal to the sibling templates/artifact-guard.py;
+             each gap adds a `review:` line naming the hook (merge-guard missing · artifact-guard missing |
+             outdated; no template next to the checker → `unknown`, no line). JSON `blocks.hooks` =
+             {merge_guard: bool, artifact_guard: ok|missing|outdated|unknown}. The owner installs hooks
+             (run with `!`); renovation never touches them
 
 Output is at most 40 lines; the last is `RENOVATE: up-to-date | needed(a,b) | unparsed (...)`.
 Exit codes: 0 up-to-date, 1 needed, 2 unparsed (no brain/execute.md, unreadable, internal error), 64 usage.
@@ -62,7 +74,7 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.15.2"
+__version__ = "0.16.0"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
@@ -73,7 +85,10 @@ TYPES = ("executor", "auditor", "researcher", "courier", "digester")
 BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "context", "modules")
 NEED = ("missing", "partial", "unparsed", "needed", "cache-dep")
 FLAGS = (("digest_line", "digest-line"), ("last_log_s4", "last-log-s4"), ("next_label", "next-label"),
-         ("blocked_label", "blocked-label"), ("model_rule", "model-rule"), ("protocol_line", "protocol-line"))
+         ("blocked_label", "blocked-label"), ("model_rule", "model-rule"), ("protocol_line", "protocol-line"),
+         ("reviewer_line", "reviewer-line"), ("merge_rule", "merge-rule"), ("links_once", "links-once"))
+RETIRED = "auto" + "-merge"  # the pre-0.16 policy text, built from parts so grepping for it finds only stale docs
+RETIRED_RX = re.compile(RETIRED.replace("-", "-?"), re.I)
 DOCS_ES = ("propuesta-ejecutiva.md", "plan-maestro.md", "plan-detallado.md")
 KNOWN = "✅⛔⏸🔄☐🔀🔬"
 DONE = "✅🔀"
@@ -98,6 +113,8 @@ NEXT_LABEL = re.compile(r"(?:\*\*|^\s*[-*]\s+)(?:Next|Siguiente)\b[^:*\n]{0,24}(
 S7_HEADER = re.compile(r"###\s+(?:(?:[^\w\s]+|[A-Z]{2,}(?:\s*\([^)\n]{0,30}\))?)\s+){0,6}\*{0,2}(?:Wave|Ola)\s+\*{0,2}([^\s—–:,(*]+)")
 LOAD_SKILL = re.compile(r"(?:Load|Carga)\s+(?:the|el)\s+skills?\b[^`\n]*`([^`\n]+)`")
 PROTOCOL = re.compile(r">\s*\*\*Protocol:\*\*\s*adcm-toolkits\s+(\d+\.\d+(?:\.\d+)?)")
+REVIEWER = re.compile(r">\s*\*\*Reviewer:\*\*(.*)$")
+PLACEHOLDER = re.compile(r"_?pending\b|owner sets|\{\{", re.I)
 
 
 # ---------------------------------------------------------------- helpers copied from status_digest.py
@@ -336,10 +353,12 @@ def scanned(skill, plugin):
 def read_execute(text, glyphs):
     """Marker block, protocol, context block and counters of an execute.md."""
     struct, prose = strip_comments(text), strip_comments(text, False)
-    s2, s2b, s4, s7 = (region(struct, r'##\s*2\b', r'##\s*\d'), region(struct, r'##\s*2b\b', r'##\s'),
-                       region(struct, r'##\s*4\.', r'##\s'), region(struct, r'##\s*7\.', r'##\s(?!\s*(?:Executor|Simplifier|Capture|Courier) brief)'))  # unfenced brief headings stay inside §7
+    s2, s2b, s3, s4, s7 = (region(struct, r'##\s*2\b', r'##\s*\d'), region(struct, r'##\s*2b\b', r'##\s'),
+                           region(struct, r'##\s*3\b', r'##\s'), region(struct, r'##\s*4\.', r'##\s'),
+                           region(struct, r'##\s*7\.', r'##\s(?!\s*(?:Executor|Simplifier|Capture|Courier) brief)'))  # unfenced brief headings stay inside §7
     heads = [i for i in range(*s7) if S7_HEADER.match(struct[i])] if s7 else []
     pending = have = 0
+    retired_s7 = False  # the retired policy text inside the §7 prompt of a pending wave (what a session actually runs)
     for i in heads:
         hi = next((j for j in range(i + 1, s7[1]) if re.match(r'#{1,3}\s', struct[j])), s7[1])
         wid = S7_HEADER.match(struct[i]).group(1).rstrip('.;')
@@ -347,8 +366,14 @@ def read_execute(text, glyphs):
         if g is None or g not in DONE:
             pending += 1
             have += seen(r'^\s*-\s*SKILLS:', prose[i + 1:hi])
+            wave_end = next((j for j in heads if j > i), s7[1])  # the whole wave, brief sub-headings included
+            retired_s7 = retired_s7 or bool(RETIRED_RX.search(' '.join(' '.join(prose[i + 1:wave_end]).split())))
     labels = prose[s2b[0]:s2b[1]] if s2b else prose
     found = next((p.group(1) for p in map(PROTOCOL.match, struct) if p), None)
+    rev = next((r for r in map(REVIEWER.match, struct) if r), None)
+    rev_val = rev.group(1).split('·')[0].strip() if rev else ''  # the value before `· **Merge policy:** ...`
+    flat = lambda lines: ' '.join(' '.join(lines).split())  # a sentence may wrap across lines
+    sec3, sec2b = flat(prose[s3[0]:s3[1]]) if s3 else '', flat(labels)
     m = {'types': {t: seen(r'adcm-toolkits:%s\b' % t, prose) for t in TYPES},
          'digest_line': bool(s2) and seen(r'scripts/status_digest\.py\s+--brain', prose[s2[0]:s2[1]]),
          'last_log_s4': bool(s4) and seen(r'\bLAST LOG\b', prose[s4[0]:s4[1]]),
@@ -356,9 +381,14 @@ def read_execute(text, glyphs):
          'blocked_label': seen(r'\*\*(?:blocked|bloquead\w*):?\*\*', labels, re.I),
          'model_rule': seen(r"per-call .model. overrides the type.s default", prose)
          or any('adcm-toolkits:*' in ln and 'model' in ln and re.search(r'per-call|por llamada', ln) for ln in prose),
-         'protocol_line': found == TARGET, 'skills_lines': {'have': have, 'pending_waves': pending}}
+         'protocol_line': found == TARGET, 'reviewer_line': rev is not None,
+         'merge_rule': 'Claude never merges' in sec3, 'links_once': 'exactly once per delivery close' in sec2b,
+         'auto_merge': bool(RETIRED_RX.search(sec3)) or retired_s7,
+         'reviewer_pending': rev is not None and (not rev_val or bool(PLACEHOLDER.search(rev_val))),
+         'skills_lines': {'have': have, 'pending_waves': pending}}
     flags = list(m['types'].values()) + [m[k] for k, _ in FLAGS]
-    state = 'ok' if all(flags) and have == pending else 'missing' if not any(flags) and have == 0 else 'partial'
+    state = ('ok' if all(flags) and have == pending and not m['auto_merge']
+             else 'missing' if not any(flags) and have == 0 else 'partial')
     if found:
         inferred = '.'.join(found.split('.')[:2])
     elif any(m['types'].values()) or m['model_rule']:
@@ -436,6 +466,14 @@ def cache_dep(brain):
     return sorted(found)
 
 
+def sha(path):
+    try:
+        with open(path, 'rb') as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except OSError:
+        return None
+
+
 def scripts_block(brain, skill_dir, copy, force):
     """SCRIPTS block against the templates; --copy-scripts fills the gaps first and the state reflects the disk."""
     sdir = os.path.join(brain, 'scripts')
@@ -444,13 +482,6 @@ def scripts_block(brain, skill_dir, copy, force):
                        os.path.join(skill_dir, '..', 'artifact-courier', 'scripts', n),
                        os.path.join(skill_dir, '..', '..', 'artifact-courier', 'scripts', n))
     source = lambda n: next((p for p in paths(n) if os.path.isfile(p)), None)
-
-    def sha(path):
-        try:
-            with open(path, 'rb') as fh:
-                return hashlib.sha256(fh.read()).hexdigest()
-        except OSError:
-            return None
 
     def scan():
         miss = [n for n in SCRIPTS if not os.path.isfile(os.path.join(sdir, n))]
@@ -480,6 +511,22 @@ def scripts_block(brain, skill_dir, copy, force):
     dep = cache_dep(brain) if copied or failed else dep
     return {'state': 'missing' if missing else 'cache-dep' if dep else 'ok', 'missing': missing,
             'outdated': outdated, 'copied': copied, 'failed': failed, 'cache_dep': dep}
+
+
+def hooks_dir():
+    return os.path.join(os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'), 'hooks')
+
+
+def hooks_block(skill_dir):
+    """HOOKS block (informational): merge-guard.py installed? artifact-guard.py installed and equal to the template
+    next to the checker (ok | missing | outdated | unknown when that template is not found)."""
+    hd = hooks_dir()
+    guard = os.path.join(hd, 'artifact-guard.py')
+    tpl = next((p for p in (os.path.join(skill_dir, 'templates', 'artifact-guard.py'),
+                            os.path.join(skill_dir, 'artifact-guard.py')) if os.path.isfile(p)), None)
+    state = ('missing' if not os.path.isfile(guard) else 'unknown' if tpl is None
+             else 'ok' if sha(guard) == sha(tpl) else 'outdated')
+    return {'merge_guard': os.path.isfile(os.path.join(hd, 'merge-guard.py')), 'artifact_guard': state}
 
 
 # ---------------------------------------------------------------- RULES: obsolete notes in memory and CLAUDE.md
@@ -639,8 +686,22 @@ def lacks(m, found):
     out = ['types(%s)' % ','.join(gone)] if gone else []
     out += [('protocol-line(%s≠%s)' % (found, TARGET) if key == 'protocol_line' and found else name)
             for key, name in FLAGS if not m[key]]
+    out += [RETIRED] if m.get('auto_merge') else []
     k = m['skills_lines']
     return out + (['skills %d/%d pending(☐🔄⛔⏸)' % (k['have'], k['pending_waves'])] if k['have'] != k['pending_waves'] else [])
+
+
+def hook_lines(h):
+    """`review:` lines for the hooks that are missing or differ from the template (advice only: never in `needed`)."""
+    where = '$CLAUDE_CONFIG_DIR/hooks' if os.environ.get('CLAUDE_CONFIG_DIR') else '~/.claude/hooks'
+    out = []
+    if not h['merge_guard']:
+        out.append('  · review: merge-guard hook missing in %s → the owner installs templates/merge-guard.py (PreToolUse, matcher Bash|mcp__.*merge.*) with !' % where)
+    if h['artifact_guard'] == 'missing':
+        out.append('  · review: artifact-guard hook missing in %s → the owner installs templates/artifact-guard.py (Stop) with !' % where)
+    elif h['artifact_guard'] == 'outdated':
+        out.append('  · review: artifact-guard hook outdated in %s (differs from templates/artifact-guard.py) → the owner refreshes it with !' % where)
+    return out
 
 
 def render(brain, module, args, p, b, mods, inv, stats, needed):
@@ -660,6 +721,8 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
     rev_l = (['  · review: no active_account declared → courier-preflight <docs_dir> --set-active-account <name>']
              if a.get('no_active_account') else [])  # advice only: never in `needed`
     why = lacks(e['markers'], p['found']) if e['markers'] else []
+    exe_l = (['  · review: reviewer pending → owner sets @handle in the `> **Reviewer:**` header line']
+             if e['markers'] and e['markers']['reviewer_pending'] else [])  # advice only: never in `needed`
     mid = ['EXECUTE n/a (no execute.md)' if e['state'] == 'n/a' else
            'EXECUTE %s%s' % (e['state'], ' · lacks ' + ', '.join(why) if why else '')]
     nxt = ' · last entry Next: %s' % ('yes' if t['last_entry_has_next'] else 'no')
@@ -676,6 +739,7 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
             ru['state'], ru['memory_dir'] or 'none', ru['claude_files'], len(ru['findings']), fx, len(ru['findings']) - fx))
         rules_l = ['  %s:%d %s — %s' % (f['file'], f['line'], f['id'], f['snippet']) for f in ru['findings'][:6]]
         rules_l += ['  … +%d more (use --json)' % (len(ru['findings']) - 6)] if len(ru['findings']) > 6 else []
+    hook_l = hook_lines(b['hooks'])
     after = [('CONTEXT n/a (business-context only)' if c['state'] == 'n/a' else 'CONTEXT ok (%s)%s · last_scanned %s' % (
         c['skill'], ' · plugin ' + c['plugin'] if c['plugin'] else '', c['last_scanned'] or 'unknown'))]
     mod_l = []
@@ -687,18 +751,21 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
         fmt = lambda x, n: ' '.join('%s=%d' % kv for kv in x.items()) + ' · lines=%d' % n['execute_lines']
         inv_l = ['INVARIANTS ' + fmt(inv, stats)] + ['INVARIANTS %s %s' % (m['module'], fmt(m['invariants'], m['stats'])) for m in mods]
     last = 'RENOVATE: needed(%s)' % ','.join(needed) if needed else 'RENOVATE: up-to-date'
-    fits = lambda: len(pre + rows_l + rev_l + mid + rules_l + after + mod_l + inv_l) + 1 <= MAX_LINES
-    if not fits() and (rows_l or rev_l):  # shed order: registry rows (+ the review line), module lines, RULES findings, module INVARIANTS (the root one stays)
+    head = lambda: pre + rows_l + rev_l + mid[:1] + exe_l + mid[1:] + rules_l + hook_l + after + mod_l
+    fits = lambda: len(head() + inv_l) + 1 <= MAX_LINES
+    if not fits() and (rows_l or rev_l):  # shed order: registry rows (+ the review line), reviewer/hook advice, module lines, RULES findings, module INVARIANTS (the root one stays)
         rows_l = ['  … %d rows without regen (use --json)' % len(rows_l)] if rows_l else []
         rev_l = []
+    if not fits() and (exe_l or hook_l):
+        exe_l, hook_l = [], []
     if not fits() and mod_l:
         mod_l = ['  … %d modules, %d need work (use --json)' % (len(mods), sum(bool(m['needed']) for m in mods))]
     if not fits() and rules_l:
         rules_l = ['  … %d findings (use --json)' % len(ru['findings'])]
     if not fits():
-        room = MAX_LINES - len(pre + rows_l + rev_l + mid + rules_l + after + mod_l) - 1
+        room = MAX_LINES - len(head()) - 1
         inv_l = inv_l[:room - 1] + ['INVARIANTS … %d module lines not shown (use --json)' % (len(inv_l) - room + 1)]
-    return pre + rows_l + rev_l + mid + rules_l + after + mod_l + inv_l + [last]
+    return head() + inv_l + [last]
 
 
 def emit(args, data, lines, code):
@@ -739,7 +806,7 @@ def run(args):
     rb = rev['blocks']
     rules = rules_block(brain, args) if not module else empty_rules()
     blocks = {'scripts': scripts, 'artifacts': rb['artifacts'], 'execute': rb['execute'], 'task': rb['task'],
-              'rules': rules, 'context': rb['context'], 'modules': mods}
+              'rules': rules, 'context': rb['context'], 'modules': mods, 'hooks': hooks_block(skill_dir)}
     needed = [b for b in BLOCKS if (b == 'modules' and any(m['needed'] for m in mods)) or (
         b not in ('modules', 'context') and blocks[b]['state'] in NEED)]
     inv = rev['inv'] if args.invariants else None

@@ -28,7 +28,8 @@ comment policy, and a code-simplifier pass that closes every wave.
 > **The orchestrator is pure** (`references/orchestrator-rule.md`): it never reads
 > bulk files, edits at scale, renders, browses or publishes, and every `Agent` /
 > `Workflow` call it makes names its `model`. The user's phrases `sin tanto lío` (one
-> task) and `modo directo` (until `modo orquestador`) are the escape hatch.
+> task) and `modo directo` (until `modo orquestador`) are the escape hatch. Claude never merges an MR: the
+> `merge-guard.py` PreToolUse hook denies it and the Reviewer merges; the links block appears once per delivery close.
 
 ## The principle
 

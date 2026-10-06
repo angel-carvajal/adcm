@@ -8,8 +8,8 @@ tappable links block, off the expensive main model and onto one disposable agent
 The Artifact tool refuses to publish to a URL the current conversation has not read, so a
 fresh main session that wants to refresh a stale page must first pull the whole live version
 into its context: 40 KB to 1 MB per artifact, roughly a tenth of a session for a typical set.
-Add the Stop hook that insists on a precise links block at the very end, and the close of every
-wave becomes the costliest, least intelligent thing the main model does.
+Add the Stop hook (v6), which demands the links block only when a courier returned this turn and never hands over a
+self-built one, and the close of every wave becomes the costliest, least intelligent thing the main model does.
 
 This skill packages the cheap way:
 
@@ -39,8 +39,8 @@ courier-preflight <docs_dir> --account auto|NAME   # auto = last_session_account
 courier-preflight --pages SAVED_FILE --page-kb 60 --page-lines 450
 ```
 
-Then it pastes everything after `=== LINKS ===` from the courier's RETURN as the last lines of
-its final message. It never calls the Artifact tool and never opens the HTML itself.
+Then it pastes everything after `=== LINKS ===` from the LAST courier RETURN as the last lines of
+its final message, once per delivery close (progress turns carry no links, and no block is built by hand). It never calls the Artifact tool and never opens the HTML itself.
 
 ## What it will do
 

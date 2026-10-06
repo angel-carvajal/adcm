@@ -17,17 +17,22 @@ Garantiza dos cosas cada vez que un turno intenta cerrar:
      NINGUNA familia la prueba.
      Si no hay evidencia, bloquea el cierre y apunta al courier (no a leer/publicar
      desde la sesión principal).
-  2. LINKS AL CIERRE (v3: también FORMATO y POSICIÓN — links Markdown, uno por línea,
-     como ÚLTIMAS líneas del mensaje; nada después del último link · v4: si el cierre
-     entrega una URL con IP de LAN, la MISMA app tiene que venir también como
-     `localhost`, porque desde iTerm en la Mac esa es la que el owner usa para validar ·
-     v5: el bloque se evalúa UNA vez sobre la UNIÓN de los módulos que cierran en el
-     turno, no módulo por módulo) — si el turno publicó un artifact, cambió un HTML
-     registrado o tocó un doc de cierre (`close_markers`: task.md / execute.md /
-     detailed-plan.md) del módulo, el texto del asistente en el turno debe incluir las
-     URLs canónicas de ese módulo (la convención las pone en el bloque final). Si faltan,
-     bloquea el cierre y entrega el bloque de links (la unión) listo para pegar; si el
-     courier ya corrió, se pega su bloque `=== LINKS ===` tal cual.
+  2. LINKS AL CIERRE — links Markdown, uno por línea, como ÚLTIMAS líneas del mensaje, nada
+     después del último link (v3) · una URL con IP de LAN exige su gemelo `localhost` (v4) ·
+     el bloque se evalúa UNA vez sobre la UNIÓN de los módulos que cierran (v5) · v6: el
+     bloque se imprime UNA vez por cierre, en el mensaje FINAL y solo tras el RETURN del
+     courier. Se exige cuando ese RETURN trajo un bloque de links este turno (llega por
+     hand-back, task-notification, cola o tool_result) o la sesión principal publicó un
+     artifact; se juzga el ÚLTIMO mensaje del asistente contra la unión = filas de cierre +
+     filas cuyas URLs trae el RETURN. Si cambia un doc de cierre (`close_markers`: task.md /
+     execute.md / detailed-plan.md) sin entrega ni courier (lanzado o ya corrido), bloquea
+     una vez: delega en el courier, no pegues links a mano. El guard nunca arma el bloque
+     ni imprime el marcador en sus razones; con `stop_hook_active` solo avisa (systemMessage).
+     Calla (sin bloquear ni avisar) mientras haya un courier pendiente — lanzado por tipo, por
+     descripción o por brief `artifact-courier` (ruta sin plugin) y sin RETURN — y no exige
+     courier mientras otro sub-agente del turno siga en vuelo: su RETURN despierta un stop nuevo.
+     Un doc de cierre editado DESPUÉS del último RETURN que entregó (+2 s) cuenta como sin
+     entregar. Solo cuenta como RETURN lo que manda un sub-agente: un prompt humano encolado no.
 
 Descubrimiento del registro: sube desde `cwd` buscando `ai/ai-brain/artifacts.json` o
 `ai-brain/artifacts.json`, deteniéndose en el home del usuario (nunca lo rebasa, para
@@ -60,6 +65,10 @@ from datetime import datetime, timezone
 REGISTRY_CANDIDATES = ("ai/ai-brain/artifacts.json", "ai-brain/artifacts.json")
 DEFAULT_MARKERS = ("task.md", "execute.md", "detailed-plan.md")
 CLOCK_SKEW = 60  # segundos de tolerancia antes de tratar un mtime futuro como inválido
+LINKS_MARK = "=== LINKS ==="  # cabecera del bloque de links en el RETURN del courier (solo se DETECTA, nunca se imprime)
+LINKS_RE = re.compile(r"^\s*" + re.escape(LINKS_MARK) + r"\s*$", re.M)
+COURIER_HEAD = re.compile(r"^\s*COURIER\b", re.M)
+RETURN_SKEW = 2  # segundos de tolerancia entre el sello del RETURN y el mtime de un doc de cierre
 
 
 def real(path):
@@ -132,7 +141,7 @@ def find_registries(cwd):
 
 
 def is_human_prompt(entry):
-    if entry.get("type") != "user" or entry.get("isMeta"):
+    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isCompactSummary"):
         return False
     origin = entry.get("origin") or {}
     if isinstance(origin, dict) and origin.get("kind") and origin.get("kind") != "human":
@@ -147,17 +156,79 @@ def is_human_prompt(entry):
     return False
 
 
+def text_of(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(b.get("text") or "" for b in content if isinstance(b, dict))
+    return ""
+
+
+def entry_returns(e, agent_ids):
+    """Textos que un sub-agente devolvió a la sesión en esta entrada del transcript. El tool Agent
+    es asíncrono: el RETURN no viene en su tool_result ("Async agent launched"), llega por un
+    portador (formas del harness 2.1.285/286): mensaje `peer` con `handback`, `task-notification`
+    (el RETURN va dentro de `<result>`), adjunto `queued_command` enviado por un sub-agente (no un prompt
+    humano encolado), o el tool_result de un Agent/Task."""
+    kind, origin = e.get("type"), e.get("origin")
+    origin = origin if isinstance(origin, dict) else {}
+    message = e.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if kind == "attachment":
+        att = e.get("attachment")
+        att = att if isinstance(att, dict) else {}
+        att_origin = att.get("origin")
+        att_kind = att_origin.get("kind") if isinstance(att_origin, dict) else None
+        prompt = att.get("prompt")
+        # Un `queued_command` también es lo que se encola cuando el humano escribe con Claude ocupado:
+        # solo cuenta como RETURN si lo envió un sub-agente (origin peer / task-notification, o el marco del prompt).
+        from_agent = att_kind in ("peer", "task-notification") or (
+            isinstance(prompt, str) and prompt.lstrip().startswith(("<agent-message", "<task-notification")))
+        texts = [prompt] if att.get("type") == "queued_command" and from_agent else []
+    elif kind != "user":
+        texts = []
+    elif origin.get("kind") == "task-notification" or (origin.get("kind") == "peer" and origin.get("handback")):
+        texts = [text_of(content)]
+    else:
+        texts = [text_of(b.get("content")) for b in (content if isinstance(content, list) else [])
+                 if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in agent_ids]
+    rets = []
+    for t in texts:
+        if isinstance(t, str) and not t.lstrip().startswith("Async agent launched"):
+            m = re.search(r"<result>(.*?)</result>", t, re.S)
+            rets.append(m.group(1) if m else t)
+    return rets
+
+
+def has_links_block(ret):
+    """El RETURN trae el bloque: la cabecera LINKS_MARK seguida de al menos una línea-link."""
+    m = LINKS_RE.search(ret)
+    return bool(m) and any(LINK_LINE.match(l) for l in ret[m.end():].split("\n"))
+
+
+def is_courier_launch(inp):
+    """Lanzamiento de un courier: el tipo `adcm-toolkits:courier`, o la ruta sin plugin (`general-purpose` +
+    el brief del courier): `courier` en subagent_type/description, o `artifact-courier` en los primeros 600 del prompt."""
+    probe = (str(inp.get("subagent_type") or "") + " " + str(inp.get("description") or "")).lower()
+    return "courier" in probe or "artifact-courier" in str(inp.get("prompt") or "")[:600].lower()
+
+
 def parse_transcript(path):
-    """Devuelve (session_start, turn_start, publishes, turn_text).
+    """Devuelve un dict: session_start, turn_start, publishes, last_text, delivered, pending, ran, running, return_ts.
     publishes: lista de (epoch, realpath, url) de tool Artifact publish (toda la sesión).
-    turn_text: TODO el texto del asistente del turno actual (desde el último prompt
-    humano), no solo lo posterior al último tool_use — los links pueden ir antes de
-    una última llamada a herramienta."""
+    last_text: texto del ÚLTIMO mensaje del asistente del turno actual (desde el último prompt
+    humano; los bloques `text` se agrupan por message.id): es el que ve el dueño y el único que se juzga.
+    delivered: RETURNs de este turno con bloque de links (ver entry_returns / has_links_block).
+    pending: hay más couriers lanzados (is_courier_launch) que RETURNs de courier (con bloque o con cabecera
+    COURIER); ran: volvió un RETURN con cabecera COURIER pero sin bloque (corrió y falló); running: hay más
+    Agent/Task lanzados este turno que RETURNs de cualquier sub-agente (alguno sigue en vuelo);
+    return_ts: sello del último RETURN que entregó el bloque (None si no hay o no trae timestamp)."""
     session_start = turn_start = None
-    publishes = []
-    turn_texts = []
+    publishes, agent_ids = [], set()
+    delivered, ran, last_key, last_parts = [], False, None, []
+    agents, couriers, n_returns, n_courier_returns, return_ts = set(), set(), 0, 0, None
     with open(path, encoding="utf-8") as fh:
-        for line in fh:
+        for n, line in enumerate(fh):
             try:
                 e = json.loads(line)
             except Exception:
@@ -170,26 +241,48 @@ def parse_transcript(path):
                     if session_start is None:
                         session_start = ts
                     turn_start = ts
-                turn_texts = []
+                delivered, ran, last_key, last_parts = [], False, None, []
+                agents, couriers, n_returns, n_courier_returns, return_ts = set(), set(), 0, 0, None
                 continue
+            for ret in entry_returns(e, agent_ids):
+                n_returns += 1
+                if has_links_block(ret):
+                    delivered.append(ret)
+                    n_courier_returns += 1
+                    if ts is not None:
+                        return_ts = ts if return_ts is None else max(return_ts, ts)
+                elif COURIER_HEAD.search(ret):
+                    ran = True
+                    n_courier_returns += 1
             if e.get("type") != "assistant":
                 continue
             message = e.get("message")
             content = message.get("content") if isinstance(message, dict) else None
+            key = (message.get("id") if isinstance(message, dict) else None) or e.get("uuid") or n
             for b in content or []:
                 if not isinstance(b, dict):
                     continue
                 if b.get("type") == "tool_use":
+                    inp = b.get("input")
+                    inp = inp if isinstance(inp, dict) else {}
                     if b.get("name") == "Artifact":
-                        inp = b.get("input")
-                        inp = inp if isinstance(inp, dict) else {}
                         action = inp.get("action") or "publish"
                         fp = inp.get("file_path")
                         if action == "publish" and fp and ts is not None:
                             publishes.append((ts, real(fp), inp.get("url")))
+                    elif b.get("name") in ("Agent", "Task"):
+                        agent_ids.add(b.get("id"))
+                        agents.add(b.get("id") or n)
+                        if is_courier_launch(inp):
+                            couriers.add(b.get("id") or n)
                 elif b.get("type") == "text":
-                    turn_texts.append(b.get("text") or "")
-    return session_start, turn_start, publishes, "\n".join(turn_texts)
+                    if key != last_key:
+                        last_key, last_parts = key, []
+                    last_parts.append(b.get("text") or "")
+    return {"session_start": session_start, "turn_start": turn_start, "publishes": publishes,
+            "last_text": "\n".join(last_parts), "delivered": delivered, "ran": ran and not delivered,
+            "pending": len(couriers) > n_courier_returns, "running": len(agents) > n_returns,
+            "return_ts": return_ts}
 
 
 def module_root(reg_dir, rel_file, markers):
@@ -214,17 +307,24 @@ def check(hook_input):
     cwd = hook_input.get("cwd") or os.getcwd()
     transcript = hook_input.get("transcript_path")
     if not transcript or not os.path.isfile(os.path.expanduser(transcript)):
-        return [], None
+        return [], None, False
     registries = find_registries(cwd)
     if not registries:
-        return [], None
-    session_start, turn_start, publishes, turn_text = parse_transcript(os.path.expanduser(transcript))
+        return [], None, False
+    t = parse_transcript(os.path.expanduser(transcript))
+    session_start, turn_start, publishes, last_text = t["session_start"], t["turn_start"], t["publishes"], t["last_text"]
+    returns, pending, ran, running, return_ts = t["delivered"], t["pending"], t["ran"], t["running"], t["return_ts"]
     if turn_start is None:
-        return [], None
+        return [], None, False
 
     now = time.time()
     stale = []
     union, all_missing = [], []  # módulos que cierran en este turno: links requeridos y faltantes
+    marker_mods = []  # módulos cuyo doc de cierre (close_markers) cambió en este turno
+    after_mods = []  # ...y cambió DESPUÉS del último RETURN del courier que entregó (la entrega ya no lo cubre)
+    ret_text = "\n".join(returns)
+    # Entrega = un RETURN del courier con bloque de links, o un publish de la sesión principal este turno.
+    delivered = bool(returns) or any(t >= turn_start for t, p, u in publishes)
     for reg_dir, data in registries:
         markers = normalize_markers(data.get("close_markers"))
         entries = [
@@ -281,47 +381,55 @@ def check(hook_input):
             return turn_start <= mt <= now + CLOCK_SKEW
 
         for mod, arts in by_module.items():
-            closing = False
+            closing = marker_touched = False
             for m in markers:
-                if touched_this_turn(os.path.join(mod, m)):
-                    closing = True
+                mp = os.path.join(mod, m)
+                if touched_this_turn(mp):
+                    closing = marker_touched = True
+                    if return_ts is not None and os.path.getmtime(mp) > return_ts + RETURN_SKEW and mod not in after_mods:
+                        after_mods.append(mod)
+            if marker_touched:
+                marker_mods.append(mod)
             for a in arts:
                 if touched_this_turn(a["_abs"]):
                     closing = True
                 if any((p == a["_abs"] or (u and u == a["url"])) and t >= turn_start for t, p, u in publishes):
                     closing = True
-            if not closing:
+            # Las filas del bloque que trae el RETURN se exigen aunque su módulo no se haya tocado:
+            # un courier que solo republica deja la unión vacía si solo se mira lo que cambió.
+            required = [a for a in arts if any(u in ret_text for u in urls_of(a))
+                        or (closing and a.get("in_close_block", True))]
+            if not delivered or not required:
                 continue
-            required = [a for a in arts if a.get("in_close_block", True)]
             for a in required:
                 if all(a["url"] != x["url"] for x in union):
                     union.append(a)
-            missing = [a for a in required if not any(u in turn_text for u in urls_of(a))]
+            missing = [a for a in required if not any(u in last_text for u in urls_of(a))]
             if missing:
                 all_missing.append((mod, missing))
 
+    # Un sub-agente en vuelo (courier u otro) despertará un stop nuevo con su RETURN: ahí se vuelve a revisar.
+    if marker_mods and not pending and not running:
+        if not delivered and not ran:
+            return stale, {"no_courier": marker_mods}, pending
+        if after_mods:
+            return stale, {"no_courier": after_mods, "after_return": True}, pending
     links = None
     if union:
         # Un solo mensaje, un solo bloque: se evalúa la unión de todos los módulos que
         # cierran, así dos módulos en el mismo turno no se estorban entre sí.
         probs = []
         if not all_missing:
-            probs = links_format_problems(turn_text, union) + local_link_problems(turn_text)
+            probs = links_format_problems(last_text, union) + local_link_problems(last_text)
         if all_missing or probs:
             links = {"union": union, "missing": all_missing, "probs": probs}
-    return stale, links
+    return stale, links, pending
 
 
 def urls_of(a):
     """La `url` de la fila más todo `url_<cuenta>`: una sesión bajo otra cuenta pega su propio bloque."""
     vals = [a.get("url")] + [v for k, v in a.items() if isinstance(k, str) and k.startswith("url_")]
     return [v for v in vals if isinstance(v, str) and v]
-
-
-def fmt_link(a):
-    # Link Markdown clickeable (el owner lo abre desde el cel); la URL cruda queda
-    # dentro del link, así los footer badges de Claude Code también lo detectan.
-    return f"[{a.get('favicon', '🔗')} {a.get('title') or a['file']}]({a['url']})"
 
 
 LINK_LINE = re.compile(r"^\s*(?:[-*•]\s*)?\[[^\]]+\]\(\S+\)\s*$")
@@ -355,7 +463,7 @@ def links_format_problems(turn_text, required):
     block_text = "\n".join(block)
     for a in required:
         if not any(u in block_text for u in urls_of(a)):
-            probs.append(f"{fmt_link(a)} no está en el bloque final (aparece más arriba, en prosa)")
+            probs.append(f"{a.get('title') or a['file']} no está en el bloque final (aparece más arriba, en prosa)")
     return probs
 
 
@@ -403,9 +511,11 @@ def main():
     except Exception:
         hook_input = {}
     try:
-        stale, links = check(hook_input)
+        stale, links, pending = check(hook_input)
         if not stale and not links:
             return 0
+        if pending:
+            return 0  # el courier ya está en camino: su RETURN despertará un stop nuevo que vuelve a revisar
 
         lines = ["⛔ artifact-guard: el cierre está incompleto."]
         if stale:
@@ -418,10 +528,15 @@ def main():
                 "  No la leas ni la publiques desde esta sesión: delega el cierre en UN sub-agente "
                 "artifact-courier (tipo `adcm-toolkits:courier`; sin el plugin: Agent general-purpose, model \"sonnet\"; brief = "
                 "templates/courier-brief.md del skill adcm-toolkits:artifact-courier). Él republica, "
-                "sella el registro y devuelve el bloque `=== LINKS ===`."
+                "sella el registro y devuelve el bloque de links."
             )
-        if links:
-            union = links["union"]
+        if links and "no_courier" in links:
+            lines.append(
+                "Cambiaron docs de cierre sin courier: delega el cierre en adcm-toolkits:courier "
+                "(regen + republish); no pegues links a mano."
+                + (" (docs cambiaron después del RETURN del courier)" if links.get("after_return") else "")
+            )
+        elif links:
             if links["probs"]:
                 lines.append("El BLOQUE DE LINKS existe pero NO cumple formato/posición:")
                 for pr in links["probs"]:
@@ -436,14 +551,9 @@ def main():
                     "backticks ni sangría de 4 espacios (en el cel eso se ve como código muerto, "
                     "no clickeable)."
                 )
-            lines.append(
-                "Si el courier ya corrió, pega su bloque `=== LINKS ===` tal cual como últimas "
-                "líneas; si no, este:"
-            )
-            for a in union:
-                lines.append(f"- {fmt_link(a)}")
-        lines.append("Corrige lo anterior (delega en el courier y/o pega el bloque de links) y vuelve a cerrar.")
-        reason = "\n".join(lines)
+            lines.append("Pega el bloque del último RETURN del courier, tal cual, como últimas líneas.")
+        lines.append("Corrige lo anterior (delega en el courier; el bloque de links es el de su RETURN) y vuelve a cerrar.")
+        reason = "\n".join(lines).replace(LINKS_MARK, "LINKS")  # el guard nunca imprime el marcador: no se dispara solo
 
         if hook_input.get("stop_hook_active"):
             print(json.dumps({"systemMessage": "artifact-guard: cierre con pendientes (ya se bloqueó una vez; no se vuelve a bloquear).\n" + reason}, ensure_ascii=False))

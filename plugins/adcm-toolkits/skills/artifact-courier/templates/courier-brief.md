@@ -14,7 +14,7 @@ TASK: Delivery close for {{docs_dir}}. Follow {{skill_dir}}/references/procedure
   COMMIT: {{yes | no}}   Repo: {{output of `git -C <docs_dir> rev-parse --show-toplevel` | none}}
   REGEN: {{yes | no}}
   REISSUE ON 2ND REFUSAL: {{no | yes}}
-  ACCOUNT: {{auto | <name>}}   REISSUE ON OTHER ACCOUNT: {{no | yes}}
+  ACCOUNT: {{auto | <name>}}   REISSUE ON OTHER ACCOUNT: {{no | yes}}   BLOCK FLAGS: {{none | --only <files> --include-hidden}}
   (Default `auto`: the courier probes the account this session opens (procedure 2b); never guess it. `other-account` rows are in no batch: with `yes`, name them in Rows:. A missing file reads `missing` even under --account.)
 
 FILES: only the Rows listed above, {{docs_dir}}/artifacts.json (through --mark-published and

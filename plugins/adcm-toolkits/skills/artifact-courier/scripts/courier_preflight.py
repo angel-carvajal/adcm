@@ -42,7 +42,10 @@ nothing changes: `url` and its stamps are used.
 the active account; the default report header then prints `account: <resolved> (auto)`. `--block-only`
 prints, per row, the url of the resolved account's family and falls back to the canonical `url` when the
 family has none (a warning on stderr names those rows): the block the main session pastes is the
-current account's. The `=== LINKS ===` section of the default report follows the same rule.
+current account's. The default report no longer carries the link block (0.16.0): it ends with the
+pointer line `links: N rows · use --block-only` (N = the rows the block would list, same account rule),
+so a preflight run in the main session never prints the `=== LINKS ===` marker the Stop guard reads as
+a delivery. The block is printed only by `--block-only`, whose output is unchanged.
 `--summary` ends with ` · account: <resolved> (auto|named)` only when --account is passed (without the
 flag the line is exactly the one status_digest.py has always read).
 
@@ -94,7 +97,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
-__version__ = "0.15.2"
+__version__ = "0.16.0"
 
 REGISTRY_CANDIDATES = ("artifacts.json", "ai/ai-brain/artifacts.json", "ai-brain/artifacts.json")
 DEFAULT_MARKERS = ("task.md", "execute.md", "detailed-plan.md")
@@ -600,8 +603,7 @@ def report(args):
             print(f"  batch {i}: {', '.join(r['file'] for r in grp)} ({tot / KB:.0f} KB)")
         print(f"  {batches_text(batches)}")
     print()
-    print("=== LINKS ===")
-    print("\n".join(block))
+    print(f"links: {len(block)} rows · use --block-only")
     return 0
 
 

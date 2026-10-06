@@ -29,9 +29,11 @@ canonical link of the registry's `active_account`, `url_<account>` the link of a
   - the session account: every --mark-published writes the top-level `last_session_account` (the
     --account NAME it ran with, else the active account when known); `--account auto` resolves to it
     (else to the active account) and the report header prints `account: <resolved> (auto)`;
-  - --block-only (and the `=== LINKS ===` section of the default report) is the block the main session
-    pastes: per row the url of the resolved account's family, falling back to the canonical `url`
-    (with a stderr warning) when the family has none;
+  - --block-only is the block the main session pastes: per row the url of the resolved account's
+    family, falling back to the canonical `url` (with a stderr warning) when the family has none;
+  - since 0.16.0 the default report no longer carries the block: it prints one line
+    `links: N rows · use --block-only` and never the `=== LINKS ===` section (the links are pasted
+    exactly once per delivery close, from --block-only);
   - --set-active-account NAME on a registry that declares no account (neither `active_account` nor
     `cuenta_activa`) and has no `url_<NAME>` family only DECLARES it (writes `active_account`, rows
     untouched, exit 0; a second run exits 2); with families, or with an account already declared,
@@ -485,11 +487,11 @@ def case_block_only_uses_session_account(ctx, t):
     t.has(bo.out, f"- [📄 Deck]({CORP['deck.html']})", "the row without url_alt prints its canonical url")
     t.has(bo.err, "deck.html has no url_alt", "stderr names the row that fell back to the canonical url")
     t.lacks(bo.err, "plans.html", "stderr does not name rows that have url_alt")
-    # the default report's `=== LINKS ===` section follows the same rule
+    # the default report no longer carries the block (0.16.0): a pointer line, never the `=== LINKS ===` section
     full = ctx.run(d, "--account", OTHER)
-    links = full.out.split("=== LINKS ===", 1)[1] if "=== LINKS ===" in full.out else ""
-    t.eq(links.strip(), bo.out.strip(), "`=== LINKS ===` section == --block-only under --account alt")
-    t.has(full.err, "deck.html has no url_alt", "default report: stderr names the canonical fallback row")
+    t.lacks(full.out, "=== LINKS ===", "default report under --account alt: no `=== LINKS ===` section")
+    t.ok("links: 3 rows · use --block-only" in [x.strip() for x in full.out.splitlines()],
+         "default report under --account alt: prints `links: 3 rows · use --block-only`")
     t.lacks(full.out, "left out of the block", "default report: no row is left out while a canonical url exists")
     # a hidden row stays out of the block unless --include-hidden, and then also prints the alt url
     d = ctx.registry("c10b", tweak={"prompts.html": {"in_close_block": False}})
@@ -590,6 +592,32 @@ def case_declare_active_account(ctx, t):
     t.lacks(plain.out, "· account:", "last_session_account present: --summary without --account still has no account text")
 
 
+def case_default_report_links_pointer(ctx, t):
+    """0.16.0: the default report points at --block-only instead of printing the link block."""
+    d = ctx.registry("c12")
+    for tag, flags in (("no flag", ()), (f"--account {ACTIVE}", ("--account", ACTIVE)), (f"--account {OTHER}", ("--account", OTHER))):
+        r = ctx.run(d, *flags)
+        lines = r.out.splitlines()
+        t.eq(r.rc, 0, f"default report ({tag}) exit code")
+        t.ok("links: 3 rows · use --block-only" in [x.strip() for x in lines], f"default report ({tag}) prints `links: 3 rows · use --block-only`")
+        t.lacks(r.out, "=== LINKS ===", f"default report ({tag}) never prints the `=== LINKS ===` section")
+        t.ok(not [x for x in lines if x.startswith("- [")], f"default report ({tag}) prints no link lines")
+        t.ok(set(CORP) <= set(table_rows(r.out)), f"default report ({tag}) keeps the work table")
+    # the count follows the registry
+    two = ctx.registry("c12b", files=("plans.html", "prompts.html"))
+    r = ctx.run(two)
+    t.ok("links: 2 rows · use --block-only" in [x.strip() for x in r.out.splitlines()], "a two-row registry prints `links: 2 rows · use --block-only`")
+    t.lacks(r.out, "=== LINKS ===", "a two-row registry: no `=== LINKS ===` section")
+    # --block-only is the paste: one markdown line per row, nothing else, unchanged
+    bo = ctx.run(d, "--block-only")
+    t.eq(bo.rc, 0, "--block-only exit code")
+    t.eq(bo.out.splitlines(), [f"- [📄 {f.split('.')[0].capitalize()}]({u})" for f, u in CORP.items()],
+         "--block-only prints exactly one `- [<favicon> <Title>](<url>)` line per row")
+    t.eq(bo.err, "", "--block-only prints no warning for a clean registry")
+    t.lacks(bo.out, "links:", "--block-only never prints the pointer line")
+    t.lacks(bo.out, "=== LINKS ===", "--block-only never prints the section marker")
+
+
 CASES = [
     ("default_uses_url_and_active_account_equals_default", case_default_uses_url_and_active_account_equals_default),
     ("account_selects_url_other_account", case_account_selects_url_other_account),
@@ -602,6 +630,7 @@ CASES = [
     ("last_session_account", case_last_session_account),
     ("block_only_uses_session_account", case_block_only_uses_session_account),
     ("declare_active_account", case_declare_active_account),
+    ("default_report_links_pointer", case_default_report_links_pointer),
 ]
 
 

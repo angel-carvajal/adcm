@@ -1,5 +1,31 @@
 # Changelog — adcm-toolkits
 
+## 0.16.0 — 2026-10-05
+
+- **Claude never merges.** `execute.md` declares a `Reviewer` (`> **Reviewer:** @handle (gitlab|github)
+  · **Merge policy:** wait`) and §3 is fixed text: a wave ends with its MR open, pipeline green,
+  simplify pass done and assigned to the Reviewer; the merge is a DoD-human row and wave N+1 starts
+  only after MR N is merged. The `auto-merge` example is gone from the template, the executors and
+  the orchestrator rule forbid merging and pushing code to the default branch; docs repos (ai-brain,
+  marketplaces) keep committing and pushing to main directly.
+- New PreToolUse hook `templates/merge-guard.py` (matcher `Bash|mcp__.*merge.*`): denies `gh pr merge`,
+  `glab mr merge|accept`, merge API calls, MCP merge tools (`merge_merge_request`, `merge_pull_request`,
+  `accept_merge_request`), and — while on main|master|develop|trunk — `git merge` / `git pull [--rebase]
+  <remote> <other branch>` / `git rebase <other ref>` / `git reset --hard <other ref>`; also `git push`
+  with a `merge_when_pipeline_succeeds`/`auto_merge` push option or a `<src>:<protected>` refspec
+  (`HEAD:main`, `feature/x:main`). Tokenizer-based (wrappers, `bash -c`, `$()`, heredocs, comments),
+  fail-open, 2 s git timeout; plain `git commit`, `git push`, `git push origin main` and sync forms
+  (`git merge origin/main`, `git pull`, `git pull --rebase`) stay allowed, so docs repos are unaffected.
+- The links block is printed **once per delivery close**, in the orchestrator's final message after
+  the last courier RETURN; progress turns carry no links and no agent other than the courier returns
+  URLs. `artifact-guard` v6 demands the block only when a courier returned (or the main session
+  published) in the turn, evaluates the LAST message only, never hands over a self-built block, and
+  blocks docs-touched-without-courier once with "delega el cierre en el courier".
+- `courier-preflight` default report points to `--block-only` instead of printing the links marker.
+- `renovate-check`: EXECUTE markers `reviewer-line`, `merge-rule`, `links-once` (+ `auto-merge`
+  named when still present), `review:` line for a pending Reviewer, informational HOOKS block
+  (`merge-guard` missing / `artifact-guard` outdated → `review:`, never `needed`).
+
 ## 0.15.2 — 2026-10-04
 
 - Gate reports keep the brain's layout: the verifier brief's `REPORT PATH` is

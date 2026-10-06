@@ -96,11 +96,8 @@ template's copy. Label every reference frame with its source and author.
 ## The closing link block
 
 Every step that ends in something the owner must look at closes with a clean
-link block — readable in a terminal **and** on a phone. It is NOT the courier's
-`=== LINKS ===` block pasted as-is: that standard block omits registry rows with
-`in_close_block: false`, which is how this skill registers its pages. Build it yourself from
-the URLs: run `python3 <courier skill dir>/scripts/courier_preflight.py <docs_dir> --block-only --only <its files> --include-hidden`
-(or read the `url` column of the courier's status table) and write your own REVIEW /
+link block — readable in a terminal **and** on a phone. It is the courier's RETURN block (all after `=== LINKS ===` of the LAST RETURN), once per delivery close, pasted verbatim as the last lines; the session never builds it.
+The courier brief asks for `courier_preflight.py <docs_dir> --block-only --only <its files> --include-hidden`, since the standard block omits `in_close_block: false` rows, which is how this skill registers its pages. Labels: REVIEW /
 REFERENCES / PACK bullets. The format is the same: **plain markdown bullets**, one link per line,
 no tracking parameters, no truncated URLs, no headers, no columns, no code fence, no
 indentation.

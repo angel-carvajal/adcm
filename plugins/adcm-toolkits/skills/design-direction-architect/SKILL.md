@@ -89,13 +89,13 @@ Absolute path when needed:
     the type fixes `sonnet`) publishes them; the main session never calls the Artifact tool. Register the
     rows in `<docs_dir>/artifacts.json` with `in_close_block: false` when the
     container has a brain, otherwise in `.design/artifacts.json` (same schema).
-    Because of that flag the courier's standard block OMITS these rows, so the
-    main session does NOT paste the courier's block as-is: it runs
-    `python3 <courier skill dir>/scripts/courier_preflight.py <docs_dir> --block-only --only <its files> --include-hidden`
-    (it narrows to exactly those rows; or reads the `url` column of the courier's
-    status table) and builds its OWN REVIEW / REFERENCES / PACK bullets from those
-    URLs, keeping the format rules below (plain bullets, groups by label prefix;
-    questions go ABOVE the block, which is the last lines, nothing after).
+    Because of that flag the courier's default block OMITS these rows, so the
+    courier brief carries `BLOCK FLAGS: --only <its files> --include-hidden`: the
+    courier's RETURN then lists exactly those rows (REVIEW / REFERENCES / PACK labels
+    come from the registry titles) and the main session pastes that block verbatim,
+    once, as the last lines — it never runs the preflight itself and never builds
+    its own bullets (plain bullets, groups by label prefix; questions go ABOVE the
+    block, nothing after).
 11. **Pure orchestrator.** The main session interviews (STEP 1), locks the
     direction (STEP 2), decides the curation (STEP 5) and writes the pack
     (STEP 7); it does not browse, score or publish. Delegation map, every call
@@ -190,9 +190,9 @@ Read `references/curation-protocol.md`. Present the 5 finalists as a
 **contact-sheet Artifact** (screenshots, per-dimension scores, one line each),
 built at `.design/preview/contact-sheet.html` and handed to the courier.
 Above the block, ask only *drop + why* — "which leads" is asked once, in STEP 5b.
-Close with the link block built from the URLs the courier published (rule 10:
-`courier_preflight.py ... --block-only --only <its files> --include-hidden`, never
-the courier's standard block); the block is the last lines. **≥2 survive → STEP 5b** (with exactly 2, variant C is A+B).
+Close with the courier's RETURN block for these files (rule 10: brief
+`BLOCK FLAGS: --only <its files> --include-hidden`), pasted verbatim, once; the
+block is the last lines. **≥2 survive → STEP 5b** (with exactly 2, variant C is A+B).
 **<2 → STEP 3** with the direction corrected by why they were dropped; the
 second return to STEP 3 from anywhere goes to STEP 2 instead.
 
@@ -209,8 +209,8 @@ provisionally from `templates/tokens.css.tmpl` (LOCKED VARIANT in
 structure-only mode); STEP 6 refines it, never restarts it.
 
 Ask which leads ABOVE the block (combining two is a valid answer), then close with the
-link block built from the courier's URLs (rule 10: `--block-only --include-hidden --only
-<its files>`, not the courier's block as-is). The block is the last lines.
+courier's RETURN block for these files (rule 10: brief `BLOCK FLAGS: --only <its files>
+--include-hidden`), pasted verbatim, once. The block is the last lines.
 
 ### STEP 6 — Extract
 

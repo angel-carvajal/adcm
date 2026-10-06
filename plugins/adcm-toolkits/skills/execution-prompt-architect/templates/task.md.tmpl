@@ -30,6 +30,10 @@ Status legend: ☐ pending · 🔄 in progress · ⛔ blocked (DoD-human pending
 |---|---|---|---|---|
 | 1 | {{what a human must do or confirm}} | {{owner}} | {{wave or task it blocks}} | {{due date}} |
 
+Each wave closes by adding its `MR !N reviewed and merged` row (e.g. `| n | MR !N reviewed and merged |
+{{reviewer_handle}} | W(N+1) | {{due}} |` — owner = the Reviewer in `execute.md`'s header, blocks = the next
+wave); it is struck through once merged — Claude never merges.
+
 Resolved rows stay in the table, struck through with ✅ (`~~…~~ ✅`); never delete them.
 No pending items → keep the header row only (no placeholder or `—` rows).
 

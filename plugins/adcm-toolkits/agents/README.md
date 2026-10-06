@@ -11,6 +11,10 @@ Six sub-agent types that fix the default model and the tool set of a delegation,
 | `researcher` | sonnet | all except Edit, Write, NotebookEdit | none | sourced investigation or browsing; pass `model: opus` per call for a deeper pass |
 | `digester` | sonnet | Read, Grep, Glob, Bash | none | status digest when the status script cannot parse the brain |
 
+## Two protocol rules
+
+Claude never merges an MR/PR and never pushes code to the default branch (the Reviewer merges; docs repos and marketplaces push to main directly), and only the courier returns links, exactly once per delivery close, in its RETURN.
+
 ## Fallback
 
 In a session without this plugin, call `Agent(subagent_type: "general-purpose", model: "<tier>")` with the same brief. The tier is the model column above.

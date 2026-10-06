@@ -31,6 +31,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/artifact-courier/references/procedure.md` and
 - The links block always comes from the resolved session account (`--block-only --account <resolved>`); a row whose canonical `url` this session could not open prints with the script's warning: report it under ERRORS as `<file>: not opened by this account`.
 - Not found / not owned means another account: follow procedure step 6 (retry with `url_<ACCOUNT>`, else `blocked`; re-issue only when the brief says `REISSUE ON OTHER ACCOUNT: yes`).
 - Rows outside the brief's list are not yours, even if stale. Per-row problems (blocked, refused) are reported and the batch continues.
+- The links block appears exactly once per delivery close — in the orchestrator's final message, after the last courier RETURN. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker; with several couriers (batches, `SendMessage` replies) only the last RETURN's block is pasted. No agent other than the courier returns URLs. Your RETURN is the only carrier of links: nothing before the RETURN prints the block.
 
 ## RETURN
 
