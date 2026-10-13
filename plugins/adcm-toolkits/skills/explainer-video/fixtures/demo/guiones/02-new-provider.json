@@ -1,0 +1,49 @@
+{
+  "id": "02",
+  "slug": "new-provider",
+  "title": "Registrar un proveedor nuevo",
+  "route": "/new-provider.html",
+  "tags": ["providers", "forms"],
+  "steps": [
+    {
+      "say": "Ahora registramos un proveedor nuevo. El formulario pide nombre, correo, categoría y fecha de alta. Solo el nombre es obligatorio. Lo demás ayuda a que el equipo lo encuentre después.",
+      "caption": "Alta de proveedor",
+      "action": "none",
+      "highlight": "#provider-form",
+      "hold": 600
+    },
+    {
+      "say": "Empezamos por el nombre del proveedor, tal como aparece en su factura. Escribimos Acme Servicios.",
+      "caption": "Nombre del proveedor",
+      "action": "fill",
+      "selector": "#provider-name",
+      "value": "Acme Servicios",
+      "highlight": "#provider-name"
+    },
+    {
+      "say": "Elegimos la categoría en la lista desplegable. Para este ejemplo usamos Servicios, que agrupa a quienes nos prestan trabajo y no mercancía.",
+      "caption": "Categoría",
+      "action": "select",
+      "selector": "#provider-category",
+      "value": "services",
+      "highlight": "#provider-category"
+    },
+    {
+      "say": "La fecha de alta es la de hoy. Como el guion calcula el día al grabar, el video se puede repetir cualquier otro día sin editar nada.",
+      "caption": "Fecha de alta",
+      "action": "fill",
+      "selector": "#start-date",
+      "value": "{{today}}",
+      "highlight": "#start-date"
+    },
+    {
+      "say": "Por último pulsamos Guardar proveedor. Aparece la confirmación en verde, y el proveedor queda registrado con el estado pendiente de aprobación.",
+      "caption": "Guardar",
+      "action": "click",
+      "selector": "#save-provider",
+      "waitFor": ".toast-success",
+      "highlight": ".toast-success",
+      "hold": 1500
+    }
+  ]
+}

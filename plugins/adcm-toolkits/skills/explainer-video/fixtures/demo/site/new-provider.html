@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acme Compras - Nuevo proveedor</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside>
+    <p class="brand">Acme Compras</p>
+    <nav aria-label="Principal">
+      <a href="index.html">Inicio</a>
+      <a href="providers.html">Proveedores</a>
+    </nav>
+  </aside>
+  <main>
+    <h1>Nuevo proveedor</h1>
+    <p class="lede">Da de alta a quien nos va a vender.</p>
+
+    <form id="provider-form" novalidate>
+      <div class="field">
+        <label for="provider-name">Nombre del proveedor</label>
+        <input id="provider-name" name="name" autocomplete="off" required>
+      </div>
+      <div class="field">
+        <label for="provider-email">Correo de facturación <span class="hint">(opcional)</span></label>
+        <input id="provider-email" name="email" type="email" autocomplete="off" placeholder="facturas@example.com">
+      </div>
+      <div class="field">
+        <label for="provider-category">Categoría</label>
+        <select id="provider-category" name="category">
+          <option value="goods">Mercancía</option>
+          <option value="logistics">Logística</option>
+          <option value="services">Servicios</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="start-date">Fecha de alta</label>
+        <input id="start-date" name="start" type="date">
+      </div>
+      <div>
+        <button id="save-provider" class="primary" type="submit">Guardar proveedor</button>
+      </div>
+    </form>
+
+    <div class="toast toast-success" role="status" hidden></div>
+    <p id="form-error" role="alert" hidden>El nombre es obligatorio.</p>
+  </main>
+
+  <script>
+    const form = document.getElementById('provider-form');
+    const toast = document.querySelector('.toast-success');
+    const error = document.getElementById('form-error');
+
+    // Nothing is stored: the demo has no backend, so every visit starts from the same empty form.
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const name = document.getElementById('provider-name').value.trim();
+      error.hidden = name !== '';
+      toast.hidden = name === '';
+      if (name) toast.textContent = 'Proveedor registrado: ' + name + '. Estado: pendiente de aprobación.';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "id": "01",
+  "slug": "registrar-factura",
+  "title": "Registrar la factura de un proveedor",
+  "route": "/providers/acme-supplies/invoices/new",
+  "blur": [".account-number"],
+  "tags": ["billing", "invoices"],
+  "steps": [
+    {
+      "say": "Bienvenido a Acme. En este video registramos la factura de un proveedor, paso a paso. Primero mira el formulario: arriba ves al proveedor, y abajo los datos que vamos a capturar para cerrar el registro.",
+      "caption": "Nueva factura de proveedor",
+      "action": "none",
+      "highlight": "#invoice-form",
+      "hold": 800
+    },
+    {
+      "say": "Empezamos por el folio de la factura. Lo escribimos tal como viene en el documento del proveedor, con letras, guion y número, sin espacios ni signos adicionales, para que después sea fácil encontrarla.",
+      "sayAs": "Empezamos por el folio de la factura. Lo escribimos tal como viene en el documento del proveedor, con letras, guion y número, por ejemplo I N V, dos cero cuatro, para que después sea fácil encontrarla.",
+      "caption": "Folio del proveedor",
+      "action": "fill",
+      "selector": "#invoice-number",
+      "value": "INV-204",
+      "highlight": "#invoice-number"
+    },
+    {
+      "say": "Después va la fecha de emisión. Para este ejemplo usamos la fecha de hoy, así el video se puede volver a grabar cualquier día sin tocar el guion, y el resultado siempre se ve vigente y actual.",
+      "caption": "Fecha de emisión",
+      "action": "fill",
+      "selector": "#issue-date",
+      "value": "{{today}}"
+    },
+    {
+      "say": "Por último guardamos. La factura queda registrada, aparece primera en el listado del proveedor y su estado inicial es pendiente de pago. Desde ahí cualquier persona del equipo puede revisarla y aprobarla.",
+      "caption": "Guardar y confirmar",
+      "action": "click",
+      "selector": "#save-invoice",
+      "waitFor": ".toast-success",
+      "highlight": ".invoice-row:first-child",
+      "hold": 1500
+    }
+  ]
+}

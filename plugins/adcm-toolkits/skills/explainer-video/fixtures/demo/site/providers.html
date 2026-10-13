@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acme Compras - Proveedores</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside>
+    <p class="brand">Acme Compras</p>
+    <nav aria-label="Principal">
+      <a href="index.html">Inicio</a>
+      <a href="providers.html" aria-current="page">Proveedores</a>
+    </nav>
+  </aside>
+  <main>
+    <h1>Proveedores</h1>
+    <p class="lede">Quién nos vende, de qué categoría y en qué estado está su alta.</p>
+
+    <div class="toolbar">
+      <div class="field">
+        <label for="provider-search">Buscar proveedor</label>
+        <input id="provider-search" type="search" autocomplete="off" placeholder="Nombre">
+      </div>
+      <div class="field">
+        <label for="status-filter">Estado</label>
+        <select id="status-filter">
+          <option value="all">Todos</option>
+          <option value="active">Activos</option>
+          <option value="pending">Pendientes</option>
+        </select>
+      </div>
+      <a id="new-provider-link" class="button" href="new-provider.html">Nuevo proveedor</a>
+    </div>
+
+    <table id="providers-table">
+      <thead>
+        <tr><th>Proveedor</th><th>Categoría</th><th>Último pedido</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        <tr data-status="active"><td>Acme Supplies</td><td>Mercancía</td><td>03/10/2026</td><td><span class="badge active">Activo</span></td></tr>
+        <tr data-status="pending"><td>Acme Empaques</td><td>Mercancía</td><td>-</td><td><span class="badge pending">Pendiente</span></td></tr>
+        <tr data-status="active"><td>Globex Logística</td><td>Logística</td><td>29/09/2026</td><td><span class="badge active">Activo</span></td></tr>
+        <tr data-status="active"><td>Initech Partes</td><td>Mercancía</td><td>21/09/2026</td><td><span class="badge active">Activo</span></td></tr>
+        <tr data-status="pending"><td>Umbrella Servicios</td><td>Servicios</td><td>-</td><td><span class="badge pending">Pendiente</span></td></tr>
+        <tr data-status="active"><td>Hooli Software</td><td>Servicios</td><td>15/09/2026</td><td><span class="badge active">Activo</span></td></tr>
+      </tbody>
+    </table>
+    <p id="result-count" role="status"></p>
+    <p id="empty-state" hidden>Ningún proveedor coincide con la búsqueda.</p>
+  </main>
+
+  <script>
+    const search = document.getElementById('provider-search');
+    const status = document.getElementById('status-filter');
+    const rows = Array.from(document.querySelectorAll('#providers-table tbody tr'));
+    const count = document.getElementById('result-count');
+    const empty = document.getElementById('empty-state');
+
+    function apply() {
+      const text = search.value.trim().toLowerCase();
+      let shown = 0;
+      for (const row of rows) {
+        const match = row.cells[0].textContent.toLowerCase().includes(text)
+          && (status.value === 'all' || row.dataset.status === status.value);
+        row.hidden = !match;
+        if (match) shown += 1;
+      }
+      count.textContent = shown === 1 ? '1 proveedor' : shown + ' proveedores';
+      empty.hidden = shown !== 0;
+    }
+
+    search.addEventListener('input', apply);
+    status.addEventListener('change', apply);
+    apply();
+  </script>
+</body>
+</html>

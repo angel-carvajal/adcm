@@ -1,12 +1,16 @@
 # bin/
 
-Bare-name launchers for the plugin's Python scripts. While the plugin is enabled, Claude Code puts
+Bare-name launchers for the plugin's Python and Node scripts. While the plugin is enabled, Claude Code puts
 its `bin/` on the Bash tool's PATH (after the user PATH); they carry the executable bit, no manifest
-key. Each resolves the plugin root from its own path (symlinks followed) and runs `python3 -B <script> "$@"`.
+key. Each resolves the plugin root from its own path (symlinks followed) and runs its script with `python3 -B <script> "$@"` (`node <script> "$@"` for `explainer-record`).
 
 `courier-preflight` runs `skills/artifact-courier/scripts/courier_preflight.py`; `status-digest`,
 `renovate-check`, `plans-regen` and `prompts-regen` run the `status_digest.py`, `renovate_check.py`,
 `plans-regen.py` and `prompts-regen.py` of `skills/execution-prompt-architect/templates/`.
+
+`explainer-record` is the one Node launcher: it runs `skills/explainer-video/scripts/record.mjs` with `node` instead of `python3`.
+Recording needs Node 20+, so it puts the newest nvm 2x install (version order) first on PATH and falls back to the `node` already there;
+its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, voice).
 
 Auto mode: the classifier may deny the registry seal (`courier-preflight … --mark-published`) as
 "Create Public Surface" although it only edits the project's local `artifacts.json`. The documented

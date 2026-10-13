@@ -1,0 +1,39 @@
+# {{PROJECT_NAME}} — explainer videos
+
+Human index of the recorded walkthroughs. The videos themselves live in `videos/out/` (gitignored,
+rebuilt on demand); what is versioned is `videos/config.json` and `videos/guiones/*.json`. The proof
+that a row is current is `videos/out/manifest.json`, written by `explainer-record --verify`.
+
+- Last verified: {{VERIFIED_DATE}}
+- Voice: {{VOICE_LABEL}} (fallbacks only when the owner chooses them)
+- Base URL: {{BASE_URL}} (a local stack; recordings never run against a deployed environment)
+- Sign-in variables (names only): {{ENV_VAR_NAMES}}
+
+## Videos
+
+<!-- one row per entry of videos/out/manifest.json, ordered by id -->
+
+| id | title | duration | path | regenerate |
+|---|---|---|---|---|
+| {{ID}} | {{TITLE}} | {{DURATION_S}} s | `videos/out/mp4/{{ID}}-{{SLUG}}.mp4` | `explainer-record {{ID}}` then `explainer-record --verify {{ID}}` |
+
+## Regenerate
+
+1. Start the local stack: `{{START_STACK_COMMAND}}`.
+2. Reset the demo data when a guion changes it: `{{RESET_DATA_COMMAND}}`.
+3. Export the sign-in variables listed above in the shell that runs the recorder.
+4. `explainer-record --doctor` must end in `DOCTOR: ready`.
+5. `explainer-record <ids>` (or `--all`), about two minutes per video, then `explainer-record --verify <ids>`.
+6. Update the rows above from the new `manifest.json` and the date at the top.
+
+`--dry` runs the real actions without camera or voice and changes the local data: reset first.
+
+## Storyboards
+
+| id | feature | storyboard approved |
+|---|---|---|
+| {{ID}} | {{FEATURE}} | {{APPROVED_DATE}} |
+
+## Notes
+
+{{NOTES}}

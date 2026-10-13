@@ -1,0 +1,43 @@
+{
+  "id": "01",
+  "slug": "providers-list",
+  "title": "Consultar la lista de proveedores",
+  "route": "/providers.html",
+  "next": "02",
+  "tags": ["providers"],
+  "steps": [
+    {
+      "say": "Bienvenido a Acme. En este video recorremos la lista de proveedores: ves a quién le compra la empresa, de qué categoría es cada uno y si su alta ya está activa o sigue pendiente.",
+      "caption": "Lista de proveedores",
+      "action": "none",
+      "highlight": "#providers-table",
+      "hold": 600
+    },
+    {
+      "say": "Para encontrar a alguien escribimos parte de su nombre en el buscador. Con la palabra Acme, la tabla se reduce a dos proveedores y el contador de abajo se actualiza.",
+      "caption": "Buscar por nombre",
+      "action": "fill",
+      "selector": "#provider-search",
+      "value": "Acme",
+      "highlight": "#provider-search",
+      "waitFor": "#providers-table tbody tr:not([hidden])"
+    },
+    {
+      "say": "Después filtramos por estado. Elegimos Pendientes y solo queda Acme Empaques, un alta que todavía espera la aprobación del equipo de compras.",
+      "caption": "Filtrar por estado",
+      "action": "select",
+      "selector": "#status-filter",
+      "value": "pending",
+      "highlight": "#status-filter",
+      "waitFor": "#providers-table tbody tr:not([hidden])"
+    },
+    {
+      "say": "Si el proveedor que buscas no aparece, usa el botón Nuevo proveedor. Nos lleva al formulario de alta, que es justo lo que vemos en el siguiente video.",
+      "caption": "Nuevo proveedor",
+      "action": "click",
+      "selector": "role=link[name=\"Nuevo proveedor\"]",
+      "waitFor": "#provider-form",
+      "hold": 800
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "baseUrl": "http://127.0.0.1:8765",
+  "allowHosts": ["localhost", "127.0.0.1"],
+  "guionesDir": "guiones",
+  "outDir": "out",
+  "durationWindow": [5, 125]
+}
