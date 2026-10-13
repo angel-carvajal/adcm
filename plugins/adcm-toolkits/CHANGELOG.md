@@ -1,5 +1,21 @@
 # Changelog — adcm-toolkits
 
+## 0.17.0 — 2026-10-12
+
+- **explainer-video.** New skill that records explainer videos of web apps with AI voice-over from JSON
+  storyboards. The model only writes the storyboard; once the owner approves it, `scripts/record.mjs`
+  (+ `lib/`) renders it with zero model turns: Playwright screencast, one TTS clip per step, ffmpeg mux,
+  poster, contact sheet, verify report and manifest. Everything is config-driven (`baseUrl`, `allowHosts`
+  guard that also checks redirects, `guionesDir` / `outDir` anchored to the config's own folder). Voice
+  defaults to `edge:es-MX-DaliaNeural` with `piper` / `say` fallbacks that are never applied silently.
+  `{{env:VAR}}` secrets are redacted in the logs both raw and URL-encoded. Flags `--check`, `--dry`,
+  `--verify`, `--doctor` (synthesizes one word and reports an engine that cannot synthesize) and `--mute`;
+  exit codes 0/1/2/3/4/64. Ships a Python selftest of 30 cases including an offline smoke E2E, a SKILL.md
+  with the two-phase flow (storyboard → owner OK → script records), `references/`, `templates/` and
+  generic Acme fixtures.
+- **Launchers.** `bin/explainer-record` is the first Node launcher (it puts Node >= 20 first on PATH when
+  an nvm 2x install exists); `bin/README.md` now covers both the Python and the Node launchers.
+
 ## 0.16.0 — 2026-10-05
 
 - **Claude never merges.** `execute.md` declares a `Reviewer` (`> **Reviewer:** @handle (gitlab|github)

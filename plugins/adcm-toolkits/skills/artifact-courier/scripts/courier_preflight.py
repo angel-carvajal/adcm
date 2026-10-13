@@ -97,7 +97,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
-__version__ = "0.16.0"
+__version__ = "0.17.0"
 
 REGISTRY_CANDIDATES = ("artifacts.json", "ai/ai-brain/artifacts.json", "ai-brain/artifacts.json")
 DEFAULT_MARKERS = ("task.md", "execute.md", "detailed-plan.md")
