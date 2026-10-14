@@ -1,5 +1,28 @@
 # Changelog — adcm-toolkits
 
+## 0.18.0 — 2026-10-14
+
+- **design-board.** The design-direction-architect skill now builds one fixed design board by script, as a
+  single HTML with five tabs: options, references (each with its public source URL), market, method and
+  tokens. Three live options render in iframes; font, scale and colour toggles export the chosen tokens.
+  Content lives in `board.json` plus fragments in `board.d/`; the board is registered in
+  `.design/artifacts.json` with `regen: design-board build .`.
+- **Scripts and launcher.** `scripts/design-board.py`, `scripts/capture.mjs` and the launcher
+  `bin/design-board` (`doctor|init|capture|check|build|mark|adopt|log|pack`). Exit codes 0/1/2/64; for
+  `capture`, 1 means some URL failed and 2 means the environment is not ready. Selftest of 24 cases with
+  a generic Acme fixture.
+- **Sources.** Awwwards joins the mined sources, a manual `.design/inspiration/` folder covers Pinterest,
+  and the board gains a market research section.
+- **Removed.** `contact-sheet.html`, `variants.html` and `extract-site.mjs` are gone;
+  `curation-protocol.md` and `variant-preview.md` are folded into `board.md`.
+- **Breaking.** `tokens.css` names move to the `--color-*` / `--step-*` / `--font-*` contract. Packs made
+  before 0.18.0 regenerate with `design-board adopt`.
+- **Agents.** Researcher agents may write one JSON fragment under `.design/board.d/`; `executor-frontend`
+  treats the exported `tokens.css` as the source of truth.
+- **Protocol.** The Protocol moves to 0.18.0 (`execute.md.tmpl` Protocol line, `renovate_check.py`,
+  `status_digest.py`, `courier_preflight.py`). New reference `tokens-contract.md` and template
+  `decision-entry.md.tmpl`.
+
 ## 0.17.0 — 2026-10-12
 
 - **explainer-video.** New skill that records explainer videos of web apps with AI voice-over from JSON
