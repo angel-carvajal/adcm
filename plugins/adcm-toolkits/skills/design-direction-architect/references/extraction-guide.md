@@ -15,9 +15,11 @@ pulls primitives from a public site and emits starter token files. Feed its
 output into `.design/tokens.css`, then reconcile against the brand constraints
 from Q7 — **brand wins over reference, always**.
 
-Only extract by hand when that skill is absent — and then work from the
-extractor JSON captured in STEP 3: `typeScale` → §2, `ground`/`ink` → §3,
-`radii`/`motion` → §5, `sections` vs `mobileSections` → §6.
+Only extract by hand when that skill is absent — and then work from the metrics
+`design-board capture` wrote to `.design/captures/{id}.json` in STEP 3: `typeScale` →
+§2, `ground`/`ink`/`palette` → §3, `radii`/`motion` → §5, `docHeight` and the
+desktop/mobile screenshots → §6. A capture with `captureError` has no metrics: say so,
+do not guess them.
 
 ## What to extract
 

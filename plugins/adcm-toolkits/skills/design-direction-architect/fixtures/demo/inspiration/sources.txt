@@ -1,0 +1,2 @@
+invoice-grid.png	https://ignored.example.com/sidecar-wins	Invoice grid study
+soft-atlas.png	https://moodboard.example.com/pins/soft-atlas	Soft atlas palette

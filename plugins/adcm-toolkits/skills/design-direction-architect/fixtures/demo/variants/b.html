@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Invoice · B · Tablero preciso</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{--font-display:"Space Grotesk", system-ui, sans-serif;--font-body:"Inter", system-ui, -apple-system, 'Segoe UI', sans-serif;--font-mono:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+--step--1:0.781rem;--step-0:0.938rem;--step-1:1.125rem;--step-2:1.35rem;--step-3:1.62rem;--step-4:1.944rem;--step-5:2.333rem;
+--leading-tight:1.15;--leading-body:1.55;--tracking-display:-0.01em;
+--color-ground:#F4F6FA;--color-surface:#FFFFFF;--color-ink:#0E1525;--color-ink-muted:#566078;--color-primary:#2F5BEA;--color-accent:#0F9D74;--color-accent-ink:#FFFFFF;--color-border:#DCE2EE;
+--space-1:0.25rem;--space-2:0.5rem;--space-3:0.75rem;--space-4:1.25rem;--space-5:2rem;--space-6:3.5rem;--radius:12px;--dur:180ms;--ease:cubic-bezier(.3, .7, .2, 1)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--color-ground);color:var(--color-ink);font-family:var(--font-body);font-size:var(--step-0);line-height:var(--leading-body);font-variant-numeric:tabular-nums}
+.wrap{max-width:76rem;margin:0 auto;padding:0 var(--space-4)}
+header{display:flex;justify-content:space-between;align-items:center;padding:var(--space-4) 0}
+.logo{font-family:var(--font-display);font-size:var(--step-1);font-weight:700}
+.btn{background:var(--color-primary);color:var(--color-accent-ink);border:0;border-radius:var(--radius);padding:var(--space-2) var(--space-4);font:inherit;font-weight:600;cursor:pointer}
+.intro{padding:var(--space-5) 0}
+h1{font-family:var(--font-display);font-size:var(--step-5);line-height:var(--leading-tight);letter-spacing:var(--tracking-display);margin:0 0 var(--space-2)}
+.intro p{margin:0;color:var(--color-ink-muted);font-size:var(--step-1);max-width:46ch}
+.stats{display:grid;gap:var(--space-3);grid-template-columns:repeat(2,1fr);margin:var(--space-4) 0}
+.card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:var(--space-4)}
+.card small{color:var(--color-ink-muted);font-size:var(--step--1)}
+.card b{display:block;font-family:var(--font-display);font-size:var(--step-3)}
+.list{display:grid;gap:var(--space-2);margin-bottom:var(--space-6)}
+.item{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);align-items:center}
+.item span{color:var(--color-ink-muted);font-size:var(--step--1)}
+.chip{font-size:var(--step--1);font-weight:600;padding:var(--space-1) var(--space-3);border-radius:999px;background:var(--color-ground);border:1px solid var(--color-border)}
+.chip.ok{color:var(--color-accent);border-color:var(--color-accent)}
+.chip.due{color:var(--color-primary);border-color:var(--color-primary)}
+code{font-family:var(--font-mono);font-size:var(--step--1)}
+@media (min-width:1024px){.stats{grid-template-columns:repeat(4,1fr)}.list{grid-template-columns:repeat(3,1fr)}.item{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><span class="logo">Acme Invoice</span><button class="btn">Nueva factura</button></header>
+<section class="intro"><h1>Todos tus cobros, de un vistazo.</h1><p>Un tablero sobrio para proveedores que facturan cada semana.</p></section>
+<section class="stats">
+<div class="card"><small>Por cobrar</small><b>$ 42,180</b></div>
+<div class="card"><small>Cobrado este mes</small><b>$ 96,500</b></div>
+<div class="card"><small>Vencidas</small><b>3</b></div>
+<div class="card"><small>Días promedio</small><b>11</b></div>
+</section>
+<section class="list">
+<div class="card item"><div><strong>Provider Studio</strong><br><span><code>INV-0042</code> · 12 oct</span></div><span class="chip ok">Pagada</span></div>
+<div class="card item"><div><strong>Taller Norte</strong><br><span><code>INV-0043</code> · 14 oct</span></div><span class="chip due">Vence en 3 días</span></div>
+<div class="card item"><div><strong>Casa Prisma</strong><br><span><code>INV-0044</code> · 15 oct</span></div><span class="chip">Borrador</span></div>
+</section>
+</div>
+<script data-board-bridge>
+addEventListener('message', function (e) { var d = e.data; if (e.source !== parent || !d || d.type !== 'board-tokens' || !d.vars) return;
+  var s = document.documentElement.style; for (var k in d.vars) if (/^--[\w-]+$/.test(k)) s.setProperty(k, String(d.vars[k]));
+  if (typeof d.fonts === 'string' && d.fonts.indexOf('https://fonts.googleapis.com/') === 0) { var l = document.querySelector('link[data-board-font]');
+    if (!l) { l = document.createElement('link'); l.rel = 'stylesheet'; l.setAttribute('data-board-font', ''); document.head.appendChild(l); } l.href = d.fonts; } });
+</script>
+</body>
+</html>

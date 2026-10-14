@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "project": {
+    "name": "Acme Invoice",
+    "tagline": "Facturación sin fricción para proveedores independientes: cobra a tiempo, sin hojas de cálculo.",
+    "lang": "es"
+  },
+  "step": "variants",
+  "stamp": "Corrida de ejemplo · fixture",
+  "decisions": {
+    "file": "decisions.md",
+    "chosen": null,
+    "note": "Tres direcciones listas para comparar; falta elegir una."
+  },
+  "options": [
+    {
+      "id": "a",
+      "shots": { "d": "captures/opt-a-d.jpg", "m": "captures/opt-a-m.jpg" },
+      "method": {
+        "steps": ["Tomar la retícula editorial de R01", "Serif de display con cuerpo sans", "Una sola acción por pantalla", "Reflow a dos columnas desde 1024 px"]
+      },
+      "usedMarket": ["provider-books", "shopfront-kit"],
+      "tokens": { "display": "fraunces", "body": "inter", "scale": "editorial" }
+    },
+    {
+      "id": "b",
+      "shots": { "d": "captures/opt-b-d.jpg", "m": "captures/opt-b-m.jpg" },
+      "method": {
+        "steps": ["Retícula de tarjetas de R02", "Grotesca única con cifras tabulares", "Estados de factura como chips", "Tablero a tres columnas desde 1024 px"]
+      },
+      "usedMarket": ["invoice-flow", "billstack"],
+      "tokens": { "display": "space-grotesk", "body": "inter", "scale": "compact" }
+    },
+    {
+      "id": "c",
+      "shots": { "d": "captures/opt-c-d.jpg", "m": "captures/opt-c-m.jpg" },
+      "method": {
+        "steps": ["Contraste alto de R05", "Display gigante con un solo acento", "Prueba social antes del precio", "Héroe partido desde 1024 px"]
+      },
+      "usedMarket": ["billstack"],
+      "tokens": { "display": "dm-serif-display", "body": "space-grotesk", "scale": "bold" }
+    }
+  ],
+  "references": [
+    {
+      "id": "atlas-studio",
+      "title": "Atlas Studio",
+      "url": "https://atlas.example.com/",
+      "via": "https://gallery.example.com/sotd/atlas-studio",
+      "kind": "awwwards",
+      "award": "Site of the Day",
+      "finalist": true,
+      "notes": "Retícula editorial con mucho aire; la cifra total manda en el héroe.",
+      "tags": ["editorial", "serif", "calma"]
+    },
+    {
+      "id": "paper-mill",
+      "title": "Paper Mill Dashboard",
+      "url": "https://papermill.example.com/",
+      "via": "https://templates.example.com/paper-mill",
+      "kind": "framer",
+      "finalist": true,
+      "notes": "Tarjetas densas y legibles; estados con color y texto, nunca solo color.",
+      "tags": ["tablero", "grotesca"]
+    },
+    {
+      "id": "quiet-books",
+      "title": "Quiet Books",
+      "url": "https://quietbooks.example.com/",
+      "via": "https://components.example.com/quiet-books",
+      "kind": "21st",
+      "notes": "Buen ritmo vertical; el pie de página es demasiado largo.",
+      "tags": ["ritmo"]
+    },
+    {
+      "id": "northwind-pay",
+      "title": "Northwind Pay",
+      "url": "https://northwind.example.com/",
+      "kind": "live",
+      "dropped": { "is": true, "why": "Oscuro y genérico: se parece a cualquier fintech; el dueño lo descartó." },
+      "tags": ["oscuro"]
+    },
+    {
+      "id": "grain-co",
+      "title": "Grain & Co.",
+      "url": "https://grain.example.com/",
+      "via": "https://gallery.example.com/honors/grain-co",
+      "kind": "awwwards",
+      "award": "Honorable Mention",
+      "finalist": true,
+      "notes": "Contraste fuerte y un único acento; tipografía display enorme.",
+      "tags": ["contraste", "display"]
+    },
+    {
+      "id": "tally-house",
+      "title": "Tally House",
+      "url": "https://tally.example.com/",
+      "kind": "live",
+      "notes": "Muro anti-bot: la captura falló; se conserva por la URL."
+    }
+  ],
+  "market": [
+    {
+      "id": "provider-books",
+      "name": "Provider Books",
+      "kind": "competitor",
+      "url": "https://providerbooks.example.com/",
+      "files": ["captures/provider-books-d.jpg"],
+      "works": "Alta de cliente en un paso y factura desde el móvil.",
+      "doesnt": "Precio escondido tras un formulario de contacto.",
+      "commerce": "Prueba de 14 días, luego mensualidad."
+    },
+    {
+      "id": "invoice-flow",
+      "name": "Invoice Flow",
+      "kind": "competitor",
+      "url": "https://invoiceflow.example.com/",
+      "files": ["captures/invoice-flow-d.jpg"],
+      "works": "Estados de cobro claros y recordatorios automáticos.",
+      "doesnt": "Tablero saturado; demasiadas métricas el primer día."
+    },
+    {
+      "id": "billstack",
+      "name": "Billstack",
+      "kind": "competitor",
+      "url": "https://billstack.example.com/",
+      "files": ["captures/billstack-d.jpg"],
+      "works": "Precio visible y comparación de planes honesta.",
+      "doesnt": "Marca intercambiable; nada que se recuerde."
+    },
+    {
+      "id": "shopfront-kit",
+      "name": "Shopfront Kit",
+      "kind": "adjacent",
+      "url": "https://shopfront.example.com/",
+      "files": ["captures/shopfront-kit-d.jpg"],
+      "works": "Mismo comprador (pequeño negocio) y compra en tres pasos.",
+      "doesnt": "Copia larga antes de la primera acción."
+    }
+  ],
+  "scores": {
+    "atlas-studio": { "fit": 5, "craft": 5, "type": 5, "color": 4, "motion": 3, "verdict": "keep" },
+    "paper-mill": { "fit": 4, "craft": 4, "type": 4, "color": 4, "motion": 3, "verdict": "keep" },
+    "quiet-books": { "fit": 3, "craft": 4, "type": 3, "color": 3, "motion": 2 },
+    "northwind-pay": { "fit": 2, "craft": 4, "type": 3, "color": 2, "motion": 4, "verdict": "drop" },
+    "grain-co": { "fit": 4, "craft": 5, "type": 5, "color": 4, "motion": 4, "verdict": "keep" }
+  },
+  "tokens": {
+    "fontShortlist": [
+      { "id": "fraunces", "family": "Fraunces", "google": "Fraunces:wght@400;600;700", "stack": "Georgia, 'Times New Roman', serif" },
+      { "id": "dm-serif-display", "family": "DM Serif Display", "google": "DM Serif Display", "stack": "Georgia, serif" },
+      { "id": "inter", "family": "Inter", "google": "Inter:wght@400;500;600;700", "stack": "system-ui, -apple-system, 'Segoe UI', sans-serif" },
+      { "id": "space-grotesk", "family": "Space Grotesk", "google": "Space Grotesk:wght@400;500;700", "stack": "system-ui, sans-serif" },
+      { "id": "jetbrains-mono", "family": "JetBrains Mono", "google": "JetBrains Mono:wght@400;600", "stack": "ui-monospace, Menlo, monospace" }
+    ],
+    "scalePresets": [
+      { "id": "compact", "label": "Compacta 15 / 1.2", "base": 15, "ratio": 1.2 },
+      { "id": "editorial", "label": "Editorial 17 / 1.25", "base": 17, "ratio": 1.25 },
+      { "id": "bold", "label": "Audaz 16 / 1.333", "base": 16, "ratio": 1.333 }
+    ]
+  }
+}

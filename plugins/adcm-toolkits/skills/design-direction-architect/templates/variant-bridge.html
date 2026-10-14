@@ -1,0 +1,6 @@
+<script data-board-bridge>
+addEventListener('message', function (e) { var d = e.data; if (e.source !== parent || !d || d.type !== 'board-tokens' || !d.vars) return;
+  var s = document.documentElement.style; for (var k in d.vars) if (/^--[\w-]+$/.test(k)) s.setProperty(k, String(d.vars[k]));
+  if (typeof d.fonts === 'string' && d.fonts.indexOf('https://fonts.googleapis.com/') === 0) { var l = document.querySelector('link[data-board-font]');
+    if (!l) { l = document.createElement('link'); l.rel = 'stylesheet'; l.setAttribute('data-board-font', ''); document.head.appendChild(l); } l.href = d.fonts; } });
+</script>

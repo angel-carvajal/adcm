@@ -23,10 +23,10 @@ to be different references.
 
 ## Scored means walked
 
-A candidate is scored only if `scripts/extract-site.mjs` ran on it in **full
-mode** — a `--quick` triage capture is not a walk — or, when the script is
-unavailable, a full-page browser walk of it exists in `.design/refs/`. No walk,
-no full score.
+A candidate is scored only if `design-board capture` ran on it in **full
+mode** — a `--quick` triage capture is not a walk — and its `captures/{id}.json`
+and screenshots exist; otherwise a full-page browser walk of it must exist under
+`.design/captures/`. No walk, no full score.
 
 Everything else gets a **TRIAGE** record instead: name, category, one line,
 and 3 quick dimensions read off the hero capture — style fit, business fit,
@@ -81,10 +81,17 @@ anti-pattern is capped at 2 on dimension 1 — no matter how good it looks.
 
 ## Recording
 
-Keep a scoring table with one row per **walked** candidate: source, URL, the
-nine scores, total, and a one-line verdict. Triage rows carry the three quick
-dims only; section finalists carry 4, 6 and — when 3b ran — 9. It goes into `.design/references.md` for the
-finalists and `.design/decisions.md` for everything cut.
+Scores live in `.design/board.d/scores.json`, one entry per **walked**
+candidate keyed by reference id: the nine dimensions, `total`, a one-line
+"does what others don't", its cost, `verdict`, and `"finalist": true` on exactly five entries (shape
+`{"<id>": {dimensions…, "total", "verdict", "finalist": true}}`). `build` promotes
+those badges; `board.json` wins if it sets `finalist`/`dropped` itself, and
+`mark --finalist` is for manual overrides only.
+Triage rows carry the three quick dims only; section finalists carry 4, 6 and —
+when commerce was researched — 9. A top-level `findings` list records the
+anti-first-option check and convergences. `design-board pack` writes
+`.design/references.md` from it for the finalists; everything cut is logged in
+`.design/decisions.md`.
 
 Write the *reason* for each cut, not just the score. In STEP 5 the user's
 rejections are re-searched against these reasons, and a bare number tells you

@@ -44,11 +44,12 @@ Do not summarize the pack in prose — point at it. A good handoff is short:
 ## Closing link block
 
 End the handoff with the clean, phone-readable block defined in
-`variant-preview.md` — plain bullets grouped by label prefix, nothing broken,
-nothing extra, no headers, no columns, no code fence. The owner reviews from a
+`board.md` (its REVIEW · Board row stays first) — plain bullets grouped by label
+prefix, nothing broken, nothing extra, no headers, no columns, no code fence. The owner reviews from a
 phone; a wall of raw URLs is unusable there. STEP 7 adds the third group the
 earlier blocks lack, labeled PACK (the Commerce bullet only if the business sells):
 
+- [🎨 REVIEW · Board](<artifact url of .design/board.html>)
 - [📦 PACK · Brief](<repo or published URL of .design/brief.md>)
 - [📦 PACK · References](<… references.md>)
 - [📦 PACK · Tokens](<… tokens.css>)

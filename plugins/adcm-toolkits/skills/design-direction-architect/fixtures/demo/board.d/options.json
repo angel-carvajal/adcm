@@ -1,0 +1,64 @@
+{
+  "options": [
+    {
+      "id": "a",
+      "name": "Editorial en calma",
+      "idea": "La factura como documento bien compuesto: serif de display, papel cálido y una sola acción por pantalla.",
+      "refs_used": ["atlas-studio", "quiet-books"],
+      "how_made": ["Retícula editorial de **R01** con márgenes amplios.", "Ritmo vertical de R03; la cifra total es el héroe.", "Reflow real a dos columnas desde 1024 px."],
+      "why": ["El proveedor confía en lo que parece un documento formal.", "La calma reduce la ansiedad de cobrar."],
+      "what_changes_if_picked": "Las pantallas de factura heredan la retícula editorial; el tablero se simplifica a una lista.",
+      "cost": "Bajo: una familia serif extra y plantillas de factura nuevas.",
+      "fonts": [
+        { "id": "f1", "display": "fraunces", "body": "inter" },
+        { "id": "f2", "display": "dm-serif-display", "body": "inter" },
+        { "id": "f3", "display": "fraunces", "body": "space-grotesk", "mono": "jetbrains-mono" }
+      ],
+      "ratios": [1.2, 1.25],
+      "palettes": [
+        { "id": "p1", "label": "Papel cálido", "colors": { "ground": "#F7F3EC", "surface": "#FFFDF9", "ink": "#211C17", "ink-muted": "#6B6158", "primary": "#B4532A", "accent": "#2F6B4F", "accent-ink": "#FFFFFF", "border": "#E4DCCF" } },
+        { "id": "p2", "label": "Tinta azul", "colors": { "ground": "#F3F4F1", "surface": "#FFFFFF", "ink": "#16202B", "ink-muted": "#5B6673", "primary": "#1F4E8C", "accent": "#B4532A", "accent-ink": "#FFFFFF", "border": "#DADFD8" } }
+      ]
+    },
+    {
+      "id": "b",
+      "name": "Tablero preciso",
+      "idea": "Un tablero sobrio de tarjetas con cifras tabulares: el estado de cada cobro se lee de un vistazo.",
+      "refs_used": ["paper-mill"],
+      "how_made": ["Tarjetas densas de **R02** con estados en chips.", "Una grotesca para todo, cifras tabulares.", "Tres columnas desde 1024 px."],
+      "why": ["El proveedor revisa cobros a diario: la densidad ahorra tiempo.", "Los estados con texto y color son accesibles."],
+      "what_changes_if_picked": "El tablero pasa a ser la portada; la facturación se vuelve un flujo modal.",
+      "cost": "Medio: componentes de tarjeta y chips de estado.",
+      "fonts": [
+        { "id": "f1", "display": "space-grotesk", "body": "inter" },
+        { "id": "f2", "display": "inter", "body": "inter", "mono": "jetbrains-mono" },
+        { "id": "f3", "display": "space-grotesk", "body": "space-grotesk" }
+      ],
+      "ratios": [1.2, 1.25],
+      "palettes": [
+        { "id": "p1", "label": "Azul frío", "colors": { "ground": "#F4F6FA", "surface": "#FFFFFF", "ink": "#0E1525", "ink-muted": "#566078", "primary": "#2F5BEA", "accent": "#0F9D74", "accent-ink": "#FFFFFF", "border": "#DCE2EE" } },
+        { "id": "p2", "label": "Grafito", "colors": { "ground": "#F2F2F0", "surface": "#FFFFFF", "ink": "#1A1A1A", "ink-muted": "#5E5E5A", "primary": "#3A3A38", "accent": "#D9480F", "accent-ink": "#FFFFFF", "border": "#DEDED9" } }
+      ]
+    },
+    {
+      "id": "c",
+      "name": "Contraste audaz",
+      "idea": "Fondo oscuro, display enorme y un único acento eléctrico: la marca que se recuerda en una feria.",
+      "refs_used": ["grain-co"],
+      "how_made": ["Contraste alto y acento único de **R05**.", "Display gigante con cuerpo grotesco.", "Héroe partido desde 1024 px."],
+      "why": ["Diferencia frente a competidores intercambiables.", "Un solo acento mantiene el foco en la acción."],
+      "what_changes_if_picked": "Todo el producto adopta modo oscuro por defecto; las facturas impresas usan una variante clara.",
+      "cost": "Alto: doble tema y revisión de contraste en cada estado.",
+      "fonts": [
+        { "id": "f1", "display": "dm-serif-display", "body": "space-grotesk" },
+        { "id": "f2", "display": "fraunces", "body": "space-grotesk" },
+        { "id": "f3", "display": "space-grotesk", "body": "inter" }
+      ],
+      "ratios": [1.25, 1.333, 1.5],
+      "palettes": [
+        { "id": "p1", "label": "Noche y lima", "colors": { "ground": "#121212", "surface": "#1C1C1C", "ink": "#F2EFE9", "ink-muted": "#A8A39A", "primary": "#E8FF5A", "accent": "#FF6B4A", "accent-ink": "#121212", "border": "#2E2E2E" } },
+        { "id": "p2", "label": "Tinta y coral", "colors": { "ground": "#14161F", "surface": "#1D2030", "ink": "#EEF0F7", "ink-muted": "#9AA0B5", "primary": "#FF6B4A", "accent": "#7CD4FF", "accent-ink": "#14161F", "border": "#2C3044" } }
+      ]
+    }
+  ]
+}

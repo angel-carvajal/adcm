@@ -1,0 +1,46 @@
+// board.json (schema 1): the data of the design board. `design-board init` copies this file without the // lines.
+// Agents never write board.json in parallel: researchers leave fragments in board.d/<name>.json ({"references":[…]},
+// {"market":[…]}, {"scores":{id:{…}}}, {"options":[…]}); check/build merge them by id and board.json wins per field.
+// Only init, mark, adopt and log edit this file.
+//
+// project{name≤60, tagline≤140, lang: es|en} · step: references|variants|locked · stamp (optional string, shown as is)
+// decisions{file, chosen: null|a|b|c, note≤280}
+// options[3] ids a,b,c: title≤60 · idea≤280 · variantFile (default variants/{id}.html) · shots{d,m} (default
+//   shots/opt-{id}-{d,m}.jpg) · method{how≤1200, rationale≤800, steps[≤8]×≤160} · usedRefs[] · usedMarket[] ·
+//   tokens{display: fontId, body: fontId, scale: presetId, colors{8 roles}, palettes[≤4]{id,label,colors}}
+//   board.d/options.json may add: name, refs_used, how_made, why, what_changes_if_picked, cost,
+//   fonts[{id,display,body,mono?}], ratios[], palettes[{id,label,colors}]
+//   color roles: ground surface ink ink-muted primary accent accent-ink border, each #RRGGBB
+// references[≤60] (finalists ≤12): id ^[a-z0-9-]{1,48}$ · title≤80 · url (the live site) · via (gallery page) ·
+//   kind: awwwards|21st|framer|pinterest|manual|live · files[] (default captures/{id}-{d,m}.jpg) · finalist ·
+//   dropped{is, why≤160} · notes≤280 · tags[≤6] · commerce≤160 (how this site sells, optional)
+// market[≤16]: id · name≤60 · kind: competitor|adjacent · url · files[] · works≤160 · doesnt≤160 · commerce≤160
+// tokens: fontShortlist[2..10]{id, family, google: "Inter:wght@400;600;700"|null, stack} (family/stack: letters,
+//   digits, spaces and , ' " + - only) ·
+//   scalePresets[1..6]{id, label, base 14..20, ratio 1.067..1.618}
+// inspiration/*.png|jpg|jpeg|webp are indexed as references insp-<slug>; the URL comes from <file>.url or
+// inspiration/sources.txt (filename<TAB>url[<TAB>title]).
+{
+  "schema": 1,
+  "project": { "name": "Acme", "tagline": "Invoicing for independent providers.", "lang": "es" },
+  "step": "references",
+  "decisions": { "file": "decisions.md", "chosen": null, "note": "" },
+  "options": [
+    { "id": "a", "title": "Option A", "usedRefs": [], "usedMarket": [] },
+    { "id": "b", "title": "Option B", "usedRefs": [], "usedMarket": [] },
+    { "id": "c", "title": "Option C", "usedRefs": [], "usedMarket": [] }
+  ],
+  "references": [
+    { "id": "acme-example", "title": "Example reference", "url": "https://www.example.com/", "kind": "live", "notes": "Replace with a real reference." }
+  ],
+  "market": [],
+  "tokens": {
+    "fontShortlist": [
+      { "id": "inter", "family": "Inter", "google": "Inter:wght@400;600;700", "stack": "system-ui, sans-serif" },
+      { "id": "fraunces", "family": "Fraunces", "google": "Fraunces:wght@400;600;700", "stack": "Georgia, serif" }
+    ],
+    "scalePresets": [
+      { "id": "base", "label": "16 / 1.25", "base": 16, "ratio": 1.25 }
+    ]
+  }
+}

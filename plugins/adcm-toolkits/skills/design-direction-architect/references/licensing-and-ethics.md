@@ -34,7 +34,7 @@ present an extraction as if the project had earned that design.
 original creator's involvement. Treat a pin as a *pointer*, never as an asset.
 Never copy an image out of Pinterest into a project. When a pin links to a live
 site, credit and study the live site, not the pin. Do not screenshot a
-logged-in Pinterest view into `.design/refs/`.
+logged-in Pinterest view into `.design/inspiration/` or `.design/captures/`.
 
 **21st.dev.** Components carry the publishing author's license and are installed
 through the official command. Never transcribe component code by hand from a

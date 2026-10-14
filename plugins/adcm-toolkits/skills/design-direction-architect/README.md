@@ -6,28 +6,31 @@ code exists, then hand a reference pack to whichever skill builds the site.
 ## Why
 
 AI-generated sites look generic because the agent starts with no references.
-Most design skills are excellent at building and assume you already carry the
-direction in your head. This one produces that direction.
+This skill produces the direction the building skills assume you already have.
 
 ## What it does
 
 1. Interviews you (9 questions, or 5 in Express mode) — auto-filling from a
    `business-init-*` or `code-project-context-*` skill when one matches.
 2. Converts the answers into a named style plus per-source search terms.
-3. Searches four real sources:
-   - **Framer marketplace** — 50 industry categories, and every template exposes
-     a live demo site you can actually walk through.
-   - **Pinterest** — via a browser, harvesting the results grid with
-     `javascript_tool` (topic chips only when they render).
+3. Gathers references from five sources:
+   - **Framer marketplace** — 50 industry categories, each template with a live demo.
+   - **Awwwards** — live sites that won or were nominated for your styles.
    - **21st.dev** — components, themes and templates through the `magic` MCP.
-   - **Pexels** — photo and video assets, filtered by your own palette.
-4. Triages at least 15 candidates, walks at least 8 and scores those on 9
-   dimensions, then presents 5 finalists backed by
-   at least two sources — never the first hit.
-5. Runs a second, separate search for the **product/service section and the
-   quote-or-checkout flow** when the business sells something.
-6. Writes `.design/` — brief, references, tokens, commerce, assets, decisions,
-   screenshots — and hands off.
+   - **Pexels** — photo and video assets, filtered by your palette.
+   - **Inspiration folder** — pins and images you drop in `.design/inspiration/`
+     by hand (optional `<image>.url` sidecar keeps the source link).
+   A market search adds competitors and adjacent references.
+4. Scripts capture every candidate at 390 and 1440 px, then the finalists are
+   scored on 9 dimensions: 5 finalists backed by at least two sources, never the first hit.
+5. Builds **one fixed board**, `.design/board.html`, with 5 tabs: Market,
+   References (drop what you dislike, with a reason), Options (exactly 3
+   previews), Method and Tokens.
+6. **Token export**: toggle font pair, scale and palette per option, press
+   Export and paste the short combo code in the chat. `design-board adopt`
+   turns it into `.design/tokens.css` + `tokens.json`, the source of truth for the build.
+7. Writes the `.design/` pack (brief, references, tokens, commerce, assets,
+   decisions) and hands off. Agents write data; scripts write the HTML.
 
 ## What it does not do
 
@@ -37,16 +40,20 @@ better with this pack in hand.
 
 ## Requirements
 
-| Source | Needs |
-|---|---|
-| Framer | network only |
-| Pexels | `PEXELS_API_KEY` in the environment |
-| 21st.dev | the `magic` MCP server |
-| Pinterest | a browser MCP (`claude-in-chrome`) — degrades explicitly without it |
+Python 3 (board builder) · Node >= 20 + playwright-core >= 1.61 + Chrome (captures; `design-board doctor`) · WebSearch for market and Awwwards · Pexels reads `PEXELS_API_KEY` · 21st.dev needs the `magic` MCP · Pinterest is a manual folder
 
 ## Usage
 
 ```
 design direction for a food trailer landing page
 design-direction-architect --update      # re-research, keep the interview
+design-board doctor                      # check Node, playwright-core, Chrome
+design-board init .design                # board.json + board.d/ + inspiration/
+design-board capture --board .design/board.json  # screenshots and metrics (--variants for options)
+design-board check .design              #
+design-board build .design              # validate, then write board.html
+design-board mark --drop R03 --why "too corporate" .design
+design-board adopt "<combo code>" .design # tokens.css + tokens.json
+design-board log --step 5 --decided "…" --date YYYY-MM-DD .design  # append to decisions.md
+design-board pack .design              # references.md + market summary
 ```

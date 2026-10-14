@@ -12,6 +12,9 @@ key. Each resolves the plugin root from its own path (symlinks followed) and run
 Recording needs Node 20+, so it puts the newest nvm 2x install (version order) first on PATH and falls back to the `node` already there;
 its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, voice).
 
+`design-board` is the launcher of the `design-direction-architect` board: `doctor` and `capture` run `skills/design-direction-architect/scripts/capture.mjs` with `node` (same Node 20+ shim as `explainer-record`);
+`init`, `check`, `build`, `mark`, `adopt`, `log` and `pack` run `design-board.py` with `python3 -B`; any other subcommand prints the usage on stderr and exits 64.
+
 Auto mode: the classifier may deny the registry seal (`courier-preflight … --mark-published`) as
 "Create Public Surface" although it only edits the project's local `artifacts.json`. The documented
 remedy is an `autoMode.allow` prose exception in the owner's user settings (keep `"$defaults"` first):

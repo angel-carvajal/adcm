@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Invoice · A · Editorial en calma</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{--font-display:"Fraunces", Georgia, 'Times New Roman', serif;--font-body:"Inter", system-ui, -apple-system, 'Segoe UI', sans-serif;--font-mono:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+--step--1:0.85rem;--step-0:1.063rem;--step-1:1.328rem;--step-2:1.66rem;--step-3:2.075rem;--step-4:2.594rem;--step-5:3.243rem;
+--leading-tight:1.08;--leading-body:1.65;--tracking-display:-0.02em;
+--color-ground:#F7F3EC;--color-surface:#FFFDF9;--color-ink:#211C17;--color-ink-muted:#6B6158;--color-primary:#B4532A;--color-accent:#2F6B4F;--color-accent-ink:#FFFFFF;--color-border:#E4DCCF;
+--space-1:0.25rem;--space-2:0.5rem;--space-3:1rem;--space-4:1.5rem;--space-5:2.5rem;--space-6:4.5rem;--radius:4px;--dur:240ms;--ease:cubic-bezier(.2, .7, .2, 1)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--color-ground);color:var(--color-ink);font-family:var(--font-body);font-size:var(--step-0);line-height:var(--leading-body)}
+.wrap{max-width:68rem;margin:0 auto;padding:0 var(--space-4)}
+nav{display:flex;justify-content:space-between;align-items:center;padding:var(--space-4) 0;border-bottom:1px solid var(--color-border)}
+.logo{font-family:var(--font-display);font-size:var(--step-1);font-weight:700}
+nav a{color:var(--color-ink-muted);text-decoration:none;font-size:var(--step--1);margin-left:var(--space-3)}
+.hero{display:grid;gap:var(--space-5);padding:var(--space-6) 0 var(--space-5)}
+h1{font-family:var(--font-display);font-size:var(--step-5);line-height:var(--leading-tight);letter-spacing:var(--tracking-display);margin:0}
+.lead{font-size:var(--step-1);color:var(--color-ink-muted);max-width:34ch;margin:var(--space-4) 0}
+.btn{display:inline-block;background:var(--color-primary);color:var(--color-accent-ink);padding:var(--space-3) var(--space-4);border-radius:var(--radius);text-decoration:none;font-weight:600;transition:transform var(--dur) var(--ease)}
+.btn:hover{transform:translateY(-2px)}
+.doc{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:var(--space-5)}
+.doc small{font-family:var(--font-mono);font-size:var(--step--1);color:var(--color-ink-muted)}
+.total{font-family:var(--font-display);font-size:var(--step-4);margin:var(--space-2) 0}
+.row{display:flex;justify-content:space-between;border-top:1px solid var(--color-border);padding:var(--space-2) 0;font-size:var(--step--1)}
+.paid{color:var(--color-accent);font-weight:600}
+.cols{display:grid;gap:var(--space-4);padding:var(--space-5) 0;border-top:1px solid var(--color-border)}
+h2{font-family:var(--font-display);font-size:var(--step-2);margin:0 0 var(--space-2)}
+.cols p{margin:0;color:var(--color-ink-muted)}
+footer{padding:var(--space-5) 0;color:var(--color-ink-muted);font-size:var(--step--1)}
+@media (min-width:1024px){.hero{grid-template-columns:1.2fr 1fr;align-items:center}.cols{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><span class="logo">Acme Invoice</span><span><a href="#">Precios</a><a href="#">Entrar</a></span></nav>
+<section class="hero">
+<div><h1>Cobra con la calma de un documento bien hecho.</h1>
+<p class="lead">Facturas claras para proveedores independientes. Envía, recuerda y cobra sin hojas de cálculo.</p>
+<a class="btn" href="#">Crear mi primera factura</a></div>
+<div class="doc"><small>FACTURA 0042 · PROVIDER STUDIO</small><div class="total">$ 18,400.00</div>
+<div class="row"><span>Diseño de catálogo</span><span>$ 12,000</span></div>
+<div class="row"><span>Fotografía de producto</span><span>$ 6,400</span></div>
+<div class="row"><span>Estado</span><span class="paid">Pagada a tiempo</span></div></div>
+</section>
+<section class="cols">
+<div><h2>Una sola acción</h2><p>Cada pantalla pide una cosa. Nada compite con el botón de cobrar.</p></div>
+<div><h2>Recordatorios amables</h2><p>Acme avisa a tu cliente por ti, con el tono que elijas.</p></div>
+<div><h2>Precio visible</h2><p>Un plan, sin letra chica. Cancela cuando quieras.</p></div>
+</section>
+<footer>Acme Invoice · variante A · fixture de ejemplo</footer>
+</div>
+<script data-board-bridge>
+addEventListener('message', function (e) { var d = e.data; if (e.source !== parent || !d || d.type !== 'board-tokens' || !d.vars) return;
+  var s = document.documentElement.style; for (var k in d.vars) if (/^--[\w-]+$/.test(k)) s.setProperty(k, String(d.vars[k]));
+  if (typeof d.fonts === 'string' && d.fonts.indexOf('https://fonts.googleapis.com/') === 0) { var l = document.querySelector('link[data-board-font]');
+    if (!l) { l = document.createElement('link'); l.rel = 'stylesheet'; l.setAttribute('data-board-font', ''); document.head.appendChild(l); } l.href = d.fonts; } });
+</script>
+</body>
+</html>

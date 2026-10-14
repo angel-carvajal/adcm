@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Invoice · C · Contraste audaz</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Space+Grotesk:wght@400;500;700&display=swap">
+<style>
+:root{--font-display:"DM Serif Display", Georgia, serif;--font-body:"Space Grotesk", system-ui, sans-serif;--font-mono:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+--step--1:0.75rem;--step-0:1rem;--step-1:1.333rem;--step-2:1.777rem;--step-3:2.369rem;--step-4:3.157rem;--step-5:4.209rem;
+--leading-tight:1;--leading-body:1.55;--tracking-display:-0.03em;
+--color-ground:#121212;--color-surface:#1C1C1C;--color-ink:#F2EFE9;--color-ink-muted:#A8A39A;--color-primary:#E8FF5A;--color-accent:#FF6B4A;--color-accent-ink:#121212;--color-border:#2E2E2E;
+--space-1:0.25rem;--space-2:0.5rem;--space-3:1rem;--space-4:1.5rem;--space-5:3rem;--space-6:5rem;--radius:999px;--dur:200ms;--ease:cubic-bezier(.2, .8, .2, 1)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--color-ground);color:var(--color-ink);font-family:var(--font-body);font-size:var(--step-0);line-height:var(--leading-body)}
+.wrap{max-width:80rem;margin:0 auto;padding:0 var(--space-4)}
+nav{display:flex;justify-content:space-between;padding:var(--space-4) 0;font-size:var(--step--1);text-transform:uppercase;letter-spacing:0.12em;color:var(--color-ink-muted)}
+.hero{display:grid;gap:var(--space-5);padding:var(--space-5) 0 var(--space-6);border-bottom:1px solid var(--color-border)}
+h1{font-family:var(--font-display);font-size:var(--step-5);line-height:var(--leading-tight);letter-spacing:var(--tracking-display);margin:0;font-weight:400}
+h1 em{color:var(--color-primary);font-style:normal}
+.side p{color:var(--color-ink-muted);font-size:var(--step-1);margin:0 0 var(--space-4)}
+.btn{display:inline-block;background:var(--color-primary);color:var(--color-accent-ink);border-radius:var(--radius);padding:var(--space-3) var(--space-5);font-weight:700;text-decoration:none;transition:background var(--dur) var(--ease)}
+.btn:hover{background:var(--color-accent)}
+.proof{display:grid;gap:var(--space-4);padding:var(--space-5) 0}
+blockquote{margin:0;font-family:var(--font-display);font-size:var(--step-3);line-height:var(--leading-tight)}
+cite{display:block;margin-top:var(--space-3);font-style:normal;color:var(--color-ink-muted);font-size:var(--step--1)}
+.price{background:var(--color-surface);border:1px solid var(--color-border);border-radius:24px;padding:var(--space-5)}
+.price b{font-family:var(--font-display);font-size:var(--step-4);display:block}
+.price span{color:var(--color-accent)}
+@media (min-width:1024px){.hero{grid-template-columns:1.6fr 1fr;align-items:end}.proof{grid-template-columns:1.4fr 1fr;align-items:center}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><span>Acme Invoice</span><span>Entrar</span></nav>
+<section class="hero"><h1>Factura. Cobra. <em>Olvídalo.</em></h1>
+<div class="side"><p>La facturación que se recuerda: rápida, clara y con un solo botón que importa.</p><a class="btn" href="#">Empieza gratis</a></div></section>
+<section class="proof"><blockquote>“Cobré tres facturas vencidas en una tarde.”<cite>Provider Studio · cliente desde el primer día</cite></blockquote>
+<div class="price"><small>Un solo plan</small><b>$ 199 / mes</b><span>Sin comisiones por cobro</span></div></section>
+</div>
+<script data-board-bridge>
+addEventListener('message', function (e) { var d = e.data; if (e.source !== parent || !d || d.type !== 'board-tokens' || !d.vars) return;
+  var s = document.documentElement.style; for (var k in d.vars) if (/^--[\w-]+$/.test(k)) s.setProperty(k, String(d.vars[k]));
+  if (typeof d.fonts === 'string' && d.fonts.indexOf('https://fonts.googleapis.com/') === 0) { var l = document.querySelector('link[data-board-font]');
+    if (!l) { l = document.createElement('link'); l.rel = 'stylesheet'; l.setAttribute('data-board-font', ''); document.head.appendChild(l); } l.href = d.fonts; } });
+</script>
+</body>
+</html>

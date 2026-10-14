@@ -1,0 +1,36 @@
+#!/bin/sh
+set -e
+export PYTHONDONTWRITEBYTECODE=1
+self=$0
+while [ -h "$self" ]; do
+  dir=$(cd "$(dirname "$self")" && pwd -P)
+  self=$(readlink "$self")
+  case $self in /*) ;; *) self=$dir/$self ;; esac
+done
+root=$(cd "$(dirname "$self")/.." && pwd -P)
+scripts=$root/skills/design-direction-architect/scripts
+usage='usage: design-board doctor [<dir>] | capture [--board <board.json> | --urls <file.txt>] [--variants] [options] | init | check | build | mark | adopt | log | pack'
+sub=${1:-}
+case "$sub" in
+  --help|-h|help)
+    echo "$usage"
+    exit 0
+    ;;
+  doctor|capture)
+    shift
+    # Captures need Node 20+ and the default node on PATH is often older: the newest nvm 2x (version order) wins, else PATH's node.
+    NODE_BIN=$(ls -d "$HOME"/.nvm/versions/node/v2[0-9]*/bin 2>/dev/null | sort -V | tail -1)
+    [ -n "$NODE_BIN" ] && PATH="$NODE_BIN:$PATH"
+    if [ "$sub" = doctor ]; then
+      if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then dirarg=$1; shift; set -- --doctor --out "$dirarg" "$@"; else set -- --doctor "$@"; fi
+    fi
+    exec node "$scripts/capture.mjs" "$@"
+    ;;
+  init|check|build|mark|adopt|log|pack)
+    exec python3 -B "$scripts/design-board.py" "$@"
+    ;;
+  *)
+    echo "$usage" >&2
+    exit 64
+    ;;
+esac

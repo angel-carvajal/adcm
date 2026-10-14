@@ -17,7 +17,7 @@ Your prompt is a brief: TASK · FILES · SKILLS · DELIVERABLE · DOD-SLICE · S
 ## Procedure
 
 1. If `frontend-design` is not already in your context, load it with the `Skill` tool. If the brief's `SKILLS:` line names `impeccable` or other design skills, load them with `Skill` BEFORE touching anything. If a required skill cannot be loaded, RETURN `blocked: skill <name> not available in this session`.
-2. Look for a `.design/` pack (brief, references, tokens, commerce, assets, decisions) from the design-direction-architect handoff, in the project root or the path the brief gives. When present it is the source of truth: use its tokens, references and commercial surface (product, quote or checkout sections).
+2. Look for a `.design/` pack (brief, references, tokens, commerce, assets, decisions) from the design-direction-architect handoff, in the project root or the path the brief gives. When present it is the source of truth: use its tokens, references and commercial surface (product, quote or checkout sections). `.design/tokens.css` exported from the design board is the source of truth; variant pages and builds consume the CSS custom-property contract in the skill's `references/tokens-contract.md`.
 3. Never invent palette, typography or layout language outside the pack. With no pack, use only what the brief and the existing code define, and flag the gap in the RETURN.
 4. Read FILES. Edit only FILES. A needed change outside them is a STOP IF, never a quiet extra.
 5. Work until the DOD-SLICE passes; run it and keep its output.

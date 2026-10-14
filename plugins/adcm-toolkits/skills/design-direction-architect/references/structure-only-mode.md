@@ -56,7 +56,11 @@ yardstick:
 A reference is never kept or dropped for its palette or type — those are fixed
 by the DS and carry no score.
 
-## STEP 5b — curation
+## STEP 5b — options and the board
+
+The board's Tokens toggles are **locked to the design-system values**: one font
+pair, one scale and one palette per option, taken verbatim from the DS, so Export
+yields the DS tokens and nothing else. Only structure varies between options.
 
 Consumes the project's own tokens verbatim. Do not re-extract or re-derive
 values from the surviving references — the DS is the source of truth. 5b's
