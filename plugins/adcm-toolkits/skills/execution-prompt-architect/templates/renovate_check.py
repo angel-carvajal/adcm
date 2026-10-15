@@ -2,7 +2,7 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json and scripts/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.18.0) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.18.1) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
 --copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
 from this report, never by this script.
@@ -74,7 +74,7 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.18.0"
+__version__ = "0.18.1"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",

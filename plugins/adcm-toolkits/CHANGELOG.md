@@ -1,5 +1,21 @@
 # Changelog — adcm-toolkits
 
+## 0.18.1 — 2026-10-15
+
+- **Mobile fix for `plans.html` / `prompts.html`.** The sticky topbar wrapped its wave chips into many rows
+  (819 px of an 844 px phone viewport, 238 px on a 1440 px desktop) and hid the content. It is now one
+  swipeable row (≤56 px) at every viewport size, with the theme toggle pinned at the edge; the hero padding
+  shrinks at ≤768 px and reduced-motion also disables smooth scrolling. Both shells carry a `shell vN`
+  marker (bump it whenever the style block changes).
+- **Shell refresh in `plans-regen.py` / `prompts-regen.py`.** An existing regen-made page whose shell marker
+  is missing or older than the template's gets its `<style>` block and marker replaced on the next regen
+  (`shell: rebuilt vX→vN`), articles and hand-written hero untouched; `--check` reports it as stale
+  (`would rebuild`) and writes nothing; a page regen never produced fails loudly.
+- **Protocol 0.18.1** (`execute.md.tmpl` Protocol line, `renovate_check.py`, `status_digest.py`,
+  `courier_preflight.py`). Brains run their own copies of the regen scripts under `scripts/`: refresh them
+  with a renovation (`--force-outdated` when the copies count as custom) or by hand, then let the courier
+  republish.
+
 ## 0.18.0 — 2026-10-14
 
 - **design-board.** The design-direction-architect skill now builds one fixed design board by script, as a
