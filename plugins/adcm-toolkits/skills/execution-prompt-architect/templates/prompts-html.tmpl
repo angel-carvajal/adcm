@@ -45,6 +45,7 @@ Spanish to match this script's default --lang es; if a project runs --lang en,
 edit those by hand too (the script only localizes the strings it generates per
 wave — the copy-button label, the "no prompt in §7" fallback sentence, and the
 "real status" line — via its LANG dict, not this static shell).
+Shell versioning: bump the version in the shell marker (before the style block) whenever the style block changes; regen refreshes older pages.
 -->
 <!doctype html>
 <html lang="es">
@@ -54,6 +55,7 @@ wave — the copy-button label, the "no prompt in §7" fallback sentence, and th
 <title>Prompts {{PROJECT_NAME}}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- prompts-html shell v4 -->
 <style>
 :root{--bg:#0f0d09;--surface:#16140f;--raised:#1c1913;--text:#f2ebdd;--muted:#a89f8d;
 --border:#2a2620;--border-strong:#3d382e;--gold:#c9a227;--gold-hi:#e3bc45;
@@ -78,8 +80,11 @@ letter-spacing:.18em;color:var(--gold)}
 .hero h1{margin:6px 0 8px;font-size:clamp(26px,4vw,36px)}
 .hero p{margin:0 auto;max-width:680px;color:var(--muted)}
 .topbar{position:sticky;top:0;z-index:9;display:flex;gap:8px;align-items:center;
-justify-content:center;flex-wrap:wrap;padding:10px 16px;backdrop-filter:blur(12px);
+justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;
+padding:6px 16px;backdrop-filter:blur(12px);
 background:var(--glass);border-bottom:1px solid var(--border)}
+.topbar>*{flex:0 0 auto;white-space:nowrap}
+.topbar #theme{position:sticky;right:0;margin-left:auto;box-shadow:-10px 0 8px -2px var(--bg)}
 .nav-a,.btn{cursor:pointer;border:1px solid var(--border);background:var(--surface);
 color:var(--text);border-radius:999px;padding:7px 14px;font:500 13px 'Inter',sans-serif}
 .nav-a:hover,.btn:hover{border-color:var(--border-strong);text-decoration:none}
@@ -108,7 +113,10 @@ color:var(--gold);border-radius:8px;padding:8px 14px;font:600 12.5px 'Inter',san
 pre{margin:0;padding:20px 24px;background:var(--code-bg);overflow-x:auto;
 font:12.2px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;tab-size:2}
 pre code{font:inherit}
-@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+@media (max-width:768px){
+.hero{padding:28px 16px 20px}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>

@@ -555,8 +555,7 @@ at any close.
   shell from `templates/plans-html.tmpl` (kept next to the script) and `--init --force` is the only way
   to replace an existing custom layout; `--check` exits 3 when the file has no `doc-*` articles (a
   hand-maintained layout: keep `regen none`, or `--init --force`); later runs
-  patch only the four document articles, so head, styles, theme and
-  scripts stay byte-identical, and wave statuses derive from the `task.md` wave map.
+  patch only the four document articles, so head and scripts stay byte-identical (the `<style>` block and shell marker are refreshed when the template's shell version is newer), and wave statuses derive from the `task.md` wave map.
 - **`prompts.html`**: the §7 wave prompts rendered as copy-paste cards, with a status
   badge per wave and a nav to jump between waves. Audience: the operator, reading on
   a phone. Its state has exactly ONE source of truth — the `### Wave <ID>` headers of

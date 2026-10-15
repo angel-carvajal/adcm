@@ -91,6 +91,27 @@ LANG = {
     },
 }
 
+def shell_version(text, name):
+    """Version of the shell marker `<!-- NAME shell vN -->` in a page; a page without one is v1."""
+    m = re.search(rf'<!-- {name} shell v(\d+) -->', text)
+    return int(m.group(1)) if m else 1
+
+
+def refresh_shell(text, tmpl_path, name):
+    """Swap the page's `<style>` block (and shell marker) for the template's when the template's shell
+    version is newer. Hero, protocol box, scripts and everything else in the page stay as they are.
+    Returns (text, old_version, new_version); new_version == old_version means nothing changed."""
+    old_v = shell_version(text, name)
+    if not tmpl_path.is_file():
+        return text, old_v, old_v
+    tmpl = re.sub(r'\A\s*<!--.*?-->\s*', '', tmpl_path.read_text(encoding='utf-8'), count=1, flags=re.S)
+    new_v = shell_version(tmpl, name)
+    block = re.compile(rf'(?:<!-- {name} shell v\d+ -->\s*)?<style>.*?</style>', re.S)
+    src, dst = block.search(tmpl), block.search(text)
+    if new_v <= old_v or not src or not dst:
+        return text, old_v, old_v
+    return text[:dst.start()] + src.group(0) + text[dst.end():], old_v, new_v
+
 
 def parse_s7(exec_text):
     """Parse execute.md §7 into a list of {id, title, status, bodies, line} dicts,
@@ -384,7 +405,13 @@ def main():
         sys.exit(f'{out} does not exist (pass --init to create it from prompts-html.tmpl)')
     else:
         html_text = out.read_text(encoding='utf-8', errors='replace')
-    new_text, waves, nav, cards = build(brain, allow, args.lang, titles_path, html_text, args.closed)
+    if '<section class="card"' not in html_text:
+        sys.exit(f'{out}: not a regen page (no card sections); nothing written')
+    tmpl_next = pathlib.Path(__file__).resolve().parent / 'prompts-html.tmpl'
+    page_text, was_v, now_v = refresh_shell(html_text, tmpl_next, 'prompts-html')
+    verb = 'would rebuild' if args.check else 'rebuilt'
+    shell_line = f'shell: {verb} v{was_v}→v{now_v}' if now_v != was_v else 'shell: current'
+    new_text, waves, nav, cards = build(brain, allow, args.lang, titles_path, page_text, args.closed)
 
     if args.check:
         if would_init:
@@ -401,10 +428,11 @@ def main():
             new_card = re.search(pat, new_text, re.S)
             if (old_card.group(0) if old_card else None) != (new_card.group(0) if new_card else None):
                 diffing.append(a)
-        print(f'  --check: {out} is STALE, {len(diffing)}/{len(allow)} waves differ: {diffing}')
+        print(f'  --check: {out} is STALE, {len(diffing)}/{len(allow)} waves differ: {diffing} · {shell_line}')
         sys.exit(1)
 
     out.write_text(new_text, encoding='utf-8')
+    print(f'  {shell_line}')
     print(f'  waves: {len(allow)} · nav: {nav.count("nav-a")} · cards: {"".join(cards).count("<section")} '
           f'· {len(new_text.encode("utf-8")) // 1024} KiB → {out}')
     for a in allow:

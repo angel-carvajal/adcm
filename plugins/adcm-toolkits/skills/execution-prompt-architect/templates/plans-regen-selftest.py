@@ -464,6 +464,44 @@ def case_en_docs_set(ctx, t):
     t.eq(len(sections(article(out, "master"))), len(WAVES) + 2, "master: one <section> per '##' heading")
 
 
+def case_shell_rebuild_on_version(ctx, t):
+    brain = ctx.brain("c10", build_docs("es", WAVES))
+    r = ctx.run("plans.html", brain)
+    t.has(r.text, "shell: current", "a fresh page reports the shell as current")
+    page = ctx.read("plans.html")
+    old = re.sub(r"<!-- plans-html shell v\d+ -->\n", "", page)
+    old = re.sub(r"@media \(max-width:768px\)\{.*?\n\}\n", "", old, count=1, flags=re.S)
+    t.ok("max-width:768px" not in old and "shell v" not in old, "fixture: the page has an old (v1) shell")
+    ctx.write("plans.html", old)
+    t.eq(ctx.run("plans.html", brain, "--check").rc, 1, "--check flags an old shell as stale")
+    t.eq(ctx.read("plans.html"), old, "--check writes nothing")
+    r = ctx.run("plans.html", brain)
+    t.eq(r.rc, 0, "regen exit code")
+    t.has(r.text, "shell: rebuilt v1→v4", "the run reports the rebuild")
+    new = ctx.read("plans.html")
+    for k in KEYS:
+        t.eq(article(new, k), article(page, k), f"article doc-{k} byte-identical after the shell rebuild")
+    t.has(new, "max-width:768px", "new style block applied")
+    r = ctx.run("plans.html", brain)
+    t.has(r.text, "shell: current", "second run: shell current")
+    t.eq(ctx.read("plans.html"), new, "second run is byte-identical")
+
+
+def case_mobile_topbar_css(ctx, t):
+    tmpl_path = os.path.join(os.path.dirname(ctx.script), "plans-html.tmpl")
+    if not os.path.isfile(tmpl_path):
+        raise Skip("plans-html.tmpl not found next to the script")
+    with open(tmpl_path, encoding="utf-8") as fh:
+        tmpl = fh.read()
+    m = re.search(r"\.topbar\{position:sticky;([^}]*)\}", tmpl)
+    t.ok(bool(m), "template has a sticky .topbar rule")
+    if m:
+        for need in ("flex-wrap:nowrap", "overflow-x:auto", "-webkit-overflow-scrolling:touch",
+                     "scrollbar-width:thin"):
+            t.has(m.group(1), need, "single-row swipeable topbar at every width")
+    t.has(tmpl, ".topbar>*{flex:0 0 auto;white-space:nowrap}", "chips never wrap")
+
+
 CASES = [
     ("code_span_comment_opener", case_code_span_comment_opener),
     ("fence_and_real_comments", case_fence_and_real_comments),
@@ -475,6 +513,8 @@ CASES = [
     ("init_requires_force", case_init_requires_force),
     ("idempotent_second_run", case_idempotent_second_run),
     ("en_docs_set", case_en_docs_set),
+    ("shell-rebuild-on-version", case_shell_rebuild_on_version),
+    ("mobile-topbar-css", case_mobile_topbar_css),
 ]
 
 

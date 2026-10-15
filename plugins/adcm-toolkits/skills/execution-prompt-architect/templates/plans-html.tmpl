@@ -21,6 +21,7 @@ session only writes the four .md docs; the script renders them.
   detailed / timeframe. The TOC is built client-side from each article's .sec > h2.
 - Keep it self-contained: no external assets except the font CDN (falls back to
   system-ui offline).
+Shell versioning: bump the version in the shell marker (before the style block) whenever the style block changes; regen refreshes older pages.
 -->
 <!doctype html>
 <html lang="{{lang}}" data-theme="light">
@@ -30,6 +31,7 @@ session only writes the four .md docs; the script renders them.
 <title>{{project_name}} · Plans</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://cdn.jsdelivr.net/npm/geist@1/dist/fonts/geist-sans/style.css" rel="stylesheet">
+<!-- plans-html shell v4 -->
 <style>
 :root{--bg:#FAFAFF;--surface:#F8F8FC;--raised:#F0F0F8;--text:#09090F;--muted:#74748A;
 --border:#E4E4EF;--border-strong:#C7C7D6;--primary:#6366F1;--ring:#6366F1;
@@ -48,8 +50,11 @@ background:linear-gradient(180deg,color-mix(in srgb,var(--primary) 7%,var(--bg))
 .hero h1{margin:0 0 8px;font-size:clamp(26px,4vw,40px);letter-spacing:-.02em}
 .hero p{margin:0 auto;max-width:640px;color:var(--muted)}
 .topbar{position:sticky;top:0;z-index:9;display:flex;gap:8px;align-items:center;
-justify-content:center;flex-wrap:wrap;padding:10px 16px;backdrop-filter:blur(12px);
+justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;
+padding:6px 16px;backdrop-filter:blur(12px);
 background:var(--glass-bg);border-bottom:1px solid var(--glass-bd)}
+.topbar>*{flex:0 0 auto;white-space:nowrap}
+.topbar #theme{position:sticky;right:0;margin-left:auto;box-shadow:-10px 0 8px -2px var(--bg)}
 .doc-nav-link,.btn{appearance:none;cursor:pointer;border:1px solid var(--border);
 background:var(--surface);color:var(--text);border-radius:999px;padding:7px 16px;
 font:inherit;font-size:13.5px}
@@ -109,6 +114,9 @@ font-weight:600;color:#EF4444;white-space:nowrap}
 .g-dot.mile{width:10px;height:10px;transform:rotate(45deg);border-radius:2px;background:var(--text)}
 article[hidden]{display:none}
 @media(max-width:840px){.layout{grid-template-columns:1fr}.toc{display:none}}
+@media (max-width:768px){
+.hero{padding:36px 16px 24px}
+}
 </style>
 </head>
 <body>

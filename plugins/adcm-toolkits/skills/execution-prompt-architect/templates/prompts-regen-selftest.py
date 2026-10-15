@@ -404,6 +404,52 @@ def case_title_fallback_lowercase_suffix(ctx, t):
           "a header with no title falls back to the card's existing <h2> (id match is case-insensitive)")
 
 
+def case_shell_rebuild_on_version(ctx, t):
+    md = execute_md(wave("W1", "Alpha", "☐", "BODY-1"), wave("W2", "Beta", "🔄", "BODY-2"))
+    brain = ctx.brain("b", md)
+    r = ctx.run("W1,W2", "prompts.html", brain, "--init", "--project", "Acme")
+    t.has(r.text, "shell: current", "a fresh page reports the shell as current")
+    page = ctx.read("prompts.html")
+    old = re.sub(r"<!-- prompts-html shell v\d+ -->\n", "", page)
+    old = re.sub(r"@media \(max-width:768px\)\{.*?\n\}\n", "", old, count=1, flags=re.S)
+    old = old.replace("<h1>Prompts Acme</h1>", "<h1>Prompts Acme</h1><!-- hand-edited hero -->")
+    t.ok("max-width:768px" not in old and "shell v" not in old, "fixture: the page has an old (v1) shell")
+    ctx.write("prompts.html", old)
+    r = ctx.run("W1,W2", "prompts.html", brain, "--check")
+    t.eq(r.rc, 1, "--check flags an old shell as stale")
+    t.eq(ctx.read("prompts.html"), old, "--check writes nothing")
+    r = ctx.run("W1,W2", "prompts.html", brain)
+    t.eq(r.rc, 0, "regen exit code")
+    t.has(r.text, "shell: rebuilt v1→v4", "the run reports the rebuild")
+    new = ctx.read("prompts.html")
+    t.has(new, "<!-- prompts-html shell v4 -->", "marker written")
+    t.has(new, "max-width:768px", "new style block applied")
+    t.has(new, "<!-- hand-edited hero -->", "hand-edited hero kept")
+    for low in ("w1", "w2"):
+        t.eq(card(new, low), card(page, low), f"card {low} byte-identical after the shell rebuild")
+    t.eq(nav(new), nav(page), "nav unchanged")
+    r = ctx.run("W1,W2", "prompts.html", brain)
+    t.has(r.text, "shell: current", "second run: shell current")
+    t.eq(ctx.read("prompts.html"), new, "second run is byte-identical")
+
+
+def case_mobile_topbar_css(ctx, t):
+    tmpl_path = os.path.join(os.path.dirname(ctx.script), "prompts-html.tmpl")
+    if not os.path.isfile(tmpl_path):
+        raise Skip("prompts-html.tmpl not found next to the script")
+    with open(tmpl_path, encoding="utf-8") as fh:
+        tmpl = fh.read()
+    m = re.search(r"\.topbar\{position:sticky;([^}]*)\}", tmpl)
+    t.ok(bool(m), "template has a sticky .topbar rule")
+    if m:
+        for need in ("flex-wrap:nowrap", "overflow-x:auto", "-webkit-overflow-scrolling:touch",
+                     "scrollbar-width:thin"):
+            t.has(m.group(1), need, "single-row swipeable topbar at every width")
+    t.has(tmpl, ".topbar>*{flex:0 0 auto;white-space:nowrap}", "chips never wrap")
+    t.ok(re.search(r"@media \(max-width:768px\)\{[^}]*\.hero", tmpl) is not None, "<=768px rule keeps the smaller hero padding")
+    t.ok(re.search(r"<!-- prompts-html shell v\d+ -->\s*<style>", tmpl) is not None, "shell marker sits right before <style>")
+
+
 CASES = [
     ("ids_lowercase_suffix", case_ids_lowercase_suffix),
     ("multi_delivery", case_multi_delivery),
@@ -415,6 +461,8 @@ CASES = [
     ("init_check_no_write", case_init_check_no_write),
     ("check_idempotent", case_check_idempotent),
     ("title_fallback_lowercase_suffix", case_title_fallback_lowercase_suffix),
+    ("shell-rebuild-on-version", case_shell_rebuild_on_version),
+    ("mobile-topbar-css", case_mobile_topbar_css),
 ]
 
 

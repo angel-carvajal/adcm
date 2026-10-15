@@ -581,6 +581,27 @@ def resolve_docs(brain, custom):
     if miss:
         sys.exit(f'{brain}: missing source doc(s) {miss} (expected ES/EN names {NAMES} or --docs)')
     return found
+def shell_version(text, name):
+    """Version of the shell marker `<!-- NAME shell vN -->` in a page; a page without one is v1."""
+    m = re.search(rf'<!-- {name} shell v(\d+) -->', text)
+    return int(m.group(1)) if m else 1
+
+
+def refresh_shell(text, tmpl_path, name):
+    """Swap the page's `<style>` block (and shell marker) for the template's when the template's shell
+    version is newer. Hero, protocol box, scripts and everything else in the page stay as they are.
+    Returns (text, old_version, new_version); new_version == old_version means nothing changed."""
+    old_v = shell_version(text, name)
+    if not tmpl_path.is_file():
+        return text, old_v, old_v
+    tmpl = re.sub(r'\A\s*<!--.*?-->\s*', '', tmpl_path.read_text(encoding='utf-8'), count=1, flags=re.S)
+    new_v = shell_version(tmpl, name)
+    block = re.compile(rf'(?:<!-- {name} shell v\d+ -->\s*)?<style>.*?</style>', re.S)
+    src, dst = block.search(tmpl), block.search(text)
+    if new_v <= old_v or not src or not dst:
+        return text, old_v, old_v
+    return text[:dst.start()] + src.group(0) + text[dst.end():], old_v, new_v
+
 
 def h1_of(text):
     return next((l[2:].strip() for l in text.split('\n') if l.startswith('# ')), '')
@@ -654,14 +675,19 @@ def main():
         h1 = h1_of(txt['master'])
         project = a.project or (h1.split(' — ')[0].strip() if ' — ' in h1 else brain.resolve().parent.name)
         cur = make_shell(tmpl, lang, project, txt, L)
-    new = patch(cur, articles)
+    cur_page, was_v, now_v = refresh_shell(cur, pathlib.Path(__file__).resolve().parent / 'plans-html.tmpl', 'plans-html')
+    shell_line = f'shell: rebuilt v{was_v}→v{now_v}' if now_v != was_v else 'shell: current'
+    new = patch(cur_page, articles)
     left = re.findall(r'\{\{[^}]*\}\}', re.sub(r'<article.*?</article>', '', new, flags=re.S))
     if left:
         print(f'  warning: unresolved placeholders in the shell: {left[:4]}', file=sys.stderr)
     newer = [p.name for p in [*src.values(), task_path] if out.exists() and p.exists() and p.stat().st_mtime > out.stat().st_mtime]
     if a.check:
         diff = [k for k in NAMES if shell or article_re(k).search(cur).group(0) != article_re(k).search(new).group(0)]
-        print(f'  --check: {out} is ' + (f'STALE · articles differ: {diff or "none"} · sources newer than the HTML: {newer or "none"}'
+        shell_old = now_v != was_v
+        shell = shell or shell_old
+        print(f'  --check: {out} is ' + (f'STALE · articles differ: {diff or "none"} · sources newer than the HTML: {newer or "none"} · '
+                                         + shell_line.replace('rebuilt', 'would rebuild')
                                          if shell or diff or newer else 'up to date'))
         sys.exit(1 if shell or diff or newer else 0)
     if new != old:
@@ -669,6 +695,7 @@ def main():
         out.write_text(new, encoding='utf-8')
     elif newer:
         os.utime(out, None)  # identical content: refresh the mtime so --check reads "fresh"
+    print(f'  {shell_line}')
     print(f'  {"written" if new != old else "unchanged"}: {out} · {len(new) // 1024} KB · lang={lang} · {len(waves)} wave-map rows'
           + (' (initialized: output was missing)' if fresh else ' · shell via --init' if shell else ''))
     for k in NAMES:
