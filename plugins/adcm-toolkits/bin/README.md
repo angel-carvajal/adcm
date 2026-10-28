@@ -15,6 +15,8 @@ its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, 
 `design-board` is the launcher of the `design-direction-architect` board: `doctor` and `capture` run `skills/design-direction-architect/scripts/capture.mjs` with `node` (same Node 20+ shim as `explainer-record`);
 `init`, `check`, `build`, `mark`, `adopt`, `log` and `pack` run `design-board.py` with `python3 -B`; any other subcommand prints the usage on stderr and exits 64.
 
+`tailnet-preview` runs `skills/artifact-courier/scripts/tailnet_preview.py` with `python3 -B`: `doctor`, `up`, `status`, `url`, `down`, `list` (`up`/`down` change nothing without `--apply`; exits 0/1/2/64; `--json`). It keeps a project's dev server alive after the session (detached, `caffeinate`) and maps it with `tailscale serve` to `https://<machine>.<tailnet>.ts.net:<port>/` for the owner's phone; without Tailscale it falls back to LAN-only. Setup and lifecycle: `skills/artifact-courier/references/tailnet-preview.md`.
+
 Auto mode: the classifier may deny the registry seal (`courier-preflight … --mark-published`) as
 "Create Public Surface" although it only edits the project's local `artifacts.json`. The documented
 remedy is an `autoMode.allow` prose exception in the owner's user settings (keep `"$defaults"` first):
@@ -24,6 +26,11 @@ annotates an artifact row in the project's local artifacts.json. It is a local f
 published; the artifact URL is only recorded text. Create Public Surface does not apply."`
 If the seal is still denied, the courier returns `REGISTRY: blocked by permissions: <command>` and the
 owner runs that command with `!`.
+A second prose exception the owner may add to `autoMode.allow` (keep `"$defaults"` first) covers the tailnet preview:
+`"Tailnet Preview: running the plugin's tailnet preview launcher (tailnet-preview or scripts/tailnet_preview.py) with up or down --apply starts or stops the current project's local development server and maps or unmaps it with tailscale serve (never tailscale funnel), so only devices signed in to the owner's own private tailnet can open it. Nothing becomes reachable from the public internet. Create Public Surface does not apply."`
+If it is still denied, the owner runs the exact command with `!`. Optional, since the `footerLinksRegexes` key is not publicly documented: a footer badge for the
+tailnet link, in the same entry shape as the owner's existing `footerLinksRegexes` entries:
+`{"type":"regex","pattern":"\\[(?<t>[^\\]]{1,40})\\]\\(https://(?<h>[a-z0-9-]+\\.[a-z0-9-]+\\.ts\\.net(?::\\d{1,5})?)/[^)\\s]*\\)","url":"https://{h}/","label":"{t}"}`
 
 ## Hooks
 `artifact-guard.py` (Stop) and `merge-guard.py` (PreToolUse · matcher `Bash|mcp__.*merge.*` · timeout 10) live in `skills/execution-prompt-architect/templates/`. The owner copies them to
