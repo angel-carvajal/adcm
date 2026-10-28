@@ -480,7 +480,7 @@ class Ctx:
                 problems.append(f"leftover service pid {rec['pid']} after down --all --apply")
                 os.killpg(rec["pgid"], signal.SIGTERM)
             cpid = rec.get("caffeinate_pid")
-            if cpid and wait_until(lambda: not pid_alive(cpid), 2.0) is False:
+            if cpid and not wait_until(lambda: not pid_alive(cpid), 2.0):
                 args = subprocess.run(["ps", "-o", "args=", "-p", str(cpid)], capture_output=True, text=True).stdout
                 if self.bin in args:
                     problems.append(f"leftover caffeinate pid {cpid}")
@@ -1009,7 +1009,7 @@ def case_up_writes_starting_state(c, t):
             seen = rec
         time.sleep(0.05)
     t.ok(seen is not None, "no run state with status starting while up was still waiting for health")
-    t.ok(proc.poll() is None if seen else True, "up had already finished when starting was seen")
+    t.ok(not seen or proc.poll() is None, "up had already finished when starting was seen")
     t.eq(proc.wait(timeout=60), 0, "up exit")
     if seen:
         for key in ("pid", "pgid", "lstart_epoch"):
@@ -1031,7 +1031,7 @@ def case_mapped_verdict_not_answering(c, t):
     t.eq(c.proxy(8443), f"http://127.0.0.1:{p}", "mapping")
 
 
-CASES = [(n, f) for n, f in (
+CASES = [
     ("usage-errors", case_usage_errors), ("help-version", case_help_version), ("doctor-absent", case_doctor_absent),
     ("doctor-ready", case_doctor_ready), ("doctor-logged-out", case_doctor_logged_out),
     ("doctor-https-off", case_doctor_https_off), ("doctor-defensive-json", case_doctor_defensive_json),
@@ -1047,7 +1047,7 @@ CASES = [(n, f) for n, f in (
     ("launcher-wrapper", case_launcher_wrapper), ("timeout-range-and-cap", case_timeout_range_and_cap),
     ("locale-independent-identity", case_locale_independent_identity),
     ("child-env-allowlist", case_child_env_allowlist), ("up-writes-starting-state", case_up_writes_starting_state),
-    ("mapped-verdict-not-answering", case_mapped_verdict_not_answering))]
+    ("mapped-verdict-not-answering", case_mapped_verdict_not_answering)]
 
 
 def run_case(fn, script, keep):

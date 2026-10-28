@@ -208,9 +208,7 @@ def run(argv, timeout=20, env=None):
 
 # ------------------------------------------------------------------ process identity
 def c_locale():
-    env = dict(os.environ)
-    env.update(LC_ALL="C", LANG="C")
-    return env
+    return dict(os.environ, LC_ALL="C", LANG="C")
 
 
 def lstart_epoch(text):
@@ -405,8 +403,10 @@ def lan_ip():
     if hook:
         return None if hook == "none" else hook
     ipconfig = tool("ipconfig")
+    if not ipconfig:
+        return None
     for iface in ("en0", "en1"):
-        rc, out, _ = run([ipconfig, "getifaddr", iface], timeout=5) if ipconfig else (None, "", "")
+        rc, out, _ = run([ipconfig, "getifaddr", iface], timeout=5)
         if rc == 0 and out.strip():
             return out.strip()
     return None
@@ -430,8 +430,7 @@ def find_tailscale():
 
 
 def ts_call(ts, args, timeout=20):
-    env = dict(os.environ)
-    env["TAILSCALE_BE_CLI"] = "1"
+    env = dict(os.environ, TAILSCALE_BE_CLI="1")
     return run([ts["path"]] + list(args), timeout=timeout, env=env)
 
 
@@ -499,8 +498,10 @@ def serve_config(ts):
 
 
 def proxy_on(cfg, host, https_port):
-    handler = as_dict(as_dict(as_dict(as_dict(cfg).get("Web")).get(f"{host}:{https_port}")).get("Handlers")).get("/")
-    return as_dict(handler).get("Proxy")
+    node = as_dict(cfg)
+    for key in ("Web", f"{host}:{https_port}", "Handlers", "/"):
+        node = as_dict(node.get(key))
+    return node.get("Proxy")
 
 
 def serve_taken(cfg, https_port):
@@ -575,9 +576,11 @@ def nvm_node(cwd):
     best = None
     for name in names:
         m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", name)
-        ver = tuple(int(x) for x in m.groups()) if m else None
-        if ver and ver[:len(want)] == want and os.path.isdir(os.path.join(root, name, "bin")) \
-                and (best is None or ver > best[0]):
+        if not m:
+            continue
+        ver = tuple(int(x) for x in m.groups())
+        newer = best is None or ver > best[0]
+        if ver[:len(want)] == want and os.path.isdir(os.path.join(root, name, "bin")) and newer:
             best = (ver, name)
     if best is None:
         return None, None, f".nvmrc {spec} is not installed under {tilde(root)}"
@@ -746,8 +749,10 @@ def merge_profile(slug, saved, a):
     why = profile_problem(prof, slug, need_cwd=True)
     if why:
         raise Done(2, "error", f"{slug} · invalid profile: {why}")
-    base = with_defaults(saved, slug) if saved else None
-    return prof, bool(base) and any(base.get(k) != prof.get(k) for k in PROCESS_KEYS)
+    if not saved:
+        return prof, False
+    base = with_defaults(saved, slug)
+    return prof, any(base.get(k) != prof.get(k) for k in PROCESS_KEYS)
 
 
 def shown(prof):
@@ -760,15 +765,15 @@ def resolve_slug(st, rep):
         here = os.path.realpath(os.getcwd())
     except OSError:
         raise Done(2, "error", "· the current directory is gone: pass a SLUG")
-    hits = []
-    for slug in st.slugs():
+    slugs, hits = st.slugs(), []
+    for slug in slugs:
         cwd = (st.read(st.profile_path(slug)) or {}).get("cwd")
         if isinstance(cwd, str) and within(here, os.path.realpath(cwd)):
             hits.append((slug, cwd))
     if len(hits) == 1:
         return hits[0][0]
     if not hits:
-        rep.add("profiles", ", ".join(st.slugs()) or "none yet")
+        rep.add("profiles", ", ".join(slugs) or "none yet")
         raise Done(2, "error", f"· no profile covers {tilde(here)}: pass a SLUG")
     for slug, cwd in hits:
         rep.add("candidate", f"{slug} {tilde(cwd)}")
@@ -781,8 +786,10 @@ def settle_https(st, slug, prof, cfg, host):
     that is listened on locally), a pinned one is blocked."""
     others = set()
     for other in st.slugs():
+        if other == slug:
+            continue
         with contextlib.suppress(Done):
-            value = (st.read(st.profile_path(other)) or {}).get("https_port") if other != slug else None
+            value = (st.read(st.profile_path(other)) or {}).get("https_port")
             if is_int(value):
                 others.add(value)
 
@@ -909,9 +916,10 @@ def cmd_doctor(a, rep):
     else:
         bundle = " (TAILSCALE_BE_CLI=1)" if ts["path"] == APP_CLI else ""
         check("ok", "tailscale", f"{tilde(ts['path'])} ({ts['source']}){bundle}")
-        check("ok" if ts["version_ok"] else "warn", "version",
-              (ts["version"] + ("" if ts["version_ok"] else " (1.52 or newer needed: update the app)"))
-              if ts["version"] else ts["reason"])
+        version = ts["version"] or ts["reason"]
+        if ts["version"] and not ts["version_ok"]:
+            version += " (1.52 or newer needed: update the app)"
+        check("ok" if ts["version_ok"] else "warn", "version", version)
     status = ts["status"]
     if ts["unparsed"]:
         check("fail", "status", ts["reason"])
@@ -935,8 +943,11 @@ def cmd_doctor(a, rep):
         peers = [p for p in as_dict(status.get("Peer")).values() if isinstance(p, dict)]
         phones = [p for p in peers if str(p.get("OS", "")).lower() in ("ios", "android")]
         phone = next((p for p in phones if p.get("Online")), phones[0] if phones else None)
-        check("info", "phone", f"{phone.get('HostName')} ({phone.get('OS')}, {'online' if phone.get('Online') else 'offline'})"
-              if phone else "no iOS or Android device in the tailnet yet")
+        if phone:
+            online = "online" if phone.get("Online") else "offline"
+            check("info", "phone", f"{phone.get('HostName')} ({phone.get('OS')}, {online})")
+        else:
+            check("info", "phone", "no iOS or Android device in the tailnet yet")
         for msg in (status.get("Health") if isinstance(status.get("Health"), list) else [])[:3]:
             check("info", "health", str(msg)[:120])
     for name in other_vpns()[:3]:
@@ -1085,8 +1096,9 @@ def finish_up(st, slug, prof, run_state, a, rep, tn, reused):
         word, url, reason = map_tailnet(st, slug, prof, run_state, tn, rep, path)
     ip = lan_ip()
     lan = f"http://{ip}:{prof['port']}/{path}" if ip else None
-    lan_note = "" if not lan or healthy(http_code(f"http://{ip}:{prof['port']}{prof['health']}")) \
-        else " (unreachable: bound to loopback?)"
+    lan_note = ""
+    if lan and not healthy(http_code(f"http://{ip}:{prof['port']}{prof['health']}")):
+        lan_note = " (unreachable: bound to loopback?)"
     save_run(st, slug, run_state, status="unmapped" if word == "blocked" else word)
     caf = run_state.get("caffeinate_pid")
     node = f" · node {run_state['node']} (.nvmrc)" if run_state.get("node") else ""
@@ -1210,7 +1222,6 @@ def observe(prof, run_state, tn, listening=None):
             o.update(state="unmapped", detail=f"no serve mapping on :{https}")
         return o
     recorded = run_state.get("status") in RUNNING or bool(run_state.get("mapped"))
-    holder = None
     if recorded and alive(proc_info(run_state.get("pid"))):
         o.update(state="stale", detail=f"pid {run_state['pid']} is not ours any more (pid reused): never signalled")
         return o
@@ -1354,8 +1365,11 @@ def cmd_down(a, rep):
     if not a.all and st.read(st.profile_path(name)) is None and st.read(st.run_path(name)) is None:
         raise Done(2, "error", f"{name} · unknown slug (no profile in {tilde(st.root)})")
     if not slugs:
-        rep.add("plan" if not a.apply else "down", "no profiles")
-        return (0, "down", "all · no profiles") if a.apply else (1, "would-stop", "all (dry run: add --apply)")
+        if a.apply:
+            rep.add("down", "no profiles")
+            return 0, "down", "all · no profiles"
+        rep.add("plan", "no profiles")
+        return 1, "would-stop", "all (dry run: add --apply)"
     if not a.apply:
         for slug in slugs:
             rep.add("plan", down_plan(st, slug, a.keep_serve))
