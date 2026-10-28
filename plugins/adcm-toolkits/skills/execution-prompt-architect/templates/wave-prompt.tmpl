@@ -297,7 +297,9 @@ regenerate HTML when it commits the `.md`); THEN load `adcm-toolkits:artifact-co
 and spawn one `adcm-toolkits:courier` per batch (normally 1; `Agent`, `sonnet` fixed by the type, brief from the skill's
 `templates/courier-brief.md`: registry, preview URL `localhost` — start the preview
 server yourself if none runs, bound to `0.0.0.0` with HTTP Range support or mobile
-video dies —, the VISUAL CHECK screenshots in order, a GIF when the feature spans
+video dies; {{If the repo has a tailnet-preview profile: start it with `tailnet-preview up <slug> --apply` instead (detached) and add its URL as `Tailnet:`;
+use a Bash timeout of at least (profile timeout + 150) s, 600000 ms at most, and dispatch on the verdict word, never on the exit code: `up` or `mapped` → that URL,
+`lan-only` → `Tailnet: none`, any other word → `Preview: none` and `Tailnet: none`, and say why}} —, the VISUAL CHECK screenshots in order, a GIF when the feature spans
 several screens). It runs each registry row's `regen` (`plans-regen.py`,
 `prompts-regen.py`), republishes or re-issues every stale artifact, stamps and commits
 `artifacts.json`, returns the media paths (`MEDIA: unsent`) for you to send, `curl`s localhost and the LAN IP, and returns a table
@@ -312,11 +314,12 @@ scrolling back up); (3) the FINAL message: the pending DoD-human lines (`Para ti
 tasks blocked until the Reviewer merges and {{owner}} confirms —
 - MR !N → review and merge ({{reviewer_handle}})
 - {{ID}}: {{other human_only_actions, or omit the line when none}}
+- {{If a tailnet preview ran: Probado desde el cel → 🌐 <preview> · tailnet (abajo) — the label, never the URL}}
 — and then, as its LAST lines, everything after `=== LINKS ===` in the LAST courier
 RETURN, pasted verbatim: `localhost` FIRST ({{owner}} validates from iTerm on the Mac),
 the LAN IP after it (never one without the other — the LAN IP changes with the network
-and arrives dead, `localhost` does not), then the canonical artifacts. Paths, hashes
-and DoD-human go ABOVE the block, never after it: the `artifact-guard` Stop hook
+and arrives dead, `localhost` does not), the `🌐 … · tailnet` line when the brief had one (the one exception to the two-line rule), then the canonical artifacts.
+Paths, hashes and DoD-human go ABOVE the block, never after it: the `artifact-guard` Stop hook
 rejects any text after the last link, and a close whose courier block is missing.
 FORMAT: every link is a plain Markdown bullet `- [emoji Title](url)` — never inside
 a code fence, backticks, or 4-space indentation ({{owner}} taps these on a phone;

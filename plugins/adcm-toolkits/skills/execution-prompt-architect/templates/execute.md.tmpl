@@ -304,6 +304,16 @@ merges the wave's MR) — updates ALL plan docs in ONE pass, one Conventional co
    is dead on iOS; same for a served PDF or report) and passes the localhost URL in the
    courier's brief; the courier reads the LAN IP (`ipconfig getifaddr en0`) and `curl`s
    both URLs before returning them.
+   **Off the LAN — tailnet preview**: when the repo has a `tailnet-preview` profile (`tailnet-preview list`), the
+   orchestrator starts the preview with `tailnet-preview up <slug> --apply` instead — detached (it outlives the session
+   and keeps the Mac awake until `tailnet-preview down <slug> --apply` or the next wave's `up`) and mapped by
+   `tailscale serve` to a tailnet-only HTTPS URL (never `funnel`). It passes that URL in the brief's `Tailnet:` field;
+   the courier `curl`s it and returns a THIRD line — **the one exception to the two-line rule above** — right after the
+   LAN one, above the artifacts: `- [🌐 <preview> · tailnet](https://…ts.net:<port>/…)`, which {{owner}} opens from the
+   phone on any network. The orchestrator must dispatch on the verdict word, never on the exit code: `up` or `mapped` →
+   `Tailnet: <url>`; `lan-only` (no Tailscale) → `Tailnet: none`, two lines as before; any other word → `Preview: none`
+   and `Tailnet: none`, and the narrative and the 'Para ti' lines say why. With a tailnet line the 'Para ti' lines carry
+   `Probado desde el cel → 🌐 <preview> · tailnet (abajo)` — the label, never the URL.
    **Order of the final message**: repo paths and commit hashes (one line each —
    reference, not delivery) and the pending DoD-human lines go ABOVE the links block,
    never after it: the guard rejects any text after the last link. The block itself is

@@ -35,4 +35,4 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/artifact-courier/references/procedure.md` and
 
 ## RETURN
 
-Exactly the contract at the end of procedure.md: header, table, MEDIA, REGISTRY (`blocked by permissions: <the exact command>` when a seal is denied), ACCOUNT, URL CHANGES, ERRORS, then `=== LINKS ===` and the links. Short. Never HTML, never whole files, nothing after the block.
+Exactly the contract at the end of procedure.md: header, table, MEDIA, REGISTRY (`blocked by permissions: <the exact command>` when a seal is denied), ACCOUNT, URL CHANGES, ERRORS, then `=== LINKS ===` and the links (preview lines first: localhost, LAN, and tailnet when the brief gives `Tailnet:`). Short. Never HTML, never whole files, nothing after the block.

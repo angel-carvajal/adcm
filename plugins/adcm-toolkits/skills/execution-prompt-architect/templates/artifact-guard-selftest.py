@@ -390,6 +390,19 @@ def make_cases(now):
          dict(mtimes=task_touched, courier=ret_root,
               text="Wave closed.\n\n- [📱 Preview · LAN](http://192.168.1.20:3000/)\n" + block(ART_ROOT)),
          lambda rc, out: expect_block(rc, out, "3000", "localhost"), None),
+        # A tailnet preview line (https://*.ts.net, no RFC 1918 address) sits with the preview lines above the
+        # artifacts: no localhost twin is demanded and the block passes.
+        ("tailnet_line_above_artifacts",
+         dict(mtimes=task_touched, courier=ret_root,
+              text="Wave closed.\n\n- [🖥️ Preview · localhost](http://localhost:3939/)\n"
+                   "- [📱 Preview · LAN](http://192.168.1.20:3939/)\n"
+                   "- [🌐 Preview · tailnet](https://acme-mac.tail0000.ts.net:8443/)\n" + block(ART_ROOT)),
+         expect_silent, None),
+        # ... and after the last artifact link it is text after the block: blocked.
+        ("tailnet_line_after_artifacts",
+         dict(mtimes=task_touched, courier=ret_root,
+              text=closing_text + "\n- [🌐 Preview · tailnet](https://acme-mac.tail0000.ts.net:8443/)"),
+         lambda rc, out: expect_block(rc, out, "DESPUÉS"), None),
         # A stamp beyond the skew window (hand-edited / clock-skewed) must never disable the check.
         ("stamp_future",
          dict(mtimes=fresh_file, text=closing_text,

@@ -33,6 +33,8 @@ Status legend: ☐ pending · 🔄 in progress · ⛔ blocked (DoD-human pending
 Each wave closes by adding its `MR !N reviewed and merged` row (e.g. `| n | MR !N reviewed and merged |
 {{reviewer_handle}} | W(N+1) | {{due}} |` — owner = the Reviewer in `execute.md`'s header, blocks = the next
 wave); it is struck through once merged — Claude never merges.
+A close that carried a tailnet preview also adds `| n | W<N> probado desde el cel (🌐 tailnet) | {{owner}} | MR !N | {{due}} |`
+— struck through once {{owner}} confirms in chat; after the merge `tailnet-preview down <slug> --apply` (or the next wave's `up`) stops it.
 
 Resolved rows stay in the table, struck through with ✅ (`~~…~~ ✅`); never delete them.
 No pending items → keep the header row only (no placeholder or `—` rows).
