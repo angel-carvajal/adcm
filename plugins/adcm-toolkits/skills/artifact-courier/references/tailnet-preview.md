@@ -157,3 +157,4 @@ keeps the file open, so a chatty server left up for days grows until the next `u
 - The child outlives the session because Bash runs unsandboxed; under a sandboxed harness it could be reaped.
 - `caffeinate` cannot stop lid-close sleep: keep the lid open (or an external display and power) while a link is out.
 - Ports only (https 8443-8499 unless pinned, IPv4 loopback targets); no files or folders, one tailnet.
+- Run-together names such as `APIKEY` or `SECRETKEY` are not refused by the `_`-token rule: split them (`API_KEY`) or keep them out of the profile.

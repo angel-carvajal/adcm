@@ -756,7 +756,9 @@ def merge_profile(slug, saved, a):
 
 
 def shown(prof):
-    return dict(prof, cwd=tilde(prof.get("cwd")))
+    """The profile as printed: home paths in cwd, cmd items and env values as `~` (the stored one is untouched)."""
+    return dict(prof, cwd=tilde(prof.get("cwd")), cmd=[tilde(x) for x in prof.get("cmd") or []],
+                env={k: tilde(v) for k, v in (prof.get("env") or {}).items()})
 
 
 def resolve_slug(st, rep):

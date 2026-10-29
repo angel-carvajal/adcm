@@ -884,9 +884,11 @@ def case_caps_and_verdict(c, t):
 
 def case_json_one_object(c, t):
     need_lsof()
-    p = free_port()
-    steps = (("doctor", "--json"), ("up", "demo", "--cwd", c.site, "--port", p, "--json", "--", *serve_cmd(p)),
-             ("up", "demo", "--cwd", c.site, "--port", p, "--apply", "--json", "--", *serve_cmd(p)),
+    p, conf = free_port(), os.path.join(c.root, "conf.json")
+    cmd = (sys.executable, c.fixture, str(p))
+    flags = ("--cwd", c.site, "--port", p, "--env", f"APP_CONFIG={conf}")
+    steps = (("doctor", "--json"), ("up", "demo", *flags, "--json", "--", *cmd),
+             ("up", "demo", *flags, "--apply", "--json", "--", *cmd),
              ("status", "demo", "--json"), ("url", "demo", "--json"), ("list", "--json"), ("down", "demo", "--json"),
              ("down", "demo", "--apply", "--json"), ("up", "Bad_Slug", "--json"), ("status", "ghost", "--json"))
     for args in steps:
@@ -899,6 +901,14 @@ def case_json_one_object(c, t):
         t.ok(isinstance(d, dict) and JSON_KEYS <= set(d), f"{args[:2]}: keys {sorted(d) if isinstance(d, dict) else d}")
         t.eq(d.get("exit"), r.rc, f"{args[:2]}: exit field")
         t.ok(str(d.get("verdict", "")).startswith(VERDICT), f"{args[:2]}: verdict field")
+        t.ok(c.root not in r.out, f"{args[:2]}: an absolute home path in the JSON: {r.out[:200]!r}")
+        prof = d.get("profile") if isinstance(d, dict) and isinstance(d.get("profile"), dict) else None
+        if prof is not None and args[1] == "demo":
+            t.eq(prof.get("cmd"), [sys.executable, "~/fixture_server.py", str(p)], f"{args[:2]}: profile.cmd")
+            t.eq((prof.get("env") or {}).get("APP_CONFIG"), "~/conf.json", f"{args[:2]}: profile.env")
+    stored = c.load("profiles", "demo") or {}
+    t.eq((stored.get("cmd"), stored.get("env")), (list(cmd), {"APP_CONFIG": conf}),
+         "the stored profile keeps absolute paths (the ~ form is display only)")
 
 
 def case_no_private_strings(c, t):
