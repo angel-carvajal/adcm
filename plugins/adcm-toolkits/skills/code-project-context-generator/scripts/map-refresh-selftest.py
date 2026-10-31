@@ -261,6 +261,10 @@ def abstract_class(name):
     return f"export abstract class {name}<T> {{}}\n"
 
 
+def generic_fn(name):
+    return f"export function {name}<T>(x: T): T {{ return x }}\n"
+
+
 # ------------------------------------------------------------------ map cases
 BASE_API = ("export abstract class BaseApiService<T extends Record<string, unknown>> {\n"
             "  constructor(protected readonly path: string) {}\n"
@@ -952,23 +956,59 @@ def case_detector_order(ctx, t):
     t.eq(json.dumps(mapped_swapped), json.dumps(mapped), "the map does not depend on the order of the scan either")
 
 
+TEST_FOLDERS = ("test", "tests", "__tests__", "spec", "specs", "e2e", "__mocks__")
+
+
 def case_test_file_rule(ctx, t):
-    ctx.tree("acme", {
+    files = {
         "package.json": '{"name": "acme"}\n',
-        "src/shared/tests/helpers.ts": "export function makeThing<T>(x: T): T { return x }\n",
-        "src/shared/specs/billing.ts": "export function makeBill<T>(x: T): T { return x }\n",
-        "src/shared/test_fixtures.ts": "export function makeFixture<T>(x: T): T { return x }\n",
-        "src/shared/billing.spec.ts": "export function makeSpec<T>(x: T): T { return x }\n",
+        # named like a test: the testing block counts them and the map leaves them out
+        "src/shared/billing.spec.ts": generic_fn("makeSpec"),
         "src/shared/api_test.go": "package shared\n\nfunc MapAll[T any](xs []T) []T {\n\treturn xs\n}\n",
         "src/shared/Test.php": "<?php\nabstract class AbstractGuard\n{\n}\n",
-    })
+        "src/shared/test_utils.py": "class BaseBuilder:\n    pass\n",
+        "e2e/checkout.spec.ts": "describe('checkout', () => {})\n",
+        # test_ is a Python prefix only, and a folder that merely contains the word is no test folder
+        "src/shared/test_fixtures.ts": generic_fn("makeFixture"),
+        "src/shared/contest/ranking.ts": generic_fn("rankAll"),
+        "src/shared/latest/feed.ts": generic_fn("feedAll"),
+        # the consumer to copy from sorts after the two in test folders, so only the folder rule moves
+        # the exemplar to it
+        "src/shared/format.ts": generic_fn("formatAll"),
+        "__mocks__/format.ts": "formatAll([])\n",
+        "e2e/checkout.ts": "formatAll([])\n",
+        "src/latest/page.ts": "formatAll([])\n",
+        # test support code keeps ordinary names inside a test folder
+        "e2e/pages/base-page.ts": "export abstract class BasePage {}\n",
+        "e2e/pages/login-page.ts": "export class LoginPage extends BasePage {}\n",
+        "e2e/pages/home-page.ts": "export class HomePage extends BasePage {}\n",
+    }
+    for n, folder in enumerate(TEST_FOLDERS):
+        files[f"src/shared/{folder}/helpers.ts"] = generic_fn(f"makeProbe{n}")
+    for name in ("Users", "Orders", "Items"):
+        for folder in ("__tests__/fixtures", "src/latest"):
+            files[f"{folder}/{name.lower()}.service.ts"] = f"export class {name}Service {{}}\n"
+    ctx.tree("acme", files)
     out = ctx.scan("acme")
-    t.eq(out["testing"]["test_file_count"], 3,
-         "the testing block counts billing.spec.ts, api_test.go and Test.php")
-    t.eq(out["testing"]["test_dirs"], ["src/shared"],
-         "a file in a tests/ or specs/ folder is not a test by its folder")
-    t.eq(sorted(u["symbol"] for u in rows(out, "utilities")), ["makeBill", "makeFixture", "makeThing"],
-         "the map leaves out exactly the files the testing block counts, no more and no fewer")
+
+    t.eq(out["testing"]["test_file_count"], 5,
+         "the testing block counts by name alone: billing.spec.ts, api_test.go, Test.php, test_utils.py and "
+         "e2e/checkout.spec.ts, and no file that merely sits in a test folder")
+    t.eq(out["testing"]["test_dirs"], ["e2e", "src/shared"],
+         "test_dirs lists the folders that hold a test-named file, not the folders named after tests")
+
+    utilities = rows(out, "utilities")
+    t.eq(sorted(u["symbol"] for u in utilities), ["feedAll", "formatAll", "makeFixture", "rankAll"],
+         "the map leaves out the files named like a test and everything in the seven test folders "
+         "(makeProbe0..6, BasePage), and keeps contest/ and latest/")
+    check_row(t, find(utilities, "symbol", "formatAll"), {"consumers_count": 3, "exemplar": "src/latest/page.ts"},
+              "formatAll (a consumer in a test folder counts, but never leads)")
+    t.eq([(p["name"], p["count"], p["evidence_paths"]) for p in rows(out, "patterns")],
+         [("shape:service", 3, [f"src/latest/{name}.service.ts" for name in ("items", "orders", "users")])],
+         "no family or shape forms from a test folder (e2e/pages, __tests__/fixtures); latest/ still does")
+    check_row(t, find(out["usage_map"]["surfaces"], "symbol", "formatAll"), {
+        "consumers_count": 3, "consumers": ["__mocks__/format.ts", "e2e/checkout.ts", "src/latest/page.ts"]},
+        "usage_map surface formatAll (the folder rule is the map's alone)")
 
 
 CASES = [

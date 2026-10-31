@@ -279,6 +279,10 @@ SHARED_DIR_HINTS = {"shared", "lib", "libs", "packages", "components", "ui", "co
 MAP_SHARED_HINTS = SHARED_DIR_HINTS | {"services", "api", "hooks", "models", "clients",
                                        "stores", "composables"}
 
+# Test support code (page objects, fixtures, mocks) lives in these folders under ordinary names. The map
+# leaves it out; the testing block still counts by file name alone, so its numbers do not move.
+MAP_TEST_DIRS = {"test", "tests", "__tests__", "spec", "specs", "e2e", "__mocks__"}
+
 # A folder holding one of these manifests is an application of its own, not shared code.
 APP_MANIFESTS = {"package.json", "composer.json", "go.mod", "pyproject.toml", "Cargo.toml"}
 
@@ -526,6 +530,14 @@ def _is_test_file(path: str) -> bool:
             or flow.endswith(("_test.go", "_test.py", "_test.rb", "_spec.rb"))
             or (flow.startswith("test_") and ext == ".py")
             or (ext == ".php" and (fname.endswith("Test.php") or flow.endswith("_test.php"))))
+
+
+def _map_excluded(rel: str) -> bool:
+    """True for a file the map leaves out: one named like a test, or one inside a MAP_TEST_DIRS folder.
+
+    Folders match by whole name, so `contest/` and `latest/` stay in.
+    """
+    return _is_test_file(rel) or not MAP_TEST_DIRS.isdisjoint(rel.split("/")[:-1])
 
 
 def _within(rel: str, folders) -> bool:
@@ -1400,7 +1412,7 @@ class ProjectScanner:
         for fpath, rel in files:
             ext = fpath.suffix.lower()
             group = MAP_LANG.get(ext)
-            if group is None or _is_test_file(rel):
+            if group is None or _map_excluded(rel):
                 continue
             try:
                 text = fpath.read_text(encoding="utf-8", errors="ignore")
@@ -1443,8 +1455,8 @@ class ProjectScanner:
 
         def lead(rel: str) -> int:
             """Lower leads: 0 a consumer to copy from (not a test, outside the shared roots), 1 a non-test
-            inside them, 2 a test."""
-            return 2 if _is_test_file(rel) else int(under(rel))
+            inside them, 2 a test, by name or by folder."""
+            return 2 if _map_excluded(rel) else int(under(rel))
 
         counts, _, exemplars = self._census(
             sorted(defining), lambda rel, sym: rel in defining[sym], files, lead)
@@ -1481,7 +1493,7 @@ class ProjectScanner:
         roles: dict[str, set] = defaultdict(set)
         for _, rel in files:
             role = _shape_role(rel)
-            if role and not _is_test_file(rel):
+            if role and not _map_excluded(rel):
                 roles[role].add(rel)
         for role in sorted(roles):
             tally = Counter(b for rel in roles[role] for b in bases_by_file.get(rel, ()))
