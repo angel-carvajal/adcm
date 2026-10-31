@@ -28,6 +28,11 @@ import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from dependency_manifest import attach_dependency_manifest, dependency_update_targets
+except ImportError:
+    attach_dependency_manifest = dependency_update_targets = None
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -601,6 +606,8 @@ class ProjectScanner:
         self._detect_test_strategy()
         self._detect_usage_map()
         self._detect_map()
+        if attach_dependency_manifest:
+            attach_dependency_manifest(self.root, self.result, SKIP_DIRS)
         return self.result
 
     # ---- walker ----
@@ -1547,6 +1554,8 @@ def main():
     if args.update:
         changed = [p.strip().strip("/") for p in args.update.split(",") if p.strip()]
         result["update"] = delta(result, changed)
+        if dependency_update_targets:
+            result["update"]["affected_context_files"] = dependency_update_targets(changed)
 
     out = json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False, default=str)
 

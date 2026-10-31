@@ -605,7 +605,7 @@ def case_update_affected_map_rows(ctx, t):
     files["src/pages/home.tsx"] = "import { BaseApiService } from '@/shared/base-api.service'\n"
     ctx.tree("acme", files)
     base = "src/shared/base-api.service.ts"
-    key = ["affected_folders", "affected_map_rows", "affected_surfaces", "paths"]
+    key = ["affected_context_files", "affected_folders", "affected_map_rows", "affected_surfaces", "paths"]
 
     out = ctx.scan("acme", "--update", base)
     t.eq(sorted(out["update"]), key, "update keys")
