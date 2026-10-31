@@ -949,6 +949,118 @@ def case_ci_secret_masking_quoted_and_bare(ctx, t):
         t.lacks(json.dumps(m), secret, "the manifest JSON")
 
 
+DOTTED_CREDENTIALS = ("john.doe:12/34", "john.doe:12?34", "john.doe:12#34", "a.b:c/d")
+DOTTED_SECRETS = ("john.doe", "12/34", "12?34", "12#34", "a.b:c")
+PRESERVED_SPECS = {"gitref": "git+https://git.example.com/acme/e.git@v1.2.3",
+                   "cdn": "https://cdn.example.com/pkg@1.2.3/dist.tgz",
+                   "scoped": "https://npm.example.com:8443/@acme/pkg/-/pkg-1.0.0.tgz",
+                   "alias": "npm:@acme/x@^1.0.0", "workspace": "workspace:*",
+                   "github": "github:acme/repo#semver:^1", "local": "file:" + PARENT + "local"}
+
+
+def case_userinfo_dotted_user_digit_password(ctx, t):
+    for n, credential in enumerate(DOTTED_CREDENTIALS):
+        tag = "dotted%d" % n
+        ctx.tree(tag, {
+            "package.json": J({"name": "acme",
+                               "dependencies": {"lib": "git+https://%s@git.example.com/acme/lib.git" % credential},
+                               "overrides": {"lib": "https://%s@cdn.example.com/lib.tgz" % credential}}),
+            ".npmrc": ("registry=https://%s@registry.example.com/\n"
+                       "@acme:registry=https://%s@npm.example.com:4873/npm/\n" % (credential, credential)),
+            "requirements.txt": ("pkg @ https://%s@files.example.com/pkg.whl\n"
+                                 "git+https://%s@git.example.com/acme/other.git#egg=other\n"
+                                 % (credential, credential)),
+            "pnpm-workspace.yaml": "catalog:\n  lib: git+https://%s@git.example.com/acme/lib.git\n" % credential,
+            ".gitlab-ci.yml": ("build:\n  script:\n    - curl https://%s@ci.example.com/hook && npm run build\n"
+                               % credential)})
+        m = ctx.manifest(tag)
+        t.clean(m)
+        t.eq(m["npmrc"], [{"path": ".npmrc", "keys": {"@acme:registry": "npm.example.com:4873",
+                                                       "registry": "registry.example.com"}}], tag + ": hosts only")
+        t.eq({(p["name"], p["kind"]): p["declared"] for p in m["packages"]}, {
+            ("lib", "prod"): "git+https://***@git.example.com/acme/lib.git",
+            ("pkg", "prod"): "https://***@files.example.com/pkg.whl",
+            ("other", "prod"): "git+https://***@git.example.com/acme/other.git"}, tag + ": declared specs")
+        t.eq(m["overrides"], [{"name": "lib", "spec": "https://***@cdn.example.com/lib.tgz",
+                               "source": "package.json#overrides"}], tag + ": override spec")
+        t.eq(m["catalogs"]["default"]["lib"]["spec"], "git+https://***@git.example.com/acme/lib.git",
+             tag + ": catalog spec")
+        t.eq(m["ci"]["verify_jobs"], [{"file": ".gitlab-ci.yml", "job": "build",
+                                       "commands": ["curl https://***@ci.example.com/hook && npm run build"]}],
+             tag + ": the CI command is masked up to the host")
+        for secret in DOTTED_SECRETS:
+            t.lacks(json.dumps(m), secret, tag + ": the manifest JSON")
+
+    if sys.version_info >= (3, 11):
+        deps = ", ".join('"pkg%d @ https://%s@files.example.com/pkg.whl"' % pair
+                         for pair in enumerate(DOTTED_CREDENTIALS))
+        ctx.tree("pyproject", {"pyproject.toml": '[project]\nname = "acme"\ndependencies = [%s]\n' % deps})
+        py = ctx.manifest("pyproject")
+        t.eq({e["name"]: e["declared"] for e in py["packages"]},
+             {"pkg%d" % n: "https://***@files.example.com/pkg.whl" for n in range(len(DOTTED_CREDENTIALS))},
+             "pyproject specs")
+        for secret in DOTTED_SECRETS:
+            t.lacks(json.dumps(py), secret, "the pyproject manifest JSON")
+
+    scoped = PRESERVED_SPECS["scoped"]
+    ctx.tree("preserved", {
+        "package.json": J({"name": "acme", "dependencies": dict(PRESERVED_SPECS),
+                           "overrides": {key: PRESERVED_SPECS[key] for key in ("gitref", "cdn", "scoped")}}),
+        "requirements.txt": "vcs @ %s\n" % PRESERVED_SPECS["gitref"],
+        "pnpm-workspace.yaml": "catalog:\n  cdn: %s\n  scoped: %s\n" % (PRESERVED_SPECS["cdn"], scoped),
+        ".gitlab-ci.yml": ("build:\n  script:\n    - curl -O %s && npm run build\n    - npm run test --registry %s\n"
+                           % (PRESERVED_SPECS["cdn"], scoped))})
+    kept = ctx.manifest("preserved")
+    t.clean(kept)
+    declared = {e["name"]: e["declared"] for e in kept["packages"]}
+    t.eq({key: declared.get(key) for key in PRESERVED_SPECS}, PRESERVED_SPECS, "preserved forms stay byte-identical")
+    t.eq(declared.get("vcs"), PRESERVED_SPECS["gitref"], "a pinned git ref in a requirements line")
+    t.eq({o["name"]: o["spec"] for o in kept["overrides"]},
+         {key: PRESERVED_SPECS[key] for key in ("gitref", "cdn", "scoped")}, "preserved override specs")
+    t.eq({name: e["spec"] for name, e in kept["catalogs"]["default"].items()},
+         {"cdn": PRESERVED_SPECS["cdn"], "scoped": scoped}, "preserved catalog specs")
+    t.eq(kept["ci"]["verify_jobs"], [{"file": ".gitlab-ci.yml", "job": "build", "commands": [
+        "curl -O %s && npm run build" % PRESERVED_SPECS["cdn"], "npm run test --registry " + scoped]}],
+         "preserved URLs in CI commands")
+
+    ctx.tree("authority", {
+        "package.json": J({"name": "acme", "dependencies": {
+            "tokenref": "git+https://tok3n@git.example.com/acme/pkg.git@v1.2.3",
+            "scopedauth": "https://user:tok3n@registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
+            "scopedspecial": "https://john.doe:12/34@registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
+            "nested": "https://user:tok3n@registry.example.com/?next=https://other.example.com/@acme/x",
+            "port": "https://git.example.com:8443/acme/e.git@v1.2.3"}}),
+        ".gitlab-ci.yml": ("build:\n  script:\n    - curl https://john.doe:12/34@ci.example.com/a "
+                           "https://a.b:c/d@ci.example.com/b && npm run build\n")})
+    shapes = ctx.manifest("authority")
+    t.eq({e["name"]: e["declared"] for e in shapes["packages"]}, {
+        "tokenref": "git+https://***@git.example.com/acme/pkg.git@v1.2.3",
+        "scopedauth": "https://***@registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
+        "scopedspecial": "https://***@registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
+        "nested": "https://***@registry.example.com/?next=https://other.example.com/@acme/x",
+        "port": "https://***@v1.2.3"},
+         "userinfo before a path @ or a /@ marker is masked; a port before a path @ is over-masked on purpose")
+    t.eq(shapes["ci"]["verify_jobs"], [{"file": ".gitlab-ci.yml", "job": "build", "commands": [
+        "curl https://***@ci.example.com/a https://***@ci.example.com/b && npm run build"]}],
+         "two URLs in one command are masked one by one")
+    for secret in DOTTED_SECRETS + ("tok3n",):
+        t.lacks(json.dumps(shapes), secret, "the manifest JSON")
+
+    ctx.tree("hostless", {"package.json": J({"name": "acme"}), ".npmrc": (
+        "registry=https://a.example.com b@c.example.com/\n@acme:registry=https://registry.example.com/\n")})
+    t.eq(ctx.manifest("hostless")["npmrc"][0]["keys"], {"@acme:registry": "registry.example.com"},
+         "a registry value that names two hosts is dropped")
+
+    huge, slashes = "https://" + "a:" * 250000 + "@x.example.com/", "https://" + "/@" * 250000
+    ctx.tree("huge", {"package.json": J({"name": "acme", "dependencies": {"huge": huge, "slashes": slashes}})})
+    started = time.monotonic()
+    big = ctx.manifest("huge")
+    elapsed = time.monotonic() - started
+    t.ok(elapsed < 2, "two 500 KB URL tokens took %.1fs" % elapsed)
+    t.eq({e["name"]: e["declared"] for e in big["packages"]},
+         {"huge": "https://***@x.example.com/", "slashes": slashes}, "huge tokens are masked or kept like short ones")
+
+
 # ------------------------------------------------------------------ cases: YAML it cannot read
 def case_yaml_unterminated_flow_is_noted_and_fast(ctx, t):
     importers = "".join("  pkg%d:\n    dependencies:\n      left-pad:\n        specifier: 1.3.0\n"
@@ -1273,6 +1385,7 @@ CASES = [
     ("registry_userinfo_with_specials", case_registry_userinfo_with_specials),
     ("spec_urls_carry_no_credentials", case_spec_urls_carry_no_credentials),
     ("ci_secret_masking_quoted_and_bare", case_ci_secret_masking_quoted_and_bare),
+    ("userinfo_dotted_user_digit_password", case_userinfo_dotted_user_digit_password),
     ("yaml_unterminated_flow_is_noted_and_fast", case_yaml_unterminated_flow_is_noted_and_fast),
     ("yaml_tab_indentation_is_noted", case_yaml_tab_indentation_is_noted),
     ("update_root_lockfile", case_update_root_lockfile),

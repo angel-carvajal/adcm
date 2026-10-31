@@ -587,15 +587,45 @@ def _strs(value):
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
-# The userinfo of a URL may hold @, /, ? or #. A dotted host or localhost followed by a path keeps every later @ for
-# the path (scoped package, git ref); any other prefix is credentials, up to the last @ of the token.
-_HOST = r"(?:(?:[a-z0-9-]+\.)+[a-z0-9-]+|localhost)(?::\d*)?(?=[/?#\s]|$)"
-_URL_USERINFO = re.compile(r"(://)(?:[^/?#\s]*@|(?!%s|/)(?:(?!://)\S)*[^\s/]@)" % _HOST, re.I)
+# A URL token is what follows "://" up to whitespace or the next "://". Its userinfo ends at the token's last "@" that
+# does not follow a "/" ("/@" marks a scoped package, never credentials) when the text before that "@" holds no / ? #
+# (user@host, user:pass@host) or holds a ":" (user:pass, whose password may hold / ? #). Otherwise it ends at the last
+# "@" before the first / ? # (the authority's own userinfo, ahead of a path "@" such as a git ref). The host shape is
+# never judged.
+# WHY: a port or IPv6 host followed by a path "@" (host:8080/pkg@v1) is over-masked, the safe side.
+_SPACE = re.compile(r"\s")
+_AUTHORITY_END = re.compile(r"[/?#]")
+
+
+def _userinfo_end(text, start, stop):
+    """Index of the "@" that ends the userinfo of the URL token text[start:stop], or -1 when it has none."""
+    last = text.rfind("@", start, stop)
+    while start < last and text[last - 1] == "/":
+        last = text.rfind("@", start, last)
+    if last < 0:
+        return -1
+    edge = _AUTHORITY_END.search(text, start, last)
+    if edge is None or text.find(":", start, last) >= 0:
+        return last
+    return text.rfind("@", start, edge.start())
 
 
 def _mask_userinfo(text):
     """`text` with the userinfo of every scheme://userinfo@host replaced by ***; other values pass through."""
-    return _URL_USERINFO.sub(r"\1***@", text) if isinstance(text, str) else text
+    if not isinstance(text, str) or "@" not in text or "://" not in text:
+        return text
+    out, kept, found = [], 0, text.find("://")
+    while found >= 0:
+        start = found + 3
+        found = text.find("://", start)
+        stop = len(text) if found < 0 else found
+        blank = _SPACE.search(text, start, stop)
+        end = _userinfo_end(text, start, blank.start() if blank else stop)
+        if end >= 0:
+            out.append(text[kept:start] + "***")
+            kept = end
+    out.append(text[kept:])
+    return "".join(out)
 
 
 def _guard(c, label, fn, default):
@@ -909,7 +939,7 @@ _REQ = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*([^;#]*)")
 
 def _requirement(line):
     """(name, spec) of a pip requirement line; None for options, includes and unnamed URLs."""
-    line = line.strip()
+    line = _mask_userinfo(line.strip())  # before the cuts at "#" and ";" below, which a password may hold
     if not line or line[0] in "#-":
         return None
     if "://" in line.split(" @ ")[0]:
@@ -1086,7 +1116,8 @@ def _registry_host(value):
         host, port = parts.hostname, parts.port
     except ValueError:
         return None
-    if not host or "${" in host:
+    userinfo = parts.netloc.rpartition("@")[0]
+    if not host or "${" in host or userinfo not in ("", "***"):
         return None
     if ":" in host:
         host = "[%s]" % host
