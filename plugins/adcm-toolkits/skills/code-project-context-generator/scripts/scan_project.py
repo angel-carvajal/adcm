@@ -8,8 +8,15 @@ The output is designed to feed the generation of a
 
 Usage:
     python3 scan_project.py <project_path> [--output report.json] [--max-depth 4]
+                            [--pretty] [--update path,path]
 
 The scanner is stack-agnostic — it detects Node/TS, PHP, Python, Go, Rust, Java, Ruby.
+
+Two blocks serve the lazy brain: `usage_map` (shared surfaces and who consumes them) and
+`map` (candidates for the brain map: reusable `utilities`, repeated `patterns` and
+`where_to_look` pointers). With --update the JSON also gains an `update` block naming the
+affected folders, usage-map surfaces and map rows (`update.affected_map_rows`: utilities as
+`symbol@path`, patterns by name), so a delta refresh revisits only those.
 """
 
 from __future__ import annotations
@@ -262,6 +269,17 @@ CODE_EXTS = {".ts", ".tsx", ".js", ".jsx", ".py", ".php", ".go", ".rs", ".rb", "
 SHARED_DIR_HINTS = {"shared", "lib", "libs", "packages", "components", "ui", "common",
                     "core", "utils", "helpers", "dpl", "design-system", "widgets"}
 
+# The map also reads these as shared code. They stay out of SHARED_DIR_HINTS because widening
+# that set would rewrite the usage map of every project already documented.
+MAP_SHARED_HINTS = SHARED_DIR_HINTS | {"services", "api", "hooks", "models", "clients",
+                                       "stores", "composables"}
+
+# A folder holding one of these manifests is an application of its own, not shared code.
+APP_MANIFESTS = {"package.json", "composer.json", "go.mod", "pyproject.toml", "Cargo.toml"}
+
+# An `api` folder directly under one of these holds route handlers, not a shared client layer.
+ROUTE_TREE_PARENTS = {"app", "pages", "routes"}
+
 # Symbols too generic to census (would match everywhere)
 USAGE_STOPWORDS = {"default", "index", "types", "props", "main", "config", "utils",
                    "constants", "helpers", "common", "shared", "component", "module",
@@ -272,6 +290,212 @@ USAGE_STOPWORDS = {"default", "index", "types", "props", "main", "config", "util
 USAGE_MAX_CONSUMER_PATHS = 15
 USAGE_MAX_SURFACES = 50
 USAGE_MAX_FILE_BYTES = 400_000
+
+# Candidate rows for the lazy brain map. The caps keep it short enough to read before writing code.
+MAP_MAX_UTILITIES = 40
+MAP_MAX_PATTERNS = 20
+MAP_MAX_EVIDENCE = 5
+MAP_MAX_WHERE = 30
+MAP_MAX_DOCS = 20
+MAP_SIGNATURE_MAX = 80
+
+# Utility kinds, most reusable first; the order also ranks rows when a cap cuts the list.
+MAP_KINDS = ("abstract-class", "base-class", "generic-class", "generic-fn",
+             "hook", "composable", "service", "helper")
+
+# Language group by extension: it picks the declaration patterns that apply to a file.
+MAP_LANG = {".ts": "ts", ".tsx": "ts", ".js": "ts", ".jsx": "ts", ".vue": "ts",
+            ".svelte": "ts", ".astro": "ts", ".php": "php", ".java": "jvm", ".kt": "jvm",
+            ".cs": "jvm", ".py": "py", ".go": "go"}
+
+_NAME = r"(?P<name>[A-Za-z_$][\w$]*)"
+_ABSTRACT_RX = re.compile(
+    r"^[ \t]*(?:export\s+)?(?:default\s+)?"
+    r"(?:(?:public|protected|internal|private|static|final|sealed|open|data)\s+)*"
+    r"abstract\s+(?:partial\s+)?class\s+" + _NAME, re.M)
+_BASE_RX = re.compile(r"\bclass\s+(?P<name>(?:Base|Abstract)[A-Z][\w$]*)")
+
+# Declarations that make an export worth reusing, per language group, in MAP_KINDS order.
+MAP_DECL_RX = {
+    "ts": [
+        ("abstract-class", _ABSTRACT_RX),
+        ("base-class", _BASE_RX),
+        ("generic-class", re.compile(
+            r"\bexport\s+(?:default\s+)?(?:abstract\s+)?class\s+" + _NAME + r"\s*<")),
+        ("generic-fn", re.compile(
+            r"\bexport\s+(?:default\s+)?(?:async\s+)?function\s+" + _NAME + r"\s*<")),
+        ("generic-fn", re.compile(
+            r"\bexport\s+const\s+" + _NAME + r"\s*(?::[^=\n]{1,200})?=\s*(?:async\s+)?<")),
+        ("hook", re.compile(
+            r"\bexport\s+(?:default\s+)?(?:function|const)\s+(?P<name>use[A-Z][\w$]*)")),
+        ("service", re.compile(
+            r"@Injectable\s*\([^)]{0,200}\)\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+" + _NAME)),
+        ("helper", re.compile(
+            r"\bexport\s+(?:default\s+)?(?:async\s+)?function\s+(?P<name>[a-z][\w$]*)\s*[(<]")),
+        ("helper", re.compile(
+            r"\bexport\s+const\s+(?P<name>[a-z][\w$]*)\s*(?::[^=\n]{1,200})?="
+            r"\s*(?:async\s+)?(?:\(|[A-Za-z_$][\w$]*\s*=>|function\b)")),
+    ],
+    "php": [("abstract-class", _ABSTRACT_RX), ("base-class", _BASE_RX)],
+    "jvm": [("abstract-class", _ABSTRACT_RX), ("base-class", _BASE_RX)],
+    "py": [
+        ("abstract-class", re.compile(
+            r"^class\s+" + _NAME + r"\s*\([^)\n]*\b(?:ABC|ABCMeta|Protocol)\b", re.M)),
+        ("base-class", _BASE_RX),
+        ("generic-class", re.compile(r"^class\s+" + _NAME + r"\s*\([^)\n]*\bGeneric\[", re.M)),
+        ("helper", re.compile(r"^(?:async\s+)?def\s+(?P<name>[a-z]\w*)\s*\(", re.M)),
+    ],
+    "go": [("generic-fn", re.compile(r"^func\s+" + _NAME + r"\s*\[", re.M))],
+}
+
+# A class and what it extends. Kotlin and C# write the base after a colon, which cannot tell a base
+# class from an interface, so only the `extends` keyword (and Python's base list) is read.
+CLASS_HEAD_RX = re.compile(
+    r"^[ \t]*(?:export\s+)?(?:default\s+)?"
+    r"(?:(?:public|protected|internal|private|static|final|sealed|open|data|abstract|partial)\s+)*"
+    r"class\s+(?!(?:extends|implements)\b)" + _NAME, re.M)
+EXTENDS_RX = re.compile(r"\s*extends\s+(?P<base>[A-Za-z_$\\][\w$.\\]*)")
+ARROW_HEAD_RX = re.compile(r"[ \t]*(?::[^=\n]{1,200})?=[ \t]*(?:async\s+)?")
+PY_CLASS_RX = re.compile(r"^class\s+(?P<name>[A-Za-z_]\w*)\s*(?:\((?P<bases>[^)\n]*)\))?", re.M)
+PY_BASES_RX = re.compile(r"[ \t]*\(([^)\n]*)\)")
+PY_NON_BASES = {"object", "ABC", "ABCMeta", "Protocol", "Generic"}
+
+# TypeScript's built-in utility types: a hand-written variant of one of these is a missed reuse.
+UTILITY_TYPES = ("Awaited", "Exclude", "Extract", "InstanceType", "NonNullable", "Omit",
+                 "Parameters", "Partial", "Pick", "Readonly", "Record", "Required", "ReturnType")
+UTILITY_TYPE_RX = re.compile(r"\b(" + "|".join(UTILITY_TYPES) + r")\s*<")
+
+# The last word of a file name says what role it plays (providers.service.ts, ProviderForm.vue).
+SHAPE_ROLES = ("service", "api", "store", "schema", "columns", "list", "form", "detail",
+               "repository", "controller", "dto")
+
+# Test code is neither a reusable export nor evidence of a pattern.
+TEST_FILE_RX = re.compile(
+    r"(^|/)(tests?|__tests__|specs?|e2e|__mocks__)/|\.(test|spec)\.|(^|/)test_[^/]*$"
+    r"|_(test|spec)\.[^/]*$|[a-z0-9]Tests?\.[^/]*$")
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+def _symbol_ok(name: str) -> bool:
+    """True for a name worth censusing: long enough, not a generic word, shaped like an identifier."""
+    return (len(name) >= 4 and name.lower() not in USAGE_STOPWORDS
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name) is not None)
+
+
+def census_cmd(sym: str) -> str:
+    """Shell one-liner that recounts the files mentioning `sym`, leaving out build and coverage output."""
+    return (f"grep -rl '{sym}' . --exclude-dir=node_modules "
+            "--exclude-dir=.git --exclude-dir=coverage --exclude-dir=reports "
+            "--exclude-dir=dist --exclude-dir=.next | wc -l")
+
+
+def _collapse(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _balanced(text: str, i: int, open_ch: str, close_ch: str, limit: int = 400) -> int:
+    """Offset just past the bracket pair opening at text[i], or -1 when it does not close.
+
+    The `>` of an arrow is not a closer and a `;` ends the search, so a comparison such as
+    `a < b` cannot swallow the code after it.
+    """
+    depth = 0
+    for j in range(i, min(len(text), i + limit)):
+        ch = text[j]
+        if ch == open_ch:
+            depth += 1
+        elif ch == close_ch and not (open_ch == "<" and text[j - 1] == "="):
+            depth -= 1
+            if depth == 0:
+                return j + 1
+        elif ch == ";":
+            return -1
+    return -1
+
+
+def _type_params(text: str, i: int, open_ch: str = "<", close_ch: str = ">"):
+    """Type parameters opening right after offset `i`: (`T extends Id`, offset past the clause)."""
+    j = i
+    while j < len(text) and text[j] in " \t":
+        j += 1
+    if j >= len(text) or text[j] != open_ch:
+        return "", i
+    end = _balanced(text, j, open_ch, close_ch)
+    if end < 0:
+        return "", i
+    return _collapse(text[j + 1:end - 1]), end
+
+
+def _generics_after(text: str, i: int, group: str) -> str:
+    """Type parameters declared right after the name that ends at offset `i`."""
+    if group == "py":
+        bases = PY_BASES_RX.match(text, i)
+        inner = bases.group(1) if bases else ""
+        at = inner.find("Generic[")
+        if at < 0:
+            return ""
+        start = at + len("Generic")
+        end = _balanced(inner, start, "[", "]")
+        return _collapse(inner[start + 1:end - 1]) if end > 0 else ""
+    if group == "go":
+        return _type_params(text, i, "[", "]")[0]
+    if group == "ts":
+        head = ARROW_HEAD_RX.match(text, i)  # `export const f = <T,>(...)` opens its type parameters after `=`
+        i = head.end() if head else i
+    return _type_params(text, i)[0]
+
+
+def _signature(text: str, pos: int) -> str:
+    """The declaration line holding offset `pos`, whitespace collapsed and cut at MAP_SIGNATURE_MAX."""
+    start = text.rfind("\n", 0, pos) + 1
+    end = text.find("\n", pos)
+    line = _collapse(text[start:end if end >= 0 else len(text)][:4 * MAP_SIGNATURE_MAX])
+    line = re.sub(r"\s*[{:]$", "", line)
+    return line if len(line) <= MAP_SIGNATURE_MAX else line[:MAP_SIGNATURE_MAX - 1].rstrip() + "…"
+
+
+def _split_bases(text: str) -> list[str]:
+    """Split a Python base list on its top-level commas."""
+    parts, depth, current = [], 0, ""
+    for ch in text:
+        depth += (ch in "([{") - (ch in ")]}")
+        if ch == "," and depth == 0:
+            parts.append(current)
+            current = ""
+        else:
+            current += ch
+    parts.append(current)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _classes_in(text: str, group: str):
+    """Yield one dict per class declared in `text`: name, signature, generics and base names."""
+    if group == "py":
+        for hit in PY_CLASS_RX.finditer(text):
+            bases = []
+            for token in _split_bases(hit.group("bases") or ""):
+                name = token.split("[", 1)[0].strip()
+                if "=" not in token and name.rsplit(".", 1)[-1] not in PY_NON_BASES:
+                    bases.append(name)
+            yield {"name": hit.group("name"), "signature": _signature(text, hit.start("name")),
+                   "generics": _generics_after(text, hit.end("name"), group), "bases": bases}
+    elif group in ("ts", "php", "jvm"):
+        for hit in CLASS_HEAD_RX.finditer(text):
+            generics, after = _type_params(text, hit.end("name"))
+            ext = EXTENDS_RX.match(text, after)
+            base = ext.group("base").rsplit("\\", 1)[-1] if ext else None
+            yield {"name": hit.group("name"), "signature": _signature(text, hit.start("name")),
+                   "generics": generics, "bases": [base] if base else []}
+
+
+def _shape_role(rel: str):
+    """The role named by the last word of a file name (`providers.service.ts` is a service), else None."""
+    stem = rel.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    words = re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+", stem)
+    return words[-1].lower() if words and words[-1].lower() in SHAPE_ROLES else None
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +568,14 @@ class ProjectScanner:
                                          #   consumers (sample), census_cmd}]
                 "count": 0,
             },
+            "map": {                     # reuse candidates for the lazy brain map
+                "utilities": [],         # [{symbol, path, kind, signature, generics,
+                                         #   consumers_count, exemplar}]
+                "patterns": [],          # [{name, kind, status, evidence_paths, count,
+                                         #   base, exemplar}]
+                "where_to_look": [],     # [{topic, path}]
+                "count": 0,              # rows across the three lists
+            },
         }
         self._symbol_counter: Counter[str] = Counter()
         # candidate files collected during the walk, processed by the detectors
@@ -368,6 +600,7 @@ class ProjectScanner:
         self._detect_data_models()
         self._detect_test_strategy()
         self._detect_usage_map()
+        self._detect_map()
         return self.result
 
     # ---- walker ----
@@ -936,12 +1169,57 @@ class ProjectScanner:
                 t["ci_runs_tests"] = True
                 break
 
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
     # ---- usage map: shared surfaces → consumer census ----
+    def _shared_roots(self, hints, guard=False):
+        """Shallowest folders named in `hints` that hold files of their own.
+
+        With `guard`, a folder that is a whole application is dropped: one with a manifest of
+        its own, a direct child of apps/, or an `api` folder inside a route tree.
+        """
+        candidates = []
+        for f in self.result["folders"]:
+            path = f["path"]
+            if path == "." or f["file_count"] == 0:
+                continue
+            name = Path(path).name.lower()
+            if name not in hints:
+                continue
+            if guard:
+                parent = Path(path).parent.name.lower()
+                if (APP_MANIFESTS.intersection(f["config_files"]) or parent == "apps"
+                        or (name == "api" and parent in ROUTE_TREE_PARENTS)):
+                    continue
+            candidates.append(path)
+        # keep the shallowest roots; a shared dir nested in another adds nothing
+        roots: list[str] = []
+        for path in sorted(set(candidates), key=lambda p: (p.count("/"), p)):
+            if not any(path == r or path.startswith(r + "/") for r in roots):
+                roots.append(path)
+        return roots
+
+    def _census(self, symbols, skip):
+        """Count the source files that mention each symbol and sample their paths.
+
+        `skip(rel, sym)` is True for a file that must not count as a consumer of `sym`.
+        Returns (counts, consumers): files per symbol, and up to USAGE_MAX_CONSUMER_PATHS
+        paths per symbol in scan order.
+        """
+        consumers: dict[str, list[str]] = {s: [] for s in symbols}
+        counts: Counter[str] = Counter()
+        if not symbols:
+            return counts, consumers
+        for fpath, rel in self._source_files:
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for sym in symbols:
+                if sym in text and not skip(rel, sym):
+                    counts[sym] += 1
+                    if len(consumers[sym]) < USAGE_MAX_CONSUMER_PATHS:
+                        consumers[sym].append(rel)
+        return counts, consumers
+
     def _detect_usage_map(self):
         """Find symbols exported from shared folders and census who consumes them.
 
@@ -950,18 +1228,7 @@ class ProjectScanner:
         """
         um = self.result["usage_map"]
 
-        candidates = []
-        for f in self.result["folders"]:
-            path = f["path"]
-            if path == "." or f["file_count"] == 0:
-                continue
-            if Path(path).name.lower() in SHARED_DIR_HINTS:
-                candidates.append(path)
-        # keep the shallowest roots; a shared dir nested in another adds nothing
-        roots: list[str] = []
-        for path in sorted(set(candidates), key=lambda p: (p.count("/"), p)):
-            if not any(path == r or path.startswith(r + "/") for r in roots):
-                roots.append(path)
+        roots = self._shared_roots(SHARED_DIR_HINTS)
         um["shared_roots"] = roots
         if not roots or not self._source_files:
             return
@@ -981,8 +1248,7 @@ class ProjectScanner:
 
         def add_symbol(name: str, rel: str):
             name = name.strip()
-            if (len(name) < 4 or name.lower() in USAGE_STOPWORDS
-                    or name in defined or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name)):
+            if name in defined or not _symbol_ok(name):
                 return
             defined[name] = rel
 
@@ -1003,21 +1269,7 @@ class ProjectScanner:
         if not defined:
             return
 
-        symbols = sorted(defined)
-        consumers: dict[str, list[str]] = {s: [] for s in symbols}
-        counts: Counter[str] = Counter()
-        for fpath, rel in self._source_files:
-            if under_shared(rel):
-                continue
-            try:
-                text = fpath.read_text(encoding="utf-8", errors="ignore")
-            except OSError:
-                continue
-            for sym in symbols:
-                if sym in text:
-                    counts[sym] += 1
-                    if len(consumers[sym]) < USAGE_MAX_CONSUMER_PATHS:
-                        consumers[sym].append(rel)
+        counts, consumers = self._census(sorted(defined), lambda rel, sym: under_shared(rel))
 
         surfaces = []
         for sym, n in counts.most_common(USAGE_MAX_SURFACES):
@@ -1026,13 +1278,228 @@ class ProjectScanner:
                 "defined_in": defined[sym],
                 "consumers_count": n,
                 "consumers": consumers[sym],
-                "census_cmd": (f"grep -rl '{sym}' . --exclude-dir=node_modules "
-                               "--exclude-dir=.git --exclude-dir=coverage --exclude-dir=reports "
-                               "--exclude-dir=dist --exclude-dir=.next | wc -l"),
+                "census_cmd": census_cmd(sym),
             })
         um["surfaces"] = surfaces
         um["count"] = len(surfaces)
 
+    # ---- map: reuse candidates for the brain map ----
+    def _detect_map(self):
+        """Candidate rows for the lazy brain map: reusable utilities, repeated patterns, where docs live.
+
+        Every emitted list is sorted, so the same tree always yields the same rows.
+        """
+        m = self.result["map"]
+        # which file defines a name and which consumer is the exemplar are first-seen choices:
+        # they must not depend on the order the filesystem lists directories in
+        self._source_files.sort(key=lambda item: item[1])
+        roots = self._shared_roots(MAP_SHARED_HINTS, guard=True)
+
+        def under(rel: str) -> bool:
+            return any(rel == r or rel.startswith(r + "/") for r in roots)
+
+        classes, decls, type_counts, type_files = self._map_read(under)
+        local = {c["name"] for c in classes}
+        extenders: dict[str, dict[tuple, dict]] = defaultdict(dict)
+        for c in classes:
+            for base in c["bases"]:
+                if base in local and base != c["name"]:
+                    extenders[base][(c["name"], c["rel"])] = c
+        families = {base: [found[k] for k in sorted(found)]
+                    for base, found in sorted(extenders.items()) if len(found) >= 2}
+        m["utilities"] = self._map_utilities(under, classes, decls, families)
+        m["patterns"] = self._map_patterns(classes, local, families, type_counts, type_files)
+        m["where_to_look"] = self._map_where()
+        m["count"] = len(m["utilities"]) + len(m["patterns"]) + len(m["where_to_look"])
+
+    def _map_read(self, under):
+        """Read each non-test source once; `under(rel)` says whether a file sits in a shared root.
+
+        Returns every class with its bases, the MAP_DECL_RX declarations (functions only under
+        shared roots) and how often, and where, TypeScript utility types are used.
+        """
+        composables = bool({"Vue", "Nuxt"}.intersection(self.result["stack"]["frameworks"]))
+        classes: list[dict] = []
+        decls: dict[tuple, dict] = {}
+        type_counts: Counter[str] = Counter()
+        type_files: Counter[str] = Counter()
+        for fpath, rel in self._source_files:
+            ext = fpath.suffix.lower()
+            group = MAP_LANG.get(ext)
+            if group is None or TEST_FILE_RX.search(rel):
+                continue
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            shared = under(rel)
+            as_composable = composables or "composables" in rel.split("/")
+            classes.extend(dict(c, rel=rel) for c in _classes_in(text, group))
+            for kind, rx in MAP_DECL_RX.get(group, ()):
+                if not shared and kind in ("generic-fn", "hook", "helper"):
+                    continue
+                row_kind = "composable" if kind == "hook" and as_composable else kind
+                for hit in rx.finditer(text):
+                    name = hit.group("name")
+                    held = decls.get((name, rel))
+                    if not _symbol_ok(name) or (
+                            held and MAP_KINDS.index(held["kind"]) <= MAP_KINDS.index(row_kind)):
+                        continue
+                    decls[(name, rel)] = {
+                        "symbol": name, "path": rel, "kind": row_kind,
+                        "signature": _signature(text, hit.start("name")),
+                        "generics": _generics_after(text, hit.end("name"), group)}
+            if ext in (".ts", ".tsx"):
+                for hit in UTILITY_TYPE_RX.finditer(text):
+                    type_counts[hit.group(1)] += 1
+                    type_files[rel] += 1
+        return classes, decls, type_counts, type_files
+
+    def _map_utilities(self, under, classes, decls, families):
+        """Reusable exports under shared roots, plus every class that heads a family."""
+        cands = {key: d for key, d in decls.items() if under(d["path"]) or d["symbol"] in families}
+        for c in classes:
+            key = (c["name"], c["rel"])
+            if c["name"] in families and key not in cands and _symbol_ok(c["name"]):
+                cands[key] = {"symbol": c["name"], "path": c["rel"], "kind": "base-class",
+                              "signature": c["signature"], "generics": c["generics"]}
+        defining: dict[str, set] = defaultdict(set)
+        for d in cands.values():
+            defining[d["symbol"]].add(d["path"])
+        counts, consumers = self._census(sorted(defining), lambda rel, sym: rel in defining[sym])
+
+        def exemplar(sample: list[str]):
+            """A consumer to copy from: not a test, preferably outside the shared roots."""
+            plain = [r for r in sample if not TEST_FILE_RX.search(r)]
+            outside = [r for r in plain if not under(r)]
+            return (outside or plain or sample or [None])[0]
+
+        rows = []
+        for key in sorted(cands):
+            d = cands[key]
+            n = counts[d["symbol"]]
+            if d["kind"] == "helper" and n < 2:
+                continue
+            rows.append({"symbol": d["symbol"], "path": d["path"], "kind": d["kind"],
+                         "signature": d["signature"], "generics": d["generics"],
+                         "consumers_count": n, "exemplar": exemplar(consumers[d["symbol"]])})
+        rows.sort(key=lambda r: (MAP_KINDS.index(r["kind"]), -r["consumers_count"],
+                                 r["symbol"], r["path"]))
+        return rows[:MAP_MAX_UTILITIES]
+
+    def _map_patterns(self, classes, local, families, type_counts, type_files):
+        """Families sharing a local base, file shapes that repeat, and TypeScript utility types in use."""
+        bases_by_file: dict[str, set] = defaultdict(set)
+        for c in classes:
+            bases_by_file[c["rel"]].update(b for b in c["bases"] if b in local)
+        rows = []
+        for base, found in families.items():
+            paths = sorted({c["rel"] for c in found})
+            rows.append({"name": f"family:{base}", "kind": "family", "status": "applied",
+                         "evidence_paths": paths[:MAP_MAX_EVIDENCE], "count": len(found),
+                         "base": base, "exemplar": paths[0]})
+        roles: dict[str, set] = defaultdict(set)
+        for _, rel in self._source_files:
+            role = _shape_role(rel)
+            if role and not TEST_FILE_RX.search(rel):
+                roles[role].add(rel)
+        for role in sorted(roles):
+            members = sorted(roles[role])
+            if len(members) < 3:
+                continue
+            tally = Counter(b for rel in members for b in bases_by_file.get(rel, ()))
+            base, k = min(tally.items(), key=lambda kv: (-kv[1], kv[0])) if tally else (None, 0)
+            if k == 0:
+                status = "candidate (no shared base) · signal only — same-behaviour test decides"
+            elif 2 * k >= len(members):
+                status = "applied"
+            else:
+                status = f"partial {k}/{len(members)}"
+            rows.append({"name": f"shape:{role}", "kind": "shape", "status": status,
+                         "evidence_paths": members[:MAP_MAX_EVIDENCE], "count": len(members),
+                         "base": base, "exemplar": next(
+                             (rel for rel in members if base in bases_by_file.get(rel, ())), members[0])})
+        if type_counts:
+            by_type = sorted(type_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+            by_file = sorted(type_files.items(), key=lambda kv: (-kv[1], kv[0]))
+            rows.append({"name": "types:utility", "kind": "types", "status": "applied",
+                         "evidence_paths": sorted(p for p, _ in by_file[:MAP_MAX_EVIDENCE]),
+                         "count": sum(type_counts.values()),
+                         "base": " · ".join(f"{name} {n}" for name, n in by_type),
+                         "exemplar": by_file[0][0]})
+        order = {"family": 0, "shape": 1, "types": 2}
+        rows.sort(key=lambda r: (order[r["kind"]], -r["count"], r["name"]))
+        return rows[:MAP_MAX_PATTERNS]
+
+    def _map_where(self):
+        """Repo-level pointers: README, agent instructions, docs/ pages and API specs."""
+        def rel_of(path) -> str:
+            return os.path.relpath(path, self.root).replace(os.sep, "/")
+
+        def title(rel: str) -> str:
+            try:
+                head = (self.root / rel).read_text(encoding="utf-8", errors="ignore")[:2000]
+            except OSError:
+                head = ""
+            heading = re.search(r"^#[ \t]+(.+?)[ \t#]*$", head, re.M)
+            return heading.group(1) if heading else re.sub(r"[-_]+", " ", Path(rel).stem).strip()
+
+        topics: dict[str, str] = {}
+        try:
+            names = sorted(os.listdir(self.root))
+        except OSError:
+            names = []
+        for name in names:
+            low = name.lower()
+            topic = ("Project README" if low.startswith("readme") else
+                     "Claude instructions" if low == "claude.md" else
+                     "Agent instructions" if low == "agents.md" else None)
+            if topic and (self.root / name).is_file():
+                topics[name] = topic
+        docs = []
+        for dirpath, dirnames, filenames in os.walk(self.root / "docs"):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+            docs.extend(rel_of(os.path.join(dirpath, f)) for f in filenames if f.lower().endswith(".md"))
+        for rel in sorted(docs)[:MAP_MAX_DOCS]:
+            topics.setdefault(rel, title(rel))
+        for spec in self._openapi_files:
+            topics.setdefault(rel_of(spec), "OpenAPI spec")
+        return [{"topic": topic, "path": path} for path, topic in sorted(topics.items())][:MAP_MAX_WHERE]
+
+
+def delta(result: dict, changed: list[str]) -> dict:
+    """The `update` block for the project-relative paths in `changed`: what a delta refresh revisits."""
+    def touched(path: str) -> bool:
+        return any(path == p or path.startswith(p + "/") for p in changed)
+
+    def touches(folder_path: str) -> bool:
+        return touched(folder_path) or any(p.startswith(folder_path + "/") for p in changed)
+
+    affected_folders = sorted({f["path"] for f in result["folders"]
+                               if f["path"] != "." and touches(f["path"])})
+    affected_surfaces = sorted({
+        s["symbol"] for s in result["usage_map"]["surfaces"]
+        if touched(s["defined_in"]) or any(touched(c) for c in s["consumers"])
+    })
+    rows = result["map"]
+    affected_map_rows = {
+        "utilities": sorted(f"{u['symbol']}@{u['path']}" for u in rows["utilities"]
+                            if touched(u["path"]) or (u["exemplar"] and touched(u["exemplar"]))),
+        "patterns": sorted(pat["name"] for pat in rows["patterns"]
+                           if any(touched(e) for e in pat["evidence_paths"])
+                           or (pat["exemplar"] and touched(pat["exemplar"]))),
+    }
+    return {
+        "paths": changed,
+        "affected_folders": affected_folders,
+        "affected_surfaces": affected_surfaces,
+        "affected_map_rows": affected_map_rows,
+    }
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def main():
     # Requires Python 3 (stdlib only). The f-strings and type hints in this file
@@ -1079,23 +1546,7 @@ def main():
 
     if args.update:
         changed = [p.strip().strip("/") for p in args.update.split(",") if p.strip()]
-
-        def touches(folder_path: str) -> bool:
-            return any(folder_path == p or folder_path.startswith(p + "/")
-                       or p.startswith(folder_path + "/") for p in changed)
-
-        affected_folders = sorted({f["path"] for f in result["folders"]
-                                   if f["path"] != "." and touches(f["path"])})
-        affected_surfaces = sorted({
-            s["symbol"] for s in result["usage_map"]["surfaces"]
-            if any(s["defined_in"] == p or s["defined_in"].startswith(p + "/") for p in changed)
-            or any(c == p or c.startswith(p + "/") for p in changed for c in s["consumers"])
-        })
-        result["update"] = {
-            "paths": changed,
-            "affected_folders": affected_folders,
-            "affected_surfaces": affected_surfaces,
-        }
+        result["update"] = delta(result, changed)
 
     out = json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False, default=str)
 
@@ -1120,6 +1571,9 @@ def main():
               f"(frameworks: {result['testing']['frameworks']})", file=sys.stderr)
         print(f"  - Shared surfaces (usage map): {result['usage_map']['count']} "
               f"(roots: {result['usage_map']['shared_roots']})", file=sys.stderr)
+        print(f"  - Map candidates: utilities {len(result['map']['utilities'])} · "
+              f"patterns {len(result['map']['patterns'])} · "
+              f"where {len(result['map']['where_to_look'])}", file=sys.stderr)
         if "update" in result:
             print(f"  - Delta update: {len(result['update']['affected_folders'])} folders, "
                   f"{len(result['update']['affected_surfaces'])} surfaces affected", file=sys.stderr)
