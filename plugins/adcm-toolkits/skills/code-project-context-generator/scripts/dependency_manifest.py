@@ -982,20 +982,15 @@ def _python_packages(c):
 
     project = _dict(c.toml("pyproject.toml"))
     meta = _dict(project.get("project"))
-    for spec in _strs(meta.get("dependencies")):
-        parsed = _requirement(spec)
-        if parsed:
-            out.append(_py_entry(parsed[0], parsed[1], "prod", pin_lock.get(_norm_py(parsed[0]))))
-    for group in sorted(_dict(meta.get("optional-dependencies"))):
-        for spec in _strs(meta["optional-dependencies"][group]):
+    optional, groups = _dict(meta.get("optional-dependencies")), _dict(project.get("dependency-groups"))
+    tables = [("prod", meta.get("dependencies"))]
+    tables += [("optional", optional[group]) for group in sorted(optional)]
+    tables += [("dev", groups[group]) for group in sorted(groups)]
+    for kind, specs in tables:
+        for spec in _strs(specs):
             parsed = _requirement(spec)
             if parsed:
-                out.append(_py_entry(parsed[0], parsed[1], "optional", pin_lock.get(_norm_py(parsed[0]))))
-    for group in sorted(_dict(project.get("dependency-groups"))):
-        for spec in _strs(project["dependency-groups"][group]):
-            parsed = _requirement(spec)
-            if parsed:
-                out.append(_py_entry(parsed[0], parsed[1], "dev", pin_lock.get(_norm_py(parsed[0]))))
+                out.append(_py_entry(parsed[0], parsed[1], kind, pin_lock.get(_norm_py(parsed[0]))))
 
     poetry = _dict(_dict(project.get("tool")).get("poetry"))
     tables = [("prod", poetry.get("dependencies")), ("dev", poetry.get("dev-dependencies"))]
@@ -1078,6 +1073,15 @@ def _patched(c):
     return sorted(out, key=lambda e: (e["source"], e["name"]))
 
 
+def _collect_listed(conf, key, notes, bucket, why):
+    """Add the names listed under conf[key] to `bucket`, and the comment on each one to `why`."""
+    for i, name in enumerate(conf[key]):
+        if isinstance(name, str):
+            bucket.add(name)
+            if (key, i) in notes:
+                why[name] = notes[(key, i)]
+
+
 def _install_scripts(c):
     data, comments = c.yaml("pnpm-workspace.yaml")
     for source, conf, notes in (("pnpm-workspace.yaml", _dict(data), comments),
@@ -1087,11 +1091,7 @@ def _install_scripts(c):
                             ("neverBuiltDependencies", deny)):
             if isinstance(conf.get(key), list):
                 found = True
-                for i, name in enumerate(conf[key]):
-                    if isinstance(name, str):
-                        bucket.add(name)
-                        if (key, i) in notes:
-                            why[name] = notes[(key, i)]
+                _collect_listed(conf, key, notes, bucket, why)
         if isinstance(conf.get("allowBuilds"), dict):
             found = True
             for name, flag in conf["allowBuilds"].items():
@@ -1400,19 +1400,24 @@ def _github(c, rel, ci):
             step = _dict(step)
             may_fail = step.get("continue-on-error") is True or job.get("continue-on-error") is True
             if isinstance(step.get("uses"), str):
-                action = _action(ci, rel, step["uses"])
-                setup = SETUP_ACTIONS.get(action)
-                version = _dict(step.get("with")).get(setup[1]) if setup else None
-                if version is not None:
-                    for value in _matrix_values(str(version), matrix):
-                        ci.versions.append((setup[0], "setup-%s:%s" % (setup[0], rel), value))
-                        if setup[0] == "node":
-                            ci.node_versions.append({"file": rel, "value": value})
-                for tool, pattern in _AUDIT:
-                    if pattern.search(step["uses"].split("@")[0]):
-                        _add_audit(ci, rel, jid, tool, may_fail)
+                _uses_step(ci, rel, jid, step, matrix, may_fail)
             steps.append((_commands(step.get("run")), may_fail))
         _jobs_report(ci, rel, jid, steps)
+
+
+def _uses_step(ci, rel, job, step, matrix, may_fail):
+    """Record the action a step uses, the runtime versions a setup action pins and the audit it runs."""
+    action = _action(ci, rel, step["uses"])
+    setup = SETUP_ACTIONS.get(action)
+    version = _dict(step.get("with")).get(setup[1]) if setup else None
+    if version is not None:
+        for value in _matrix_values(str(version), matrix):
+            ci.versions.append((setup[0], "setup-%s:%s" % (setup[0], rel), value))
+            if setup[0] == "node":
+                ci.node_versions.append({"file": rel, "value": value})
+    for tool, pattern in _AUDIT:
+        if pattern.search(step["uses"].split("@")[0]):
+            _add_audit(ci, rel, job, tool, may_fail)
 
 
 def _action(ci, rel, uses):
@@ -1434,21 +1439,27 @@ def _tokens(segment):
     return [t.strip("'\"") for t in segment.split()]
 
 
+def _pip_pins(rel, no, args):
+    """The name==version pins among the arguments of one `pip install`, skipping the value an option takes."""
+    out, skip = [], False
+    for tok in _tokens(args):
+        if skip:
+            skip = False
+        elif tok in _OPTS_WITH_ARG:
+            skip = True
+        elif not tok.startswith("-"):
+            m = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==([^\s;,]+)$", tok)
+            if m:
+                out.append({"file": rel, "line": no, "kind": "pip", "name": m.group(1), "version": m.group(2)})
+    return out
+
+
 def _pins_in_line(rel, no, line):
     out = []
     for segment in _SEGMENT_END.split(line):
         pip = re.search(r"\bpip3?\s+install\b(.*)$", segment)
         if pip:
-            skip = False
-            for tok in _tokens(pip.group(1)):
-                if skip:
-                    skip = False
-                elif tok in _OPTS_WITH_ARG:
-                    skip = True
-                elif not tok.startswith("-"):
-                    m = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==([^\s;,]+)$", tok)
-                    if m:
-                        out.append({"file": rel, "line": no, "kind": "pip", "name": m.group(1), "version": m.group(2)})
+            out.extend(_pip_pins(rel, no, pip.group(1)))
         runner = re.search(r"\b(?:npx|bunx|pnpm\s+dlx|yarn\s+dlx|npm\s+exec)\b(.*)$", segment)
         glob = re.search(r"\bnpm\s+(?:i|install|add)\s+(?:\S+\s+)*?(?:-g|--global)\b(.*)$", segment)
         for match, first_only in ((runner, True), (glob, False)):
@@ -1488,17 +1499,25 @@ def _ci_pins(rel, text):
     return out
 
 
+def _ci_kind(rel):
+    """The provider of a CI pipeline file, "gitlab" or "github", else None."""
+    name = _base(rel)
+    if name.endswith(".gitlab-ci.yml"):
+        return "gitlab"
+    if _dir(rel) == ".github/workflows" and _is_yaml_name(name):
+        return "github"
+    return None
+
+
 def _ci(c):
     ci = _Ci()
     for rel in c.files:
-        name = _base(rel)
-        gitlab = name == ".gitlab-ci.yml" or name.endswith(".gitlab-ci.yml")
-        github = _dir(rel) == ".github/workflows" and _is_yaml_name(name)
-        if not (gitlab or github):
+        kind = _ci_kind(rel)
+        if kind is None:
             continue
         ci.files.append(rel)
         ci.pins.extend(_ci_pins(rel, c.text(rel) or ""))
-        if gitlab:
+        if kind == "gitlab":
             ci.gitlab = True
             _gitlab(c, rel, ci)
         else:
@@ -1526,10 +1545,12 @@ def _ci_report(ci):
 # Runtime pins
 # ---------------------------------------------------------------------------
 
-PIN_ORDER = (".nvmrc", ".node-version", ".python-version", ".php-version", ".dvmrc", ".tool-versions",
-             "engines.node", "volta.node", "devEngines.runtime", "@types/node", "runtime.txt", "requires-python",
-             "tool.poetry.python", "Pipfile.python_version", "require.php", "config.platform.php", "ci-image",
-             "docker", "setup-node", "setup-python", "setup-php", "setup-deno")
+VERSION_FILES = {".nvmrc": "node", ".node-version": "node", ".python-version": "python", ".php-version": "php",
+                 ".dvmrc": "deno"}
+PIN_ORDER = tuple(VERSION_FILES) + (
+    ".tool-versions", "engines.node", "volta.node", "devEngines.runtime", "@types/node", "runtime.txt",
+    "requires-python", "tool.poetry.python", "Pipfile.python_version", "require.php", "config.platform.php",
+    "ci-image", "docker", "setup-node", "setup-python", "setup-php", "setup-deno")
 
 
 def _pin_key(pin):
@@ -1570,8 +1591,8 @@ def _runtimes(c, ci, docker, packages, lock):
         if isinstance(value, str) and value.strip():
             pins[runtime].append({"source": source, "value": value.strip()})
 
-    add("node", ".nvmrc", _first_line(c.text(".nvmrc")))
-    add("node", ".node-version", _first_line(c.text(".node-version")))
+    for name, runtime in VERSION_FILES.items():
+        add(runtime, name, _first_line(c.text(name)))
     tools = _tool_versions(c.text(".tool-versions"))
     for runtime, names in (("node", ("nodejs", "node")), ("python", ("python",)), ("php", ("php",)),
                            ("deno", ("deno",))):
@@ -1587,7 +1608,6 @@ def _runtimes(c, ci, docker, packages, lock):
     add("node", "@types/node", next((_dict(pkg.get(g))["@types/node"] for g in ("dependencies", "devDependencies")
                                       if "@types/node" in _dict(pkg.get(g))), None))
 
-    add("python", ".python-version", _first_line(c.text(".python-version")))
     runtime_txt = re.match(r"^python-(\S+)$", _first_line(c.text("runtime.txt")) or "")
     add("python", "runtime.txt", runtime_txt.group(1) if runtime_txt else None)
     pyproject = c.text("pyproject.toml") or ""
@@ -1599,10 +1619,8 @@ def _runtimes(c, ci, docker, packages, lock):
     add("python", "Pipfile.python_version", found.group(1) if found else None)
 
     composer = _dict(c.json("composer.json"))
-    add("php", ".php-version", _first_line(c.text(".php-version")))
     add("php", "require.php", _dict(composer.get("require")).get("php"))
     add("php", "config.platform.php", _dict(_dict(composer.get("config")).get("platform")).get("php"))
-    add("deno", ".dvmrc", _first_line(c.text(".dvmrc")))
 
     for entry in docker:
         runtime = IMAGE_RUNTIME.get(entry["image"].rsplit("/", 1)[-1])
@@ -1820,12 +1838,10 @@ def attach_dependency_manifest(root, result, skip_dirs=None):
             managers.append(name)
 
 
-MANIFEST_NAMES = frozenset(LOCK_TYPES) | frozenset(OTHER_KINDS) | frozenset({
-    "package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
-    "yarn.lock", "bun.lock", "bun.lockb", ".npmrc", ".nvmrc", ".node-version", ".tool-versions",
-    ".python-version", "composer.json", "composer.lock", "pyproject.toml", "poetry.lock", "Pipfile",
-    "Pipfile.lock", "renovate.json", "renovate.json5", ".renovaterc", ".renovaterc.json", "deno.json",
-    "import_map.json", ".php-version", ".dvmrc", "runtime.txt", ".renovaterc.json5"})
+MANIFEST_NAMES = (frozenset(LOCK_TYPES) | frozenset(OTHER_KINDS) | frozenset(VERSION_FILES)
+                  | frozenset(_base(rel) for rel in RENOVATE_PARSED + RENOVATE_PRESENT)
+                  | frozenset({"package.json", "pnpm-workspace.yaml", ".npmrc", ".tool-versions", "composer.json",
+                               "pyproject.toml", "Pipfile", "runtime.txt"}))
 MANIFEST_SECTIONS = ["Runtimes", "Frameworks and Critical Libraries", "Package Managers"]
 
 
@@ -1837,8 +1853,7 @@ def _is_manifest_path(path):
 
 def _is_ci_path(path):
     name = _base(path)
-    return (name.endswith(".gitlab-ci.yml")
-            or (_dir(path) == ".github/workflows" and _is_yaml_name(name))
+    return (_ci_kind(path) is not None
             or path in DEPENDABOT
             or name.startswith("Dockerfile")
             or _is_compose(name))

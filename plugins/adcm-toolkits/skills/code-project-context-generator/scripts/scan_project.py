@@ -274,13 +274,11 @@ CODE_EXTS = {".ts", ".tsx", ".js", ".jsx", ".py", ".php", ".go", ".rs", ".rb", "
 SHARED_DIR_HINTS = {"shared", "lib", "libs", "packages", "components", "ui", "common",
                     "core", "utils", "helpers", "dpl", "design-system", "widgets"}
 
-# The map also reads these as shared code. They stay out of SHARED_DIR_HINTS because widening
-# that set would rewrite the usage map of every project already documented.
+# Shared code for the map only: widening SHARED_DIR_HINTS would rewrite every documented usage map.
 MAP_SHARED_HINTS = SHARED_DIR_HINTS | {"services", "api", "hooks", "models", "clients",
                                        "stores", "composables"}
 
-# Test support code (page objects, fixtures, mocks) lives in these folders under ordinary names. The map
-# leaves it out; the testing block still counts by file name alone, so its numbers do not move.
+# Test support code (page objects, fixtures, mocks) keeps ordinary file names inside these folders.
 MAP_TEST_DIRS = {"test", "tests", "__tests__", "spec", "specs", "e2e", "__mocks__"}
 
 # A folder holding one of these manifests is an application of its own, not shared code.
@@ -300,7 +298,7 @@ USAGE_MAX_CONSUMER_PATHS = 15
 USAGE_MAX_SURFACES = 50
 USAGE_MAX_FILE_BYTES = 400_000
 
-# Candidate rows for the lazy brain map. The caps keep it short enough to read before writing code.
+# The caps keep the brain map short enough to read before writing code.
 MAP_MAX_UTILITIES = 40
 MAP_MAX_PATTERNS = 20
 MAP_MAX_EVIDENCE = 5
@@ -545,6 +543,11 @@ def _within(rel: str, folders) -> bool:
     return any(rel == f or rel.startswith(f + "/") for f in folders)
 
 
+def _walkable(dirnames) -> list[str]:
+    """The subfolders a walk descends into: none in SKIP_DIRS and none hidden."""
+    return [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+
+
 class _Row(dict):
     """A map row. `members` lists every file behind it; it is not a key, so the JSON never shows it."""
 
@@ -686,7 +689,7 @@ class ProjectScanner:
             depth = 0 if str(rel) == "." else len(rel.parts)
 
             # filter subdirs
-            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+            dirnames[:] = _walkable(dirnames)
             # but let through relevant dot folders (.github, .gitlab)
             dirnames_lower_check = []
             for d in os.listdir(dirpath):
@@ -1241,7 +1244,6 @@ class ProjectScanner:
                 t["ci_runs_tests"] = True
                 break
 
-    # ---- usage map: shared surfaces → consumer census ----
     def _shared_roots(self, hints, guard=False):
         """Shallowest folders named in `hints` that hold files of their own.
 
@@ -1266,7 +1268,7 @@ class ProjectScanner:
         # keep the shallowest roots; a shared dir nested in another adds nothing
         roots: list[str] = []
         for path in sorted(set(candidates), key=lambda p: (p.count("/"), p)):
-            if not any(path == r or path.startswith(r + "/") for r in roots):
+            if not _within(path, roots):
                 roots.append(path)
         return roots
 
@@ -1302,6 +1304,7 @@ class ProjectScanner:
                         best[sym] = (ranked, rel)
         return counts, consumers, {sym: rel for sym, (_, rel) in best.items()}
 
+    # ---- usage map: shared surfaces → consumer census ----
     def _detect_usage_map(self):
         """Find symbols exported from shared folders and census who consumes them.
 
@@ -1314,9 +1317,6 @@ class ProjectScanner:
         um["shared_roots"] = roots
         if not roots or not self._source_files:
             return
-
-        def under_shared(rel: str) -> bool:
-            return any(rel == r or rel.startswith(r + "/") for r in roots)
 
         export_patterns = [
             re.compile(r"export\s+(?:default\s+)?(?:abstract\s+)?(?:async\s+)?"
@@ -1335,7 +1335,7 @@ class ProjectScanner:
             defined[name] = rel
 
         for fpath, rel in self._source_files:
-            if not under_shared(rel):
+            if not _within(rel, roots):
                 continue
             try:
                 text = fpath.read_text(encoding="utf-8", errors="ignore")
@@ -1351,7 +1351,7 @@ class ProjectScanner:
         if not defined:
             return
 
-        counts, consumers, _ = self._census(sorted(defined), lambda rel, sym: under_shared(rel))
+        counts, consumers, _ = self._census(sorted(defined), lambda rel, sym: _within(rel, roots))
 
         surfaces = []
         for sym, n in counts.most_common(USAGE_MAX_SURFACES):
@@ -1372,10 +1372,9 @@ class ProjectScanner:
         Every emitted list is sorted, so the same tree always yields the same rows.
         """
         m = self.result["map"]
-        # a sorted copy: first-seen picks (defining file, exemplar) must not follow the directory listing
-        # order, and self._source_files has to stay in scan order for the usage census
+        # sorted copy: first-seen picks must not follow listing order; the usage census keeps scan order
         files = sorted(self._source_files, key=lambda item: item[1])
-        # `shared` always equals the usage map's roots; only the map-only roots give up the applications nested in them
+        # only the map-only roots drop nested applications, so `shared` stays the usage map's roots
         shared = self._shared_roots(SHARED_DIR_HINTS)
         mapped = self._shared_roots(MAP_SHARED_HINTS - SHARED_DIR_HINTS, guard=True)
         nested_apps = [f["path"] for f in self.result["folders"]
@@ -1551,7 +1550,7 @@ class ProjectScanner:
                 topics[name] = topic
         docs = []
         for dirpath, dirnames, filenames in os.walk(self.root / "docs"):
-            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+            dirnames[:] = _walkable(dirnames)
             docs.extend(rel_of(os.path.join(dirpath, f)) for f in filenames if f.lower().endswith(".md"))
         for rel in sorted(docs)[:MAP_MAX_DOCS]:
             topics.setdefault(rel, title(rel))
@@ -1563,10 +1562,10 @@ class ProjectScanner:
 def delta(result: dict, changed: list[str]) -> dict:
     """The `update` block for the project-relative paths in `changed`: what a delta refresh revisits."""
     def touched(path: str) -> bool:
-        return any(path == p or path.startswith(p + "/") for p in changed)
+        return _within(path, changed)
 
     def touches(folder_path: str) -> bool:
-        return touched(folder_path) or any(p.startswith(folder_path + "/") for p in changed)
+        return touched(folder_path) or any(_within(p, (folder_path,)) for p in changed)
 
     affected_folders = sorted({f["path"] for f in result["folders"]
                                if f["path"] != "." and touches(f["path"])})

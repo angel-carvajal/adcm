@@ -119,6 +119,11 @@ def pkg(by, name, kind="prod", workspace="."):
     return next((p for p in by["packages"] if (p["name"], p["kind"], p["workspace"]) == (name, kind, workspace)), {})
 
 
+def declared_specs(by):
+    """{name: declared spec} over the packages of a manifest."""
+    return {p["name"]: p["declared"] for p in by["packages"]}
+
+
 PNPM_V9 = """lockfileVersion: '9.0'
 
 settings:
@@ -920,7 +925,7 @@ def case_spec_urls_carry_no_credentials(ctx, t):
             '[tool.poetry.dependencies]\nacme-tool = {git = "%s"}\n' % SPEC_URL)})
         py = ctx.manifest("pyproject")
         t.lacks(json.dumps(py), "tok3n", "the pyproject manifest JSON")
-        t.eq({e["name"]: e["declared"] for e in py["packages"]},
+        t.eq(declared_specs(py),
              {"pkg": "https://***@example.com/pkg.whl", "acme-tool": SPEC_MASKED}, "pyproject specs")
 
 
@@ -996,7 +1001,7 @@ def case_userinfo_dotted_user_digit_password(ctx, t):
                          for pair in enumerate(DOTTED_CREDENTIALS))
         ctx.tree("pyproject", {"pyproject.toml": '[project]\nname = "acme"\ndependencies = [%s]\n' % deps})
         py = ctx.manifest("pyproject")
-        t.eq({e["name"]: e["declared"] for e in py["packages"]},
+        t.eq(declared_specs(py),
              {"pkg%d" % n: "https://***@files.example.com/pkg.whl" for n in range(len(DOTTED_CREDENTIALS))},
              "pyproject specs")
         for secret in DOTTED_SECRETS:
@@ -1012,7 +1017,7 @@ def case_userinfo_dotted_user_digit_password(ctx, t):
                            % (PRESERVED_SPECS["cdn"], scoped))})
     kept = ctx.manifest("preserved")
     t.clean(kept)
-    declared = {e["name"]: e["declared"] for e in kept["packages"]}
+    declared = declared_specs(kept)
     t.eq({key: declared.get(key) for key in PRESERVED_SPECS}, PRESERVED_SPECS, "preserved forms stay byte-identical")
     t.eq(declared.get("vcs"), PRESERVED_SPECS["gitref"], "a pinned git ref in a requirements line")
     t.eq({o["name"]: o["spec"] for o in kept["overrides"]},
@@ -1033,7 +1038,7 @@ def case_userinfo_dotted_user_digit_password(ctx, t):
         ".gitlab-ci.yml": ("build:\n  script:\n    - curl https://john.doe:12/34@ci.example.com/a "
                            "https://a.b:c/d@ci.example.com/b && npm run build\n")})
     shapes = ctx.manifest("authority")
-    t.eq({e["name"]: e["declared"] for e in shapes["packages"]}, {
+    t.eq(declared_specs(shapes), {
         "tokenref": "git+https://***@git.example.com/acme/pkg.git@v1.2.3",
         "scopedauth": "https://***@registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
         "scopedspecial": "https://***@registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
@@ -1057,7 +1062,7 @@ def case_userinfo_dotted_user_digit_password(ctx, t):
     big = ctx.manifest("huge")
     elapsed = time.monotonic() - started
     t.ok(elapsed < 2, "two 500 KB URL tokens took %.1fs" % elapsed)
-    t.eq({e["name"]: e["declared"] for e in big["packages"]},
+    t.eq(declared_specs(big),
          {"huge": "https://***@x.example.com/", "slashes": slashes}, "huge tokens are masked or kept like short ones")
 
 

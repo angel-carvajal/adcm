@@ -265,6 +265,13 @@ def generic_fn(name):
     return f"export function {name}<T>(x: T): T {{ return x }}\n"
 
 
+def add_family(files, n, base_path):
+    """BaseFam<n> at `base_path` and the two classes under src/ext/ that extend it."""
+    files[base_path] = "export class BaseFam%02d {}\n" % n
+    for side in "ab":
+        files[f"src/ext/fam{n:02d}{side}.ts"] = "export class Fam%02d%s extends BaseFam%02d {}\n" % (n, side, n)
+
+
 # ------------------------------------------------------------------ map cases
 BASE_API = ("export abstract class BaseApiService<T extends Record<string, unknown>> {\n"
             "  constructor(protected readonly path: string) {}\n"
@@ -723,9 +730,7 @@ def case_map_caps(ctx, t):
         "export abstract class BaseVeryLong<TFirst extends Record<string, unknown>, "
         "TSecond extends Record<string, unknown>> {}\n")
     for n in range(22):
-        files[f"shared/fam/base-fam{n:02d}.ts"] = "export class BaseFam%02d {}\n" % n
-        for side in "ab":
-            files[f"src/ext/fam{n:02d}{side}.ts"] = "export class Fam%02d%s extends BaseFam%02d {}\n" % (n, side, n)
+        add_family(files, n, f"shared/fam/base-fam{n:02d}.ts")
     files["shared/fam/base-big.ts"] = "export class BaseBig {}\n"
     for n in range(7):
         files[f"src/big/big{n}.ts"] = "export class Big%d extends BaseBig {}\n" % n
@@ -899,9 +904,7 @@ def case_shape_excludes_base_file(ctx, t):
 def case_pattern_slots(ctx, t):
     files = {"package.json": '{"name": "acme"}\n', "src/types.ts": "type Row = Partial<Invoice>\n"}
     for n in range(41):
-        files[f"src/fam/base{n:02d}.ts"] = "export class BaseFam%02d {}\n" % n
-        for side in "ab":
-            files[f"src/ext/fam{n:02d}{side}.ts"] = "export class Fam%02d%s extends BaseFam%02d {}\n" % (n, side, n)
+        add_family(files, n, f"src/fam/base{n:02d}.ts")
     roles = ("api", "columns", "controller", "detail", "dto", "form", "list", "repository", "schema", "service",
              "store")
     for role in roles:
