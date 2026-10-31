@@ -7,7 +7,8 @@ Usage:
 Every case builds one throwaway `tempfile` project (generic "Acme" code), runs scan_project.py on it as a
 subprocess (`<project> [--update PATHS]`, PYTHONDONTWRITEBYTECODE=1) and prints
 `PASS|FAIL|SKIP <case> [- why]`, then the tally `N PASS · N FAIL · N SKIP (of N)`. Exit code 1 when any
-case FAILs. No real project tree is ever scanned.
+case FAILs. No real project tree is ever scanned. One case imports the scanner under test as a module,
+to run two of its detectors in both orders.
 
 What is asserted (JSON structure of the scanner output, never prose):
   - the `usage_map` block (shared roots, surfaces and their consumer census) and the legacy `update` keys
@@ -19,12 +20,14 @@ copy. --script names the map writer (map_refresh.py), which the writer cases dri
 absent. --keep leaves the temp trees on disk.
 """
 import argparse
+import importlib.util
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -77,6 +80,18 @@ class Ctx:
         if r.rc != 0:
             raise RuntimeError(f"scanner exit {r.rc}: {r.err.strip()[:300]}")
         return json.loads(r.out)
+
+
+def load_scanner(path):
+    """Import the scanner under test as a module, writing no bytecode next to it."""
+    keep, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        spec = importlib.util.spec_from_file_location("scan_project_under_test", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = keep
+    return module
 
 
 class Check:
@@ -379,8 +394,6 @@ def case_shape_without_base(ctx, t):
         "src/features/providers/providers.repository.ts": "export const listProviders = () => []\n",
         "src/features/invoices/InvoiceRepository.ts": "export const listInvoices = () => []\n",
         "src/features/payments/payment_repository.py": "def list_payments():\n    return []\n",
-        "tests/fixtures/rates.repository.ts": "export const rates = 1\n",
-        "src/__tests__/users.repository.ts": "export const users = 1\n",
         "src/features/orders/test_orders_repository.py": "def test_orders():\n    pass\n",
         "src/features/providers/providers.form.tsx": "export const ProvidersForm = 1\n",
         "src/features/invoices/invoices.form.tsx": "export const InvoicesForm = 1\n",
@@ -402,7 +415,7 @@ def case_shape_without_base(ctx, t):
                            "src/features/payments/payment_repository.py",
                            "src/features/providers/providers.repository.ts"],
         "exemplar": "src/features/invoices/InvoiceRepository.ts"},
-        "shape:repository (tests, in a test folder or named test_*, are excluded)")
+        "shape:repository (test_orders_repository.py is a test and is left out)")
     check_row(t, find(shapes, "name", "shape:dto"), {
         "count": 6, "base": None, "exemplar": "src/dto/OrderDto.ts",
         "evidence_paths": ["src/dto/OrderDto.ts", "src/dto/UserDTO.ts", "src/dto/a.dto.ts", "src/dto/b.dto.ts",
@@ -505,6 +518,9 @@ def case_shared_hints_extended(ctx, t):
 def case_app_root_guard(ctx, t):
     files = {"package.json": '{"name": "acme"}\n',
              "apps/api/BaseHandler.ts": abstract_class("BaseHandler"),
+             "apps/api/src/services/BaseUsers.ts": abstract_class("BaseUsers"),
+             "apps/web/hooks/BaseWebHooks.ts": abstract_class("BaseWebHooks"),
+             "apps/web/src/lib/BaseWebLib.ts": abstract_class("BaseWebLib"),
              "services/api/package.json": '{"name": "svc"}\n',
              "services/api/BaseWorker.ts": abstract_class("BaseWorker"),
              "packages/hooks/package.json": '{"name": "hk"}\n',
@@ -518,9 +534,11 @@ def case_app_root_guard(ctx, t):
         files[f"{folder}/Base{folder.title()}.ts"] = abstract_class("Base" + folder.title())
     ctx.tree("acme", files)
     out = ctx.scan("acme")
-    t.eq(sorted(u["symbol"] for u in rows(out, "utilities")), ["BaseMailer", "BaseWebStore"],
-         "apps/api, a folder with its own manifest and a services/ folder under apps/ are not "
-         "mistaken for shared code; a plain src/services is")
+    t.eq(sorted(u["symbol"] for u in rows(out, "utilities")), ["BaseMailer", "BaseWebLib"],
+         "apps/api, a folder with its own manifest and anything inside apps/<app>/, at any depth, are not "
+         "mistaken for shared code; a plain src/services is, and so is a lib/ inside an app, which the usage "
+         "map reads too")
+    t.eq(out["usage_map"]["shared_roots"], ["apps/web/src/lib"], "the usage map keeps reading that lib/")
 
 
 def case_utility_exemplar(ctx, t):
@@ -610,8 +628,9 @@ def case_update_affected_map_rows(ctx, t):
     out = ctx.scan("acme", "--update", base)
     t.eq(sorted(out["update"]), key, "update keys")
     t.eq(out["update"]["affected_map_rows"],
-         {"utilities": ["BaseApiService@" + base], "patterns": ["shape:service", "types:utility"]},
-         "touching the defining file affects its utility row and the patterns that list it as evidence")
+         {"utilities": ["BaseApiService@" + base], "patterns": ["types:utility"]},
+         "touching the defining file affects its utility row and the patterns that list it as evidence "
+         "(it is no member of the service shape it gives its name to)")
 
     out = ctx.scan("acme", "--update", "src/features/invoices")
     t.eq(sorted(out["update"]), key, "update keys for a folder")
@@ -739,6 +758,219 @@ def case_map_caps(ctx, t):
     t.eq(out["map"]["count"], 40 + 20 + 30, "map.count adds up the capped lists")
 
 
+TURBO = {
+    "package.json": '{"name": "acme", "workspaces": ["apps/*", "packages/*"]}\n',
+    "apps/web/package.json": '{"name": "web"}\n',
+    "apps/web/src/page.tsx": "import { useInvoice, formatMoney, BaseRepo } from '@acme/utils'\n",
+    "apps/admin/package.json": '{"name": "admin"}\n',
+    "apps/admin/src/page.tsx": "import { useInvoice, formatMoney, BaseRepo } from '@acme/utils'\n",
+    "packages/utils/package.json": '{"name": "@acme/utils"}\n',
+    "packages/utils/src/index.ts": ("export function formatMoney(n: number) { return n }\n"
+                                    "export const useInvoice = () => 1\n"
+                                    "export abstract class BaseRepo<T> {}\n"),
+}
+
+
+def case_workspace_packages(ctx, t):
+    ctx.tree("turbo", TURBO)
+    out = ctx.scan("turbo")
+    t.eq(out["usage_map"]["shared_roots"], ["packages/utils"], "the usage map reads packages/utils")
+    index = "packages/utils/src/index.ts"
+    both = ["apps/admin/src/page.tsx", "apps/web/src/page.tsx"]
+    t.eq({s["symbol"]: (s["defined_in"], s["consumers_count"], sorted(s["consumers"]))
+          for s in out["usage_map"]["surfaces"]},
+         {"BaseRepo": (index, 2, both), "formatMoney": (index, 2, both), "useInvoice": (index, 2, both)},
+         "the usage map's surfaces")
+    t.eq([(u["symbol"], u["kind"], u["path"], u["consumers_count"], u["exemplar"]) for u in rows(out, "utilities")],
+         [("BaseRepo", "abstract-class", index, 2, "apps/admin/src/page.tsx"),
+          ("useInvoice", "hook", index, 2, "apps/admin/src/page.tsx"),
+          ("formatMoney", "helper", index, 2, "apps/admin/src/page.tsx")],
+         "a workspace package with a manifest of its own inside a shared-code folder is a root for the map as "
+         "it is for the usage map: its generic base, hook and helper are utilities")
+
+
+def case_nested_app_in_root(ctx, t):
+    app = {
+        "services/billing/package.json": '{"name": "billing"}\n',
+        "services/billing/src/util.ts": ("export function chargeCard(x: number) { return x }\n"
+                                         "export abstract class BaseBillingJob {}\n"),
+        "services/billing/src/a.ts": "chargeCard(1)\n",
+        "services/billing/src/b.ts": "chargeCard(2)\n",
+    }
+    ctx.tree("with-readme", {"package.json": '{"name": "acme"}\n', "services/README.md": "# Services\n",
+                             "services/mailer.ts": abstract_class("BaseMailer"), **app})
+    got = [(u["symbol"], u["path"]) for u in rows(ctx.scan("with-readme"), "utilities")]
+    t.eq(got, [("BaseMailer", "services/mailer.ts")],
+         "services/ holds files of its own and is a root, but the application inside it (services/billing, with "
+         "a manifest of its own) is not shared code")
+    ctx.tree("without-readme", {"package.json": '{"name": "acme"}\n', **app})
+    t.eq(rows(ctx.scan("without-readme"), "utilities"), [],
+         "without a file of its own services/ is no root, and the application is still no shared code")
+
+    ctx.tree("shared-inside", {
+        "package.json": '{"name": "acme"}\n', "services/README.md": "# Services\n", **app,
+        "services/billing/lib/format.ts": "export function formatCharge<T>(x: T): T { return x }\n"})
+    t.eq([(u["symbol"], u["path"]) for u in rows(ctx.scan("shared-inside"), "utilities")],
+         [("formatCharge", "services/billing/lib/format.ts")],
+         "a lib/ inside that application stays shared: the usage map reads it, so the map does too")
+
+
+def case_signature_start(ctx, t):
+    ctx.tree("acme", {
+        "package.json": '{"name": "acme"}\n',
+        "shared/dense.ts": ("export function firstHelper<T>(x: T) { return x } "
+                            "export function secondHelper<T>(x: T) { return x }\n"),
+        "shared/commented.ts": ("/* " + "a long licence comment " * 15 + "*/ "
+                                "export function hiddenDecl<T>(x: T) { return x }\n"),
+        "shared/classes.ts": ("const one = 1; export abstract class BaseOne<T> {} "
+                              "export default abstract class BaseTwo<T> {}\n"),
+    })
+    out = ctx.scan("acme")
+    got = {u["symbol"]: u["signature"] for u in rows(out, "utilities")}
+    t.ok(got.get("firstHelper", "").startswith("export function firstHelper<T>(x: T) { return x }"),
+         "firstHelper's signature starts at its own declaration: %r" % got.get("firstHelper"))
+    t.eq(got.get("secondHelper"), "export function secondHelper<T>(x: T) { return x }",
+         "secondHelper shares its line with another declaration")
+    t.eq(got.get("hiddenDecl"), "export function hiddenDecl<T>(x: T) { return x }",
+         "a declaration behind a comment longer than the 320 characters a signature reads")
+    t.ok(got.get("BaseOne", "").startswith("export abstract class BaseOne<T> {}"),
+         "BaseOne's signature starts at its own declaration: %r" % got.get("BaseOne"))
+    t.eq(got.get("BaseTwo"), "export default abstract class BaseTwo<T> {}",
+         "all the modifiers in front of the name belong to the signature")
+
+
+def case_exemplar_past_sample(ctx, t):
+    files = {"package.json": '{"name": "acme"}\n', "lib/base-thing.ts": abstract_class("BaseThing"),
+             "src/page.ts": "import { BaseThing } from 'lib'\n"}
+    for n in range(15):
+        files[f"app/__tests__/t{n:02d}.spec.ts"] = "BaseThing\n"
+    ctx.tree("acme", files)
+    out = ctx.scan("acme")
+    check_row(t, find(rows(out, "utilities"), "symbol", "BaseThing"),
+              {"consumers_count": 16, "exemplar": "src/page.ts"},
+              "BaseThing (the exemplar is the only consumer that is not a test, although 15 tests come first)")
+
+
+def case_update_beyond_evidence(ctx, t):
+    files = {"package.json": '{"name": "acme"}\n', "src/base.ts": "export class BaseBig {}\n"}
+    for n in range(7):
+        files[f"src/m/big{n}.ts"] = "export class Big%d extends BaseBig {}\n" % n
+    ctx.tree("acme", files)
+    out = ctx.scan("acme", "--update", "src/m/big6.ts")
+    check_row(t, find(rows(out, "patterns"), "name", "family:BaseBig"),
+              {"count": 7, "evidence_paths": ["src/m/big%d.ts" % n for n in range(5)]},
+              "family:BaseBig lists five of its seven members")
+    t.eq(out["update"]["affected_map_rows"], {"utilities": [], "patterns": ["family:BaseBig"]},
+         "touching the seventh member, which the row does not list, still affects the family")
+    t.lacks(json.dumps(out["map"]), "members", "the member list stays internal: the JSON never shows it")
+    t.eq(ctx.scan("acme", "--update", "README.md")["update"]["affected_map_rows"],
+         {"utilities": [], "patterns": []}, "an unrelated path still affects nothing")
+
+
+def case_shape_excludes_base_file(ctx, t):
+    base = {"package.json": '{"name": "acme"}\n',
+            "src/x/base-api.service.ts": "export class BaseApiService {}\n",
+            "src/x/a.service.ts": "export class AService extends BaseApiService {}\n",
+            "src/x/b.service.ts": "export class BService {}\n"}
+    ctx.tree("two", base)
+    t.eq([p["name"] for p in rows(ctx.scan("two"), "patterns") if p["kind"] == "shape"], [],
+         "the file that defines the base is no member of its shape: two services are not a shape")
+    ctx.tree("three", {**base, "src/x/c.service.ts": "export class CService extends BaseApiService {}\n"})
+    check_row(t, find(rows(ctx.scan("three"), "patterns"), "name", "shape:service"), {
+        "status": "applied", "count": 3, "base": "BaseApiService", "exemplar": "src/x/a.service.ts",
+        "evidence_paths": ["src/x/a.service.ts", "src/x/b.service.ts", "src/x/c.service.ts"]},
+        "shape:service (2 of the 3 real members extend the base)")
+    ctx.tree("four", {
+        "package.json": '{"name": "acme"}\n',
+        "src/x/base-api.service.ts": ("export class BaseApiService {}\n"
+                                      "export class ApiService extends BaseApiService {}\n"),
+        "src/x/a.service.ts": "export class AService {}\n", "src/x/b.service.ts": "export class BService {}\n",
+        "src/x/c.service.ts": "export class CService {}\n"})
+    check_row(t, find(rows(ctx.scan("four"), "patterns"), "name", "shape:service"),
+              {"count": 3, "base": None, "evidence_paths": ["src/x/a.service.ts", "src/x/b.service.ts",
+                                                           "src/x/c.service.ts"]},
+              "shape:service (the only class extending the base lives in the base's own file: no shared base)")
+
+
+def case_pattern_slots(ctx, t):
+    files = {"package.json": '{"name": "acme"}\n', "src/types.ts": "type Row = Partial<Invoice>\n"}
+    for n in range(41):
+        files[f"src/fam/base{n:02d}.ts"] = "export class BaseFam%02d {}\n" % n
+        for side in "ab":
+            files[f"src/ext/fam{n:02d}{side}.ts"] = "export class Fam%02d%s extends BaseFam%02d {}\n" % (n, side, n)
+    roles = ("api", "columns", "controller", "detail", "dto", "form", "list", "repository", "schema", "service",
+             "store")
+    for role in roles:
+        for k in range(3):
+            files[f"src/{role}/item{k}.{role}.ts"] = "export class Item%d {}\n" % k
+    ctx.tree("acme", files)
+    first, second = rows(ctx.scan("acme"), "patterns"), rows(ctx.scan("acme"), "patterns")
+    t.eq([p["name"] for p in first],
+         ["family:BaseFam%02d" % n for n in range(10)] + ["shape:" + r for r in roles[:9]] + ["types:utility"],
+         "41 families, 11 shapes and the types row share 20 slots: the types row, then families and shapes by "
+         "turns, each in name order")
+    t.eq(first, second, "two scans of the same tree give the same rows")
+
+
+def case_detector_order(ctx, t):
+    files = {"package.json": '{"name": "acme"}\n', "lib/money.ts": "export const formatMoney = (n: number) => n\n"}
+    for n in range(20):
+        files[f"src/c{n:02d}.ts"] = "formatMoney(%d)\n" % n
+    ctx.tree("acme", files)
+    mod = load_scanner(ctx.scanner)
+
+    class Reversed(mod.ProjectScanner):
+        """Lists the source files last-first, as a filesystem may, and can run the map detector first."""
+        map_first = False
+
+        def _walk(self):
+            super()._walk()
+            self._source_files.sort(key=lambda item: item[1], reverse=True)
+
+        def _detect_usage_map(self):
+            if self.map_first:
+                mod.ProjectScanner._detect_map(self)
+            super()._detect_usage_map()
+
+        def _detect_map(self):
+            if not self.map_first:
+                super()._detect_map()
+
+    def scan(map_first):
+        scanner = Reversed(Path(ctx.path("acme")))
+        scanner.map_first = map_first
+        result = scanner.scan()
+        return result["usage_map"], result["map"]
+
+    usage, mapped = scan(False)
+    t.eq(next(s["consumers"] for s in usage["surfaces"] if s["symbol"] == "formatMoney"),
+         ["src/c%02d.ts" % n for n in range(19, 4, -1)],
+         "the usage map samples consumers in scan order")
+    usage_swapped, mapped_swapped = scan(True)
+    t.eq(json.dumps(usage_swapped), json.dumps(usage),
+         "the usage map does not depend on the map detector running first")
+    t.eq(json.dumps(mapped_swapped), json.dumps(mapped), "the map does not depend on the order of the scan either")
+
+
+def case_test_file_rule(ctx, t):
+    ctx.tree("acme", {
+        "package.json": '{"name": "acme"}\n',
+        "src/shared/tests/helpers.ts": "export function makeThing<T>(x: T): T { return x }\n",
+        "src/shared/specs/billing.ts": "export function makeBill<T>(x: T): T { return x }\n",
+        "src/shared/test_fixtures.ts": "export function makeFixture<T>(x: T): T { return x }\n",
+        "src/shared/billing.spec.ts": "export function makeSpec<T>(x: T): T { return x }\n",
+        "src/shared/api_test.go": "package shared\n\nfunc MapAll[T any](xs []T) []T {\n\treturn xs\n}\n",
+        "src/shared/Test.php": "<?php\nabstract class AbstractGuard\n{\n}\n",
+    })
+    out = ctx.scan("acme")
+    t.eq(out["testing"]["test_file_count"], 3,
+         "the testing block counts billing.spec.ts, api_test.go and Test.php")
+    t.eq(out["testing"]["test_dirs"], ["src/shared"],
+         "a file in a tests/ or specs/ folder is not a test by its folder")
+    t.eq(sorted(u["symbol"] for u in rows(out, "utilities")), ["makeBill", "makeFixture", "makeThing"],
+         "the map leaves out exactly the files the testing block counts, no more and no fewer")
+
+
 CASES = [
     ("scan_usage_map_golden", case_usage_map_golden),
     ("scan_map_block_keys", case_map_block_keys),
@@ -756,6 +988,15 @@ CASES = [
     ("scan_python_only_degrades", case_python_only_degrades),
     ("scan_other_languages", case_other_languages),
     ("scan_map_caps", case_map_caps),
+    ("scan_workspace_packages", case_workspace_packages),
+    ("scan_nested_app_in_root", case_nested_app_in_root),
+    ("scan_signature_start", case_signature_start),
+    ("scan_exemplar_past_sample", case_exemplar_past_sample),
+    ("scan_update_beyond_evidence", case_update_beyond_evidence),
+    ("scan_shape_excludes_base_file", case_shape_excludes_base_file),
+    ("scan_pattern_slots", case_pattern_slots),
+    ("scan_detector_order", case_detector_order),
+    ("scan_test_file_rule", case_test_file_rule),
 ]
 
 
@@ -767,7 +1008,7 @@ def run_case(fn, scanner, script, keep):
         verdict, why = ("FAIL", "; ".join(p[:150] for p in t.problems[:8])) if t.problems else ("PASS", "")
     except Skip as s:
         verdict, why = "SKIP", str(s)
-    except Exception as exc:  # a broken harness or a crashing scanner is a failure, not a crash
+    except (Exception, SystemExit) as exc:  # a broken harness or a crashing scanner is a failure, not a crash
         verdict, why = "FAIL", f"harness error: {exc!r}"
     finally:
         if keep:
