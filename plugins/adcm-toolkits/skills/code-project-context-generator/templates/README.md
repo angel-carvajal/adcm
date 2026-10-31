@@ -4,13 +4,14 @@ These templates are the base for generating the `code-project-context-[project-n
 
 ## Inventory
 
-Each template is **`auto`** (scan-derived; wrapped in `<!-- auto-generated -->` markers and rewritten on every scan) or **`human`** (semantic; written once by Claude in Step 3.5 and **preserved** across re-scans).
+Each template is **`auto`** (scan-derived; wrapped in `<!-- auto-generated -->` markers and rewritten on every scan) or **`human`** (semantic; written once by Claude in Step 3.5 and **preserved** across re-scans). `dependencies.md.tmpl` is **`mixed`**: an auto block plus a human `## Policy` section, rendered by script (`deps-check context`) with exact placeholders.
 
 | Template | Destination in the generated skill | What it contains | Kind |
 |----------|------------------------------------|------------------|------|
 | `SKILL.md.tmpl` | `SKILL.md` (root) | High-level index — ALWAYS loaded (auto block wrapped) | mixed |
 | `architecture.md.tmpl` | `architecture.md` | Full tree + short descriptions — on-demand | auto |
 | `stack.md.tmpl` | `stack.md` | Stack, deps, versions, DB, testing — on-demand | auto |
+| `dependencies.md.tmpl` | `dependencies.md` | Runtime pins, package manager, deps declared → locked, CI pins + human Policy — on-demand | mixed |
 | `entry-points.md.tmpl` | `entry-points.md` | Commands, routes, flows, jobs — on-demand | auto |
 | `api-surface.md.tmpl` | `api-surface.md` | Endpoints/routes, methods, specs — on-demand | auto |
 | `data-models.md.tmpl` | `data-models.md` | Entities, ORM, migrations, schema — on-demand | auto |
@@ -26,6 +27,7 @@ Each template is **`auto`** (scan-derived; wrapped in `<!-- auto-generated -->` 
 ## Placeholders used
 
 Placeholders have the format `{{NAME_UPPERCASE}}` and are replaced by Claude when rendering. They are descriptive by design — there is no rigid list; Claude decides what to put based on what the scanner extracted and what the user provided.
+Exception: `dependencies.md.tmpl` placeholders are exact and filled by `deps-check context`, never by hand.
 
 Common placeholders:
 

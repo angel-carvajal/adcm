@@ -141,10 +141,15 @@ The scanner produces a JSON with:
 - `data_models` — entities/ORM (`{orm, entities, migrations_count, schema_files}`) — Eloquent/Prisma/TypeORM/Sequelize/Django/SQLAlchemy/Mongoose
 - `config_env` — env var **names only** from `.env.example`/`.env.sample` (`{files, vars:[{name,comment,sensitive}]}`) — never values
 - `testing` — test strategy (`{frameworks, test_dirs, test_file_count, coverage_config, ci_runs_tests}`)
+- `dependency_manifest` — the dependency facts a bump needs, from `scripts/dependency_manifest.py` (imported by the scanner): the real package manager (lockfile or `packageManager`, never assumed npm), lockfiles, workspaces, pnpm catalogs, overrides, patches and install-script policy, every direct dependency `declared → locked`, runtime pins (`.nvmrc`, `engines`, CI images, Dockerfile `FROM`, `@types/node`) and a dependency that shadows the runtime, bot configs (renovate caps, dependabot), CI images, actions and pins, the jobs that verify and the jobs that audit.
+  It has 17 fixed keys: `format, package_manager, lockfiles, workspaces, catalogs, packages, overrides, patched, install_scripts, npmrc, runtimes, bots, ci, docker, verification, other, notes`. URL credentials are masked (`scheme://***@host`) and `.npmrc` is cut to a whitelist of keys, `registry` to its host.
+  Runtime pins are listed in a fixed order, with no precedence; one read from a CI file or a Dockerfile carries `kind:<file>` in `source` (`ci-image:<file>`, `docker:<file>`, `setup-node:<file>`; likewise `setup-python`, `setup-php`, `setup-deno`).
+  `notes` lists what it could not read: `<file> uses include: the included files are not followed`, `locked versions are not read for yarn|bun`, `<file> not parsed (tomllib needs Python 3.11)`, `unparsed <file> (invalid JSON|YAML|TOML)`, `conflicting lockfiles: …`.
+  Without `skip_dirs` it uses `DEFAULT_SKIP`, a 33-member mirror of the scanner's `SKIP_DIRS`. `update.affected_context_files`, the 5th key of `update`, comes from `dependency_update_targets`, which also recognises `.renovaterc.json5`, `.php-version`, `.dvmrc`, `runtime.txt` and `patches/<name>+<version>.patch`.
 - `usage_map` — shared surfaces → consumer census (`{shared_roots, surfaces:[{symbol, defined_in, consumers_count, consumers, census_cmd}]}`) — exports defined under shared/lib/packages/components-style folders, with who consumes them across the rest of the project. This is what makes impact analysis ("this component is rendered by 10 more pages") a lookup instead of a re-derivation.
-- `update` — only with `--update <paths>`: `{paths, affected_folders, affected_surfaces}` for delta refreshes (STEP 4.5).
+- `update` — only with `--update <paths>`: `{paths, affected_folders, affected_surfaces, affected_context_files}` for delta refreshes (STEP 4.5); `affected_context_files` names `dependencies.md` and the `stack.md` sections to refresh when a manifest, lockfile, runtime pin, CI file or Dockerfile changed — root paths included.
 
-These feed the **auto** sections (`api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `usage-map.md`). The scanner does not produce the **semantic** sections — those are authored in STEP 3.5.
+These feed the **auto** sections (`api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `usage-map.md`) and the auto block of `dependencies.md`. The scanner does not produce the **semantic** sections — those are authored in STEP 3.5.
 
 ### STEP 3: Review with the user and fill the gaps
 
@@ -184,6 +189,7 @@ Build the output structure (`auto` = scan-derived, wrapped in `<!-- auto-generat
 code-project-context-[project-name]/
 ├── SKILL.md                    # High-level index (ALWAYS loaded) — auto block wrapped + human rules
 ├── stack.md                    # Stack, deps, versions, DB (auto)
+├── dependencies.md             # Runtimes, package manager, deps declared → locked, CI pins (auto block) + Policy (human)
 ├── architecture.md             # Full tree + short descriptions (auto)
 ├── entry-points.md             # How to start, routes, build/run/test (auto)
 ├── api-surface.md              # Endpoints/routes, methods, specs (auto)
@@ -205,6 +211,8 @@ code-project-context-[project-name]/
 `<!-- auto-generated: scan [date] — do not edit; refresh by re-running code-project-context-generator -->`
 and ends with `<!-- end auto-generated -->`. The `human` files carry no such marker. This is what makes the refresh in STEP 4.5 safe.
 
+**`dependencies.md` is mixed** (like `SKILL.md`): it starts with a title, its auto block sits between the markers and its `## Policy` section below the end marker is human-owned (holds, caps, pins, never-auto, verification and smoke overrides, delivery). It is rendered by script, never hand-filled: the STEP 4 executor runs `deps-check context <root> --context <skill-dir> --write` (the dependency-renovate launcher; offline), which writes the Policy section only when the file is new.
+
 **Golden rule:** the SKILL.md must NEVER have all the details inline. It should only have:
 
 1. Project identity (1 paragraph)
@@ -225,12 +233,12 @@ changed (e.g. the wave-close doc-sync has the logbook's files-touched list), run
 `update` block names: the affected `folders/*.md`, the `usage-map.md` rows in
 `affected_surfaces`, and the `last_scanned` stamps of those files. Everything else —
 including all `human` files — stays untouched. This is what keeps the map fresh at
-every wave close without paying a full refresh.
+every wave close without paying a full refresh. When `update.affected_context_files` names `dependencies.md`, re-run `deps-check context <root> --context <skill-dir> --write` (auto block only); when it names `stack.md`, refresh only the listed sections.
 
 **Full refresh** (no known path list):
 
-1. **Regenerate the `auto` files** wholesale from the fresh scan: `stack.md`, `architecture.md`, `entry-points.md`, `api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `conventions.md`, `glossary.md`, `usage-map.md`, `folders/*.md`, and the wrapped block of `SKILL.md`. (These start with the `<!-- auto-generated -->` marker — safe to overwrite.)
-2. **Preserve the `human` files** untouched: `business-flows.md`, `security.md`, `tech-debt.md`, and the identity/danger-zone prose of `SKILL.md` (anything outside the markers).
+1. **Regenerate the `auto` files** wholesale from the fresh scan: `stack.md`, `architecture.md`, `entry-points.md`, `api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `conventions.md`, `glossary.md`, `usage-map.md`, `folders/*.md`, the auto block of `dependencies.md` (through `deps-check context … --write`), and the wrapped block of `SKILL.md`. (These start with the `<!-- auto-generated -->` marker — safe to overwrite.)
+2. **Preserve the `human` files** untouched: `business-flows.md`, `security.md`, `tech-debt.md`, the `## Policy` section of `dependencies.md`, and the identity/danger-zone prose of `SKILL.md` (anything outside the markers).
 3. **Update `last_scanned`** in the `SKILL.md` frontmatter and the wrapper comments.
 4. **Flag drift:** if the scan changed materially (new modules, stack change, endpoints added/removed), prepend a one-line note to the affected human files: `> ⚠ possible drift since last scan — review.` Do not edit their content.
 5. Tell the user what was refreshed vs preserved. A refresh is not finished until the installed plugin loads it: STEP 5 Option A (patch bump + commit); push when the owner asked for it (renovate's CONTEXT block does), then `claude plugin marketplace update <mk>` + `claude plugin update <plugin>@<mk>` + `/reload-plugins` (or a new session).

@@ -4,8 +4,8 @@ description: >
   Loads the architecture context of the {{PROJECT_NAME}} project. Loads ONLY the
   high-level map; details of each area live in complementary files (stack, architecture,
   entry-points, conventions, glossary, api-surface, data-models, config-env, testing,
-  business-flows, security, tech-debt, folders/*) and are read on-demand with Read when
-  the current task needs them (do not load everything up front — do it lazily).
+  dependencies, business-flows, security, tech-debt, folders/*) and are read on-demand with
+  Read when the current task needs them (do not load everything up front — do it lazily).
   Triggers when the user mentions '{{PROJECT_NAME}}', {{ALIASES_LIST}}, or any variation
   related to working on the code, architecture, routes, modules, data models, auth,
   security, tests, or structure of this project — debugging, refactors, new features,
@@ -26,11 +26,12 @@ last_scanned: {{SCAN_DATE}}
 
 ## Context files (read on-demand)
 
-Read only what the task needs. `auto` files are regenerated on every scan — never hand-edit them. `human` files are written once and **preserved** across re-scans.
+Read only what the task needs. `auto` files are regenerated on every scan — never hand-edit them. `human` files are written once and **preserved** across re-scans. `dependencies.md` is **mixed**: its auto block is regenerated, its `## Policy` section is human and binding.
 
 | File | What's in it | Start here when… | Kind |
 |------|--------------|------------------|------|
 | `stack.md` | languages, frameworks, versions, package managers, DB | ← picking a library / checking versions | auto |
+| `dependencies.md` | runtime pins, package manager, deps `declared → locked`, CI pins, Policy (holds, caps, never-auto) | ← bumping or auditing dependencies | mixed |
 | `architecture.md` | full folder tree + purpose per folder | ← "where does X live?" | auto |
 | `entry-points.md` | how to run/build/test/deploy, main routes | ← running or building the project | auto |
 | `api-surface.md` | endpoints/routes, methods, specs | ← adding/changing an endpoint | auto |
@@ -45,7 +46,7 @@ Read only what the task needs. `auto` files are regenerated on every scan — ne
 | `security.md` | auth, sensitive data, gaps, human-first zones | ← auth/permissions/PII work | human |
 | `tech-debt.md` | known quirks & gotchas (`file:line`) | ← something behaves weirdly | human |
 
-**Suggested reading order:** **L1** (orient) this file → `stack.md` · **L2** (build) `architecture.md` + `data-models.md` + `entry-points.md` · **L3** (work) `api-surface.md` + `business-flows.md` + `security.md` + `config-env.md` + `conventions.md` · **L4** (deep) `testing.md` + `tech-debt.md` + `glossary.md` + `folders/*`.
+**Suggested reading order:** **L1** (orient) this file → `stack.md` · **L2** (build) `architecture.md` + `data-models.md` + `entry-points.md` · **L3** (work) `api-surface.md` + `business-flows.md` + `security.md` + `config-env.md` + `conventions.md` · **L4** (deep) `testing.md` + `tech-debt.md` + `dependencies.md` + `glossary.md` + `folders/*`.
 
 **Routing by task type** (read ONLY these, in order):
 
@@ -57,6 +58,7 @@ Read only what the task needs. `auto` files are regenerated on every scan — ne
 | Schema change / migration | `data-models.md` · `architecture.md` · `tech-debt.md` |
 | Bug hunt (unknown cause) | `entry-points.md` · `tech-debt.md` · `business-flows.md` |
 | Build/CI/deploy issue | `entry-points.md` · `config-env.md` |
+| Dependency bump / security advisory / lockfile change | `dependencies.md` · `stack.md` · `testing.md` · `tech-debt.md` |
 | First session in this repo | this file · `stack.md` · `architecture.md` |
 {{EXTRA_ROUTING_ROWS}}
 
@@ -127,3 +129,4 @@ its spec embeds the pre-resolved read list and scope; this map covers unplanned 
 5. **Danger zones:** {{DANGER_ZONES}}
 6. **Auto vs human files:** `auto` files are overwritten on re-scan — don't hand-edit them. Put durable notes in the `human` files (`business-flows.md`, `security.md`, `tech-debt.md`).
 7. **When stale:** if the map drifts from the code, tell the user and suggest re-running `code-project-context-generator` — full refresh, or delta after a closed wave: `scan_project.py <root> --update <changed-paths>` regenerates only the affected `folders/*.md` and `usage-map.md` rows (auto files only; `human` ones are always preserved).
+8. **Dependencies:** never bump, pin, override or remove a dependency, runtime or CI image ad hoc. Read `dependencies.md` first (its `## Policy` section is binding), run upgrades through the dependency-renovate skill, and record every new pin or hold, with its why, in that Policy table.

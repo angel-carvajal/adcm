@@ -25,15 +25,17 @@ The generated `code-project-context-[name]` skill is a lazy-loaded knowledge bas
 
 - **`auto`** — scan-derived and rewritten on every run (wrapped in `<!-- auto-generated -->`): `stack`, `architecture`, `entry-points`, `api-surface`, `data-models`, `config-env` (env var **names only**, no values), `testing`, `conventions`, `glossary`, `usage-map` (shared surfaces → consumer census, so "this component is rendered by 10 more pages" is a lookup, not a re-derivation), `folders/*`.
 - **`human`** — authored by Claude reading the code, and **preserved** across re-scans: `business-flows`, `security` (incl. auth & human-first zones), `tech-debt`.
+- **`mixed`** — `dependencies` (runtime pins, package manager, every direct dependency `declared → locked`, CI and Docker pins, rendered by script) with a human `## Policy` section that the dependency-renovate skill obeys and every refresh preserves.
 
 The generated `SKILL.md` routes reading by task type (a "Start here when…" hint per file plus an L1–L4 reading order), so sessions spend the minimum tokens the task needs.
 
-Re-running on an evolved project is a **refresh**: it regenerates the `auto` files and updates `last_scanned`, while never overwriting the `human` ones. After a closed execution wave, the **delta mode** — `scan_project.py <root> --update <changed-paths>` — refreshes only the affected `folders/*.md` and `usage-map.md` rows, cheap enough to run at every wave close.
+Re-running on an evolved project is a **refresh**: it regenerates the `auto` files and updates `last_scanned`, while never overwriting the `human` ones. After a closed execution wave, the **delta mode** — `scan_project.py <root> --update <changed-paths>` — refreshes only the affected `folders/*.md` and `usage-map.md` rows, cheap enough to run at every wave close. A manifest, lockfile, runtime-pin, CI or Dockerfile path in `--update` also marks `dependencies.md` and the matching `stack.md` sections.
 
 ## Structure
 
 - `SKILL.md` — the generation workflow (scan → review → author semantic sections → generate → refresh).
 - `scripts/scan_project.py` — the scanner (Python 3, standard library only); detects stack, tree, entry points, API surface, data models, env vars, and testing.
+- `scripts/dependency_manifest.py` — the dependency manifest block (stdlib), imported by the scanner and by the `deps-check` of the dependency-renovate skill. Selftest: `scripts/dependency-manifest-selftest.py`.
 - `templates/` — templates for the generated skill (`SKILL.md.tmpl` + per-section docs, `auto` and `human`).
 
 ## Requirements
