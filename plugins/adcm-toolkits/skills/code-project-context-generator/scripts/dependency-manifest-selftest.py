@@ -6,7 +6,8 @@ Usage:
 
 Every case builds one throwaway `tempfile` project (generic "Acme" files, example.com hosts), calls the
 module in this process and asserts the JSON it returns. The cases that cover the cpcg scanner run it as
-a subprocess (`<project> [--update PATHS]`, PYTHONDONTWRITEBYTECODE=1). Output is `PASS|FAIL|SKIP <case>
+a subprocess (`<project> [--update PATHS]`, PYTHONDONTWRITEBYTECODE=1); the skip-set case loads it to read
+its SKIP_DIRS. Output is `PASS|FAIL|SKIP <case>
 [- why]` per case, then the tally `N PASS · N FAIL · N SKIP (of N)`. Exit code 1 when any case FAILs. No
 real project tree is ever scanned.
 
@@ -15,12 +16,14 @@ scan_project.py next to this file (pass --scanner to test another copy). --keep 
 disk.
 """
 import argparse
+import importlib.util
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -539,6 +542,18 @@ def case_renovate_json5_unparsed(ctx, t):
     t.ok("unparsed renovate.json5 (presence only)" in m["notes"], "note: %r" % m["notes"])
 
 
+def case_renovate_legacy_update_types(ctx, t):
+    ctx.tree("acme", {"renovate.json": J({"packageRules": [
+        {"matchPackageNames": ["typescript"], "updateTypes": ["major"], "enabled": False},
+        {"matchPackageNames": ["eslint"], "matchUpdateTypes": ["minor"], "updateTypes": ["major"], "enabled": False},
+        {"matchPackageNames": ["react"], "enabled": False}]})})
+    t.eq(ctx.manifest("acme")["bots"][0]["disabled"], [
+        {"names": ["typescript"], "patterns": [], "update_types": ["major"]},
+        {"names": ["eslint"], "patterns": [], "update_types": ["minor"]},
+        {"names": ["react"], "patterns": [], "update_types": []}],
+         "the legacy updateTypes key is read when matchUpdateTypes is absent")
+
+
 def case_dependabot_presence(ctx, t):
     ctx.tree("acme", {".github/dependabot.yml": ("version: 2\nupdates:\n  - package-ecosystem: npm\n"
                                                   "    directory: /\n    schedule:\n      interval: weekly\n")})
@@ -824,6 +839,173 @@ def case_npmrc_whitelist_no_secret(ctx, t):
         t.lacks(blob, secret, "the manifest JSON")
 
 
+# ------------------------------------------------------------------ cases: credentials
+USERINFO_PASSWORDS = (("at", "Qz7@kw4"), ("slash", "Qz7/kw4"), ("hash", "Qz7#kw4"), ("query", "Qz7?kw4"))
+SPEC_URL = "git+https://user:tok3n@git.example.com/acme/pkg.git"
+SPEC_MASKED = "git+https://***@git.example.com/acme/pkg.git"
+
+
+def case_registry_userinfo_with_specials(ctx, t):
+    for tag, password in USERINFO_PASSWORDS:
+        ctx.tree(tag, {
+            "package.json": J({"name": "acme"}),
+            ".npmrc": ("registry=https://user:%s@registry.example.com/npm/\n"
+                       "@acme:registry=https://user:%s@npm.example.com:4873/\n"
+                       "//registry.example.com/npm/:_authToken=abc123\n" % (password, password)),
+            ".gitlab-ci.yml": ("build:\n  script:\n"
+                               "    - npm run build --registry https://user:%s@registry.example.com/npm/\n" % password),
+        })
+        m = ctx.manifest(tag)
+        t.clean(m)
+        t.eq(m["npmrc"], [{"path": ".npmrc", "keys": {"@acme:registry": "npm.example.com:4873",
+                                                       "registry": "registry.example.com"}}], tag + ": hosts only")
+        t.eq(m["ci"]["verify_jobs"], [{"file": ".gitlab-ci.yml", "job": "build",
+                                       "commands": ["npm run build --registry https://***@registry.example.com/npm/"]}],
+             tag + ": the CI command is masked up to the host")
+        for fragment in ("Qz7", "kw4", "user:", "abc123"):
+            t.lacks(json.dumps(m), fragment, tag + ": the manifest JSON")
+
+    ctx.tree("literal", {"package.json": J({"name": "acme"}),
+                         ".npmrc": "registry=https://user:p@ss@registry.example.com/\n"})
+    literal = ctx.manifest("literal")
+    t.eq(literal["npmrc"][0]["keys"], {"registry": "registry.example.com"}, "user:p@ss@ still names the real host")
+    for fragment in ("p@ss", "ss@"):
+        t.lacks(json.dumps(literal), fragment, "the manifest JSON")
+
+    ctx.tree("hosts", {"package.json": J({"name": "acme"}), ".npmrc": (
+        "registry=https://registry.example.com/@acme/\n@a:registry=http://localhost:4873/\n"
+        "@b:registry=https://${REGISTRY_HOST}/npm/\n@c:registry=https://registry.example.com:${PORT}/\n"
+        "@d:registry=registry.example.com/npm/\n@e:registry=https://[::1]:4873/\n")})
+    t.eq(ctx.manifest("hosts")["npmrc"][0]["keys"],
+         {"@a:registry": "localhost:4873", "@e:registry": "[::1]:4873", "registry": "registry.example.com"},
+         "hosts without credentials are kept; placeholders, odd ports and values without a host are dropped")
+
+
+def case_spec_urls_carry_no_credentials(ctx, t):
+    other = SPEC_URL.replace("pkg.git", "other.git")
+    ctx.tree("acme", {
+        "package.json": J({"name": "acme",
+                           "dependencies": {"priv": SPEC_URL,
+                                            "scoped": "https://registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
+                                            "local": "http://localhost:4873/@acme/pkg/-/pkg-1.0.0.tgz",
+                                            "cdn": "https://cdn.example.com/npm/lodash@4.17.21/lodash.tgz"},
+                           "overrides": {"priv": SPEC_URL}}),
+        "requirements.txt": ("pkg @ https://bob:tok3n@example.com/pkg.whl\n" + other + "#egg=other\n"
+                             "vcs @ git+https://git.example.com/acme/vcs.git@v1.2.3\n"
+                             "git+https://git.example.com/acme/vcs2.git@v1.2.3#egg=vcs2\n"),
+        "composer.json": J({"name": "acme/app", "require": {"acme/priv": SPEC_URL}}),
+        "pnpm-workspace.yaml": "catalog:\n  priv: %s\n" % SPEC_URL,
+    })
+    m = ctx.manifest("acme")
+    t.clean(m)
+    t.lacks(json.dumps(m), "tok3n", "the manifest JSON")
+    t.eq({(p["name"], p["kind"]): p["declared"] for p in m["packages"]}, {
+        ("priv", "prod"): SPEC_MASKED,
+        ("scoped", "prod"): "https://registry.example.com/@acme/pkg/-/pkg-1.0.0.tgz",
+        ("local", "prod"): "http://localhost:4873/@acme/pkg/-/pkg-1.0.0.tgz",
+        ("cdn", "prod"): "https://cdn.example.com/npm/lodash@4.17.21/lodash.tgz",
+        ("acme/priv", "prod"): SPEC_MASKED,
+        ("pkg", "prod"): "https://***@example.com/pkg.whl",
+        ("other", "prod"): other.replace("user:tok3n", "***"),
+        ("vcs", "prod"): "git+https://git.example.com/acme/vcs.git@v1.2.3",
+        ("vcs2", "prod"): "git+https://git.example.com/acme/vcs2.git@v1.2.3"},
+         "declared specs: the credentials go, paths with an @ stay")
+    t.eq(pkg(m, "priv")["style"], "url", "a masked spec keeps its style")
+    t.eq(m["overrides"], [{"name": "priv", "spec": SPEC_MASKED, "source": "package.json#overrides"}], "override spec")
+    t.eq(m["catalogs"]["default"]["priv"]["spec"], SPEC_MASKED, "catalog spec")
+
+    if sys.version_info >= (3, 11):
+        ctx.tree("pyproject", {"pyproject.toml": (
+            '[project]\nname = "acme"\ndependencies = ["pkg @ https://bob:tok3n@example.com/pkg.whl"]\n\n'
+            '[tool.poetry.dependencies]\nacme-tool = {git = "%s"}\n' % SPEC_URL)})
+        py = ctx.manifest("pyproject")
+        t.lacks(json.dumps(py), "tok3n", "the pyproject manifest JSON")
+        t.eq({e["name"]: e["declared"] for e in py["packages"]},
+             {"pkg": "https://***@example.com/pkg.whl", "acme-tool": SPEC_MASKED}, "pyproject specs")
+
+
+def case_ci_secret_masking_quoted_and_bare(ctx, t):
+    script = ("npm config set //registry.example.com/:_authToken spaceTok1 && npm run build",
+              'NPM_TOKEN="quoted tok" npm run build',
+              "NPM_TOKEN='single quoted tok' npm run lint",
+              'npm run test -- --token spaceTok2 --password "pass word" --reporter=dot',
+              "yarn config set npmAuthToken spaceTok3 && yarn build",
+              "ruff check src/auth/ src/api/",
+              "pytest -k auth tests/",
+              "npm run test:auth -- --watch")
+    ctx.tree("acme", {".gitlab-ci.yml": "test:\n  script:\n" + "".join("    - %s\n" % line for line in script)})
+    m = ctx.manifest("acme")
+    t.clean(m)
+    t.eq(m["ci"]["verify_jobs"], [{"file": ".gitlab-ci.yml", "job": "test", "commands": [
+        "npm config set //registry.example.com/:_authToken *** && npm run build",
+        "NPM_TOKEN=*** npm run build",
+        "NPM_TOKEN=*** npm run lint",
+        "npm run test -- --token *** --password *** --reporter=dot",
+        "yarn config set npmAuthToken *** && yarn build",
+        "ruff check src/auth/ src/api/",
+        "pytest -k auth tests/",
+        "npm run test:auth -- --watch"]}], "secrets are masked as one value; paths and flags that only mention auth stay")
+    for secret in ("spaceTok1", "spaceTok2", "spaceTok3", "quoted tok", "single quoted tok", "pass word"):
+        t.lacks(json.dumps(m), secret, "the manifest JSON")
+
+
+# ------------------------------------------------------------------ cases: YAML it cannot read
+def case_yaml_unterminated_flow_is_noted_and_fast(ctx, t):
+    importers = "".join("  pkg%d:\n    dependencies:\n      left-pad:\n        specifier: 1.3.0\n"
+                        "        version: 1.3.0\n" % n for n in range(2000))
+    ctx.tree("lock", {
+        "package.json": J({"name": "acme", "packageManager": "pnpm@9.1.0", "dependencies": {"left-pad": "1.3.0"}}),
+        "pnpm-lock.yaml": ("lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: [true\n\nimporters:\n\n"
+                           "  .:\n    dependencies:\n      left-pad:\n        specifier: 1.3.0\n"
+                           "        version: 1.3.0\n" + importers),
+    })
+    started = time.monotonic()
+    m = ctx.manifest("lock")
+    elapsed = time.monotonic() - started
+    t.ok(elapsed < 2, "10000 lines after an open [ took %.1fs" % elapsed)
+    t.ok("unparsed pnpm-lock.yaml (invalid YAML)" in m["notes"], "lockfile note: %r" % m["notes"])
+    t.eq(pkg(m, "left-pad")["locked"], None, "an unreadable lockfile locks nothing")
+
+    ctx.tree("workspace", {"package.json": J({"name": "acme"}), "packages/a/package.json": J({"name": "a"}),
+                           "pnpm-workspace.yaml": "packages: ['packages/*'\ncatalog:\n  react: ^18.3.1\n"})
+    w = ctx.manifest("workspace")
+    t.ok("unparsed pnpm-workspace.yaml (invalid YAML)" in w["notes"], "workspace note: %r" % w["notes"])
+    t.eq((w["catalogs"], w["workspaces"]), ({}, ["."]), "the file is dropped, not half read")
+
+    ctx.tree("quote", {"package.json": J({"name": "acme"}),
+                       "pnpm-workspace.yaml": "catalog:\n  react: ['^18, ^19]\n  vue: ^3.4.0\n"})
+    q = ctx.manifest("quote")
+    t.ok("unparsed pnpm-workspace.yaml (invalid YAML)" in q["notes"], "unclosed quote note: %r" % q["notes"])
+    t.eq(q["catalogs"], {}, "an unclosed quote does not swallow the rest into a value")
+
+    ctx.tree("multiline", {"package.json": J({"name": "acme"}), "packages/a/package.json": J({"name": "a"}),
+                           "apps/web/package.json": J({"name": "web"}),
+                           "pnpm-workspace.yaml": "packages: [\n  'packages/*',\n  'apps/*'\n]\ncatalog:\n  react: ^18.3.1\n"})
+    ml = ctx.manifest("multiline")
+    t.eq(ml["notes"], [], "a flow sequence closed on a later line is fine")
+    t.eq(ml["workspaces"], [".", "apps/web", "packages/a"], "and its items count")
+    t.eq(ml["catalogs"].get("default", {}).get("react", {}).get("spec"), "^18.3.1", "and the entries after it are read")
+
+
+def case_yaml_tab_indentation_is_noted(ctx, t):
+    ctx.tree("tabs", {"package.json": J({"name": "acme"}), "packages/a/package.json": J({"name": "a"}),
+                      "pnpm-workspace.yaml": "packages:\n\t- 'packages/*'\ncatalog:\n\treact: ^18.3.1\n"})
+    m = ctx.manifest("tabs")
+    t.ok("unparsed pnpm-workspace.yaml (invalid YAML)" in m["notes"], "tab note: %r" % m["notes"])
+    t.eq((m["catalogs"], m["workspaces"]), ({}, ["."]), "a tab-indented file yields nothing")
+
+    ctx.tree("fine", {
+        "package.json": J({"name": "acme"}),
+        "pnpm-workspace.yaml": "catalog:\n\t# a tab before a comment\n  react: ^18.3.1\t# a tab before an inline one\n",
+        ".gitlab-ci.yml": "test:\n  script:\n    - |\n      npm run build\n      \techo done\n"})
+    f = ctx.manifest("fine")
+    t.eq(f["notes"], [], "tabs that do not indent a line are not an error")
+    t.eq(f["catalogs"].get("default", {}).get("react"),
+         {"spec": "^18.3.1", "comment": "a tab before a comment a tab before an inline one"}, "comment and inline tab")
+    t.eq(f["ci"]["verify_jobs"], [{"file": ".gitlab-ci.yml", "job": "test", "commands": ["npm run build"]}],
+         "a tab inside a block scalar row")
+
+
 # ------------------------------------------------------------------ cases: update targets
 MANIFEST_BASENAMES = ("package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml",
                       "pnpm-workspace.yaml", "yarn.lock", "bun.lock", "bun.lockb", ".npmrc", ".nvmrc",
@@ -865,6 +1047,24 @@ def case_update_unrelated_empty(ctx, t):
                                        "src/requirements.md"]), [], "unrelated paths touch nothing")
     t.eq(dm.dependency_update_targets([]), [], "no paths")
     t.eq(dm.dependency_update_targets(None), [], "no list")
+
+
+def case_update_targets_cover_every_name_the_module_reads(ctx, t):
+    t.eq(dm.dependency_update_targets([".renovaterc.json5", ".php-version", "runtime.txt"]),
+         targets([".php-version", ".renovaterc.json5", "runtime.txt"], STACK_MANIFEST),
+         "runtime pin files and the json5 renovate config")
+    for name in (".dvmrc", "deno.jsonc", "deno.lock", "go.mod", "Cargo.toml", "Gemfile", "build.gradle",
+                 "build.gradle.kts", "pom.xml", ".yarnrc.yml", "bunfig.toml", "patches/lodash+4.17.21.patch"):
+        t.eq(dm.dependency_update_targets([name]), targets([name], STACK_MANIFEST), "read name " + name)
+    for name in sorted(set(dm.LOCK_TYPES) | set(dm.OTHER_KINDS)):
+        t.eq(dm.dependency_update_targets(["packages/web/" + name]), targets(["packages/web/" + name], STACK_MANIFEST),
+             "nested read name " + name)
+    for path in dm.RENOVATE_PARSED + dm.RENOVATE_PRESENT:
+        t.eq(dm.dependency_update_targets([path]), targets([path], STACK_MANIFEST), "renovate config " + path)
+    for path in dm.DEPENDABOT:
+        t.eq(dm.dependency_update_targets([path]), targets([path], ["CI/CD"]), "dependabot config " + path)
+    t.eq(dm.dependency_update_targets(["patches/README.md", "docs/patches/x.patch", "src/runtime.txt.md"]), [],
+         "files that only look like patches or pins touch nothing")
 
 
 # ------------------------------------------------------------------ cases: the cpcg scanner
@@ -917,6 +1117,22 @@ def case_module_missing_still_scans(ctx, t):
     t.ok("dependency_manifest" not in out, "no dependency_manifest key")
     t.eq(sorted(out["update"]), OLD_UPDATE, "update keeps its 4 keys")
     t.eq(out["stack"]["package_managers"], ["npm"], "the scanner's own package manager list is untouched")
+
+
+def case_default_skip_matches_scanner(ctx, t):
+    spec = importlib.util.spec_from_file_location("scanner_skip_set", ctx.scanner)
+    scanner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(scanner)
+    t.eq(sorted(dm.DEFAULT_SKIP), sorted(scanner.SKIP_DIRS), "DEFAULT_SKIP lists the directories the scanner skips")
+    files = {"package.json": J({"name": "acme", "workspaces": ["*/*"]})}
+    for folder in ("apps/web", "env/lib", "out/app", "tmp/job", "coverage/report"):
+        files[folder + "/package.json"] = J({"name": folder.replace("/", "-")})
+    ctx.tree("acme", files)
+    root = Path(ctx.path("acme"))
+    alone = dm.dependency_manifest(root)
+    t.eq(alone["workspaces"], [".", "apps/web"], "a standalone run leaves out what the scanner leaves out")
+    t.eq(json.dumps(dm.dependency_manifest(root, scanner.SKIP_DIRS)), json.dumps(alone),
+         "a standalone run and a scanner run give one manifest")
 
 
 # ------------------------------------------------------------------ cases: other ecosystems
@@ -1047,17 +1263,25 @@ CASES = [
     ("shadowed_by_node_package", case_shadowed_by_node_package),
     ("renovate_caps_disabled_minage_groups", case_renovate_caps_disabled_minage_groups),
     ("renovate_json5_unparsed", case_renovate_json5_unparsed),
+    ("renovate_legacy_update_types", case_renovate_legacy_update_types),
     ("dependabot_presence", case_dependabot_presence),
     ("gitlab_ci_images_services_verify_audit_mrpipelines", case_gitlab_ci_images_services_verify_audit_mrpipelines),
     ("ci_pins_pip_supabase", case_ci_pins_pip_supabase),
     ("github_actions_setup_node", case_github_actions_setup_node),
     ("verification_placeholder_and_external", case_verification_placeholder_and_external),
     ("npmrc_whitelist_no_secret", case_npmrc_whitelist_no_secret),
+    ("registry_userinfo_with_specials", case_registry_userinfo_with_specials),
+    ("spec_urls_carry_no_credentials", case_spec_urls_carry_no_credentials),
+    ("ci_secret_masking_quoted_and_bare", case_ci_secret_masking_quoted_and_bare),
+    ("yaml_unterminated_flow_is_noted_and_fast", case_yaml_unterminated_flow_is_noted_and_fast),
+    ("yaml_tab_indentation_is_noted", case_yaml_tab_indentation_is_noted),
     ("update_root_lockfile", case_update_root_lockfile),
     ("update_ci_file", case_update_ci_file),
     ("update_unrelated_empty", case_update_unrelated_empty),
+    ("update_targets_cover_every_name_the_module_reads", case_update_targets_cover_every_name_the_module_reads),
     ("scan_keys_additive", case_scan_keys_additive),
     ("module_missing_still_scans", case_module_missing_still_scans),
+    ("default_skip_matches_scanner", case_default_skip_matches_scanner),
     ("composer_and_requirements", case_composer_and_requirements),
     ("poetry_tomllib", case_poetry_tomllib),
     ("deterministic_bytes", case_deterministic_bytes),

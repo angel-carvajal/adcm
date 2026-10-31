@@ -9,7 +9,7 @@ update bots, CI images/actions/pins, Docker bases, verification commands, other 
 The module reports facts and the file each one came from. It never runs a package manager, never picks
 a runtime and never copies a credential into its output. The result is deterministic (sorted lists, no
 clock, no network, no subprocess) and bounded (files at most four directory levels deep, skipping the
-directories it is given).
+directories it is given, or DEFAULT_SKIP, the standalone fallback mirror of the cpcg scanner's skip set).
 
 API
   MANIFEST_FORMAT = 1
@@ -23,6 +23,7 @@ import json
 import os
 import re
 import shlex
+from urllib.parse import urlsplit
 
 try:
     import tomllib
@@ -35,7 +36,20 @@ MAX_DEPTH = 4
 DOCKER_DEPTH = 3
 MAX_BYTES = 64 * 1024 * 1024
 ALIAS_BUDGET = 200000
-DEFAULT_SKIP = frozenset({".git", "node_modules", "vendor", "dist", "build", ".venv", "venv"})
+# The directories a run without skip_dirs leaves out: the ones the cpcg scanner skips, so both walk the same tree.
+DEFAULT_SKIP = frozenset({
+    ".git", ".hg", ".svn",
+    "node_modules", "vendor", "bower_components",
+    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+    ".venv", "venv", "env", ".env.d",
+    "dist", "build", "out", "target", ".next", ".nuxt", ".svelte-kit",
+    "coverage", ".nyc_output",
+    ".idea", ".vscode", ".vs",
+    "storage", "tmp", "temp",
+    ".terraform",
+    ".gradle", ".m2",
+    "DerivedData",
+})
 DOT_DIRS = (".github", ".gitlab")
 PARENT = os.pardir + "/"
 
@@ -141,8 +155,8 @@ def _split_key(text):
     return m.group(1).strip(), (m.group(2) or "").strip()
 
 
-def _brackets(text):
-    depth, quote = 0, None
+def _brackets(text, depth=0, quote=None):
+    """(depth, open quote) after `text`; a later line of the same scalar resumes from the state it returns."""
     for i, ch in enumerate(text):
         if quote:
             if ch == quote:
@@ -153,7 +167,7 @@ def _brackets(text):
             depth += 1
         elif ch in "]}":
             depth -= 1
-    return depth
+    return depth, quote
 
 
 def _skip_ws(s, i):
@@ -272,7 +286,7 @@ def _logical_lines(text):
     while i < n:
         line = raw[i]
         i += 1
-        body = line.lstrip(" ")
+        body = line.lstrip(" \t")
         if not body.strip():
             above = []
             continue
@@ -282,6 +296,9 @@ def _logical_lines(text):
         if body.strip() in ("---", "..."):
             above = []
             continue
+        if "\t" in line[:len(line) - len(body)]:
+            # A tab cannot indent YAML; failing the file leaves a note, reading on would drop its entries unseen.
+            raise ValueError("tab in indentation")
         indent = len(line) - len(body)
         content, inline = _split_comment(body.rstrip())
         ln = _Ln(indent, content, above, inline)
@@ -355,10 +372,14 @@ class _Yaml(object):
         if ln.block is not None and _BLOCK_HEAD.match(text):
             return ln.block
         if text[0] in "[{":
-            while _brackets(text) > 0 and self.i < len(self.lines):
-                text += " " + self.lines[self.i].text
+            parts, (depth, quote) = [text], _brackets(text)
+            while depth > 0 and self.i < len(self.lines):
+                parts.append(self.lines[self.i].text)
+                depth, quote = _brackets(" " + parts[-1], depth, quote)
                 self.i += 1
-            return _flow_value(text, 0)[0]
+            if depth > 0:
+                raise ValueError("unterminated flow collection")
+            return _flow_value(" ".join(parts), 0)[0]
         return _scalar_text(text)
 
     def continued(self, val, indent):
@@ -566,6 +587,17 @@ def _strs(value):
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
+# The userinfo of a URL may hold @, /, ? or #. A dotted host or localhost followed by a path keeps every later @ for
+# the path (scoped package, git ref); any other prefix is credentials, up to the last @ of the token.
+_HOST = r"(?:(?:[a-z0-9-]+\.)+[a-z0-9-]+|localhost)(?::\d*)?(?=[/?#\s]|$)"
+_URL_USERINFO = re.compile(r"(://)(?:[^/?#\s]*@|(?!%s|/)(?:(?!://)\S)*[^\s/]@)" % _HOST, re.I)
+
+
+def _mask_userinfo(text):
+    """`text` with the userinfo of every scheme://userinfo@host replaced by ***; other values pass through."""
+    return _URL_USERINFO.sub(r"\1***@", text) if isinstance(text, str) else text
+
+
 def _guard(c, label, fn, default):
     try:
         return fn()
@@ -700,7 +732,7 @@ def _catalogs(c):
             bucket = found.setdefault(name, {})
             for dep in sorted(entries):
                 if isinstance(entries[dep], str):
-                    bucket[dep] = {"spec": entries[dep], "comment": comments.get(base + (dep,))}
+                    bucket[dep] = {"spec": _mask_userinfo(entries[dep]), "comment": comments.get(base + (dep,))}
 
     data = _dict(data)
     take("default", data.get("catalog"), ("catalog",))
@@ -961,6 +993,8 @@ def _python_packages(c):
 
 def _packages(c, lock, workspaces):
     out = _node_packages(c, lock, workspaces) + _composer_packages(c) + _python_packages(c)
+    for entry in out:
+        entry["declared"], entry["locked"] = _mask_userinfo(entry["declared"]), _mask_userinfo(entry["locked"])
     rank = {ws: i for i, ws in enumerate(workspaces)}
     return sorted(out, key=lambda e: (rank.get(e["workspace"], len(rank)), e["name"], e["kind"]))
 
@@ -988,7 +1022,8 @@ def _overrides(c):
                           ("package.json#resolutions", pkg.get("resolutions")),
                           ("package.json#pnpm.overrides", _dict(pkg.get("pnpm")).get("overrides")),
                           ("pnpm-workspace.yaml#overrides", _dict(c.yaml("pnpm-workspace.yaml")[0]).get("overrides"))):
-        out.extend({"name": name, "spec": spec, "source": source} for name, spec in _flatten_overrides("", value) if name)
+        out.extend({"name": name, "spec": _mask_userinfo(spec), "source": source}
+                   for name, spec in _flatten_overrides("", value) if name)
     return sorted(out, key=lambda e: (e["source"], e["name"]))
 
 
@@ -1042,7 +1077,20 @@ def _install_scripts(c):
 NPMRC_KEYS = ("save-exact", "save-prefix", "engine-strict", "legacy-peer-deps", "strict-peer-dependencies",
               "auto-install-peers", "node-linker", "shamefully-hoist")
 _REGISTRY_KEY = re.compile(r"^(?:@[\w.-]+:)?registry$")
-_URL_HOST = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://(?:[^/@?#]*@)?([^/?#]+)")
+
+
+def _registry_host(value):
+    """host[:port] of a registry URL without its credentials; None when there is no host to report."""
+    try:
+        parts = urlsplit(_mask_userinfo(value))
+        host, port = parts.hostname, parts.port
+    except ValueError:
+        return None
+    if not host or "${" in host:
+        return None
+    if ":" in host:
+        host = "[%s]" % host
+    return host if port is None else "%s:%d" % (host, port)
 
 
 def _npmrc(c):
@@ -1061,9 +1109,9 @@ def _npmrc(c):
             if key in NPMRC_KEYS:
                 keys[key] = {"true": True, "false": False}.get(value, value)
             elif _REGISTRY_KEY.match(key):
-                host = _URL_HOST.match(value)
-                if host and "${" not in host.group(1):
-                    keys[key] = host.group(1)
+                host = _registry_host(value)
+                if host:
+                    keys[key] = host
         out.append({"path": rel, "keys": dict(sorted(keys.items()))})
     return out
 
@@ -1196,12 +1244,17 @@ class _Ci(object):
         self.gitlab = self.github = self.merge_requests = False
 
 
-_SECRET_ASSIGN = re.compile(r"([\w.-]*(?:token|secret|passw(?:or)?d|api[_-]?key|credentials?|auth(?![a-z]))[\w.-]*=)\S+", re.I)
-_URL_USERINFO = re.compile(r"(://)[^/@\s]+@")
+_SECRET = r"(?:token|secret|passw(?:or)?d|api[_-]?key|credentials?|auth(?![a-z]))"
+_NAME = r"(?=[\w.-]*%s)[\w.-]+" % _SECRET
+# A value is one shell word: a quoted string, which may hold spaces, with whatever touches it, else a run of non-space.
+_WORD = r"""(?:(?:"(?:[^"\\]|\\.)*(?:"|$)|'[^']*(?:'|$))\S*|\S+)"""
+_SECRET_ASSIGN = re.compile(r"((?<![\w.-])%s=)%s" % (_NAME, _WORD), re.I)
+# The same names given as a flag, an npm config key or the key after `set` carry their value as the next word.
+_SECRET_ARG = re.compile(r"((?:(?<!\S)--?|(?<!\w)_|\bset\s+)%s['\"]?\s+)(?![-&|;<>])%s" % (_NAME, _WORD), re.I)
 
 
 def _redact(command):
-    return _URL_USERINFO.sub(r"\1***@", _SECRET_ASSIGN.sub(r"\1***", command))
+    return _mask_userinfo(_SECRET_ARG.sub(r"\1***", _SECRET_ASSIGN.sub(r"\1***", command)))
 
 
 def _commands(value):
@@ -1587,7 +1640,7 @@ def _renovate(c, rel):
             bot["caps"].append({"names": names, "patterns": patterns, "allowed": rule["allowedVersions"]})
         if rule.get("enabled") is False:
             bot["disabled"].append({"names": names, "patterns": patterns,
-                                    "update_types": _strs(rule.get("matchUpdateTypes"))})
+                                    "update_types": _strs(rule.get("matchUpdateTypes") or rule.get("updateTypes"))})
         if isinstance(rule.get("groupName"), str):
             bot["groups"].append({"name": rule["groupName"], "names": names, "patterns": patterns})
     if _strs(data.get("ignoreDeps")):
@@ -1736,18 +1789,19 @@ def attach_dependency_manifest(root, result, skip_dirs=None):
             managers.append(name)
 
 
-MANIFEST_NAMES = frozenset({
+MANIFEST_NAMES = frozenset(LOCK_TYPES) | frozenset(OTHER_KINDS) | frozenset({
     "package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
     "yarn.lock", "bun.lock", "bun.lockb", ".npmrc", ".nvmrc", ".node-version", ".tool-versions",
     ".python-version", "composer.json", "composer.lock", "pyproject.toml", "poetry.lock", "Pipfile",
     "Pipfile.lock", "renovate.json", "renovate.json5", ".renovaterc", ".renovaterc.json", "deno.json",
-    "import_map.json"})
+    "import_map.json", ".php-version", ".dvmrc", "runtime.txt", ".renovaterc.json5"})
 MANIFEST_SECTIONS = ["Runtimes", "Frameworks and Critical Libraries", "Package Managers"]
 
 
 def _is_manifest_path(path):
     name = _base(path)
-    return name in MANIFEST_NAMES or fnmatch.fnmatchcase(name, "requirements*.txt")
+    return (name in MANIFEST_NAMES or fnmatch.fnmatchcase(name, "requirements*.txt")
+            or (_dir(path) == "patches" and bool(_PATCH_FILE.match(name))))
 
 
 def _is_ci_path(path):
