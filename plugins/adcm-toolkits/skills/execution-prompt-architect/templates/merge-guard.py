@@ -25,6 +25,8 @@ Qué se niega:
   sea Bash se permite en silencio; sin `tool_name` (o si no es un texto) se aplica la ruta de Bash.
   Bash (decide por argv[0], basename; nunca por el texto suelto del comando):
   - `gh pr merge …` y `glab mr merge|accept …`, salvo `--help|-h` (y `--disable-auto` en gh).
+  - `glab mr create` con `--auto-merge` (también `--auto-merge=…`): el MR nacería con el merge programado, salvo
+    `--help|-h`. Sin esa opción se permite (los MRs de las olas nacen con `--draft`).
   - API de merge con verbo distinto de GET: `gh api` / `glab api` / `curl|http|https|xh|wget` sobre
     `/pulls/N/merge`, `/merges`, `/merge_requests/N/merge`, `/merge_requests/N/merge_when_pipeline_succeeds`;
     `gh api graphql` con `mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest|mergeBranch`.
@@ -116,6 +118,7 @@ RESET_MODES = frozenset({"--hard", "--soft", "--keep", "--merge"})
 LOCAL_REF = re.compile(r"HEAD(?:[~^]\d*)*")  # solo la propia historia de la rama; HEAD@{N} y ORIG_HEAD pueden apuntar a otra rama
 PUSH_VALUE_FLAGS = frozenset({"--repo", "--receive-pack", "--exec"})
 AUTO_MERGE_OPT = re.compile(r"merge_request\.merge_when_pipeline_succeeds|merge_request\.auto_merge|auto_merge", re.I)
+AUTO_MERGE_FLAG = re.compile(r"--auto-merge(?:=|$)")  # la opción de `glab mr create` que programa el merge
 MCP_MERGE = re.compile(r"mcp__.*(?:merge_merge_request|merge_pull_request|accept_merge_request|merge_mr|merge_pr)", re.I)
 
 
@@ -549,6 +552,8 @@ def judge(argv, state, depth):
             return argv
     elif prog == "glab":
         if words[:2] in (["mr", "merge"], ["mr", "accept"]) and not help_asked:
+            return argv
+        if words[:2] == ["mr", "create"] and not help_asked and any(AUTO_MERGE_FLAG.match(a) for a in rest):
             return argv
         if words[:1] == ["api"] and merges_over_api(prog, rest):
             return argv

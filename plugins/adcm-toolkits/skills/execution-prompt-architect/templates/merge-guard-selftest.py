@@ -200,6 +200,8 @@ def build_groups(c):
         allow("gh_pr_checks", "gh pr checks 3", f),
         allow("gh_pr_diff", "gh pr diff 3", f),
         allow("glab_mr_create", "glab mr create --fill", f),
+        deny("glab_mr_create_auto_merge", "glab mr create --draft --auto-merge -t x", f, mention="glab mr create --draft --auto-merge"),
+        allow("glab_mr_create_draft_labels", "glab mr create --draft -l dependencies --remove-source-branch -y", f),
     ]
 
     g3 = [  # false positives: the words are there, the command is not
