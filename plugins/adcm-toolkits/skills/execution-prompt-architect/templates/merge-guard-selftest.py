@@ -201,6 +201,9 @@ def build_groups(c):
         allow("gh_pr_diff", "gh pr diff 3", f),
         allow("glab_mr_create", "glab mr create --fill", f),
         deny("glab_mr_create_auto_merge", "glab mr create --draft --auto-merge -t x", f, mention="glab mr create --draft --auto-merge"),
+        deny("glab_mr_new_auto_merge", "glab mr new --draft --auto-merge -t x", f, mention="glab mr new --draft --auto-merge"),
+        deny("glab_mr_create_auto_merge_help_value", "glab mr create --auto-merge -t --help", f, mention="glab mr create --auto-merge -t --help"),
+        deny("glab_mr_create_auto_merge_unclosed_quote", r"glab mr create --auto-merge -t $'it\'s'", f, mention="glab mr create --auto-merge"),  # bash reads $'it\'s' as one word, shlex fails on it
         allow("glab_mr_create_draft_labels", "glab mr create --draft -l dependencies --remove-source-branch -y", f),
     ]
 
