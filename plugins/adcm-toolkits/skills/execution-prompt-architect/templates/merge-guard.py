@@ -25,9 +25,10 @@ Qué se niega:
   sea Bash se permite en silencio; sin `tool_name` (o si no es un texto) se aplica la ruta de Bash.
   Bash (decide por argv[0], basename; nunca por el texto suelto del comando):
   - `gh pr merge …` y `glab mr merge|accept …`, salvo `--help|-h` (y `--disable-auto` en gh).
-  - `glab mr <subcomando>` con `--auto-merge` (también `--auto-merge=…`): `create`, su alias `new` o cualquier otro; el
-    MR nacería con el merge programado y `--help` no lo exime. Sin esa opción `glab mr create` se permite (los MRs de
-    las olas nacen con `--draft`).
+  - `glab … mr … --auto-merge` (también `--auto-merge=…`), con cualquier subcomando (`create`, su alias `new`…): el MR
+    nacería con el merge programado. Se busca en el texto de todo comando antes de parsearlo, sin importar comillas,
+    sustituciones ni llaves, y `--help` no lo exime; un `echo` o un mensaje que lo escriba así también se niega. No ve
+    lo que el shell compone al ejecutar (`F=--auto-merge; glab mr create $F`, llaves anidadas). Sin esa opción pasa.
   - API de merge con verbo distinto de GET: `gh api` / `glab api` / `curl|http|https|xh|wget` sobre
     `/pulls/N/merge`, `/merges`, `/merge_requests/N/merge`, `/merge_requests/N/merge_when_pipeline_succeeds`;
     `gh api graphql` con `mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest|mergeBranch`.
@@ -53,7 +54,6 @@ segmentos; descarta redirecciones, palabras reservadas (`if then do …`), `VAR=
 command exec sudo nohup time nice timeout xargs`); recursa en `bash|sh|zsh -c`, `eval`, `$(…)` y
 backticks. Una comilla sin cerrar (ValueError de shlex) cae a una regex solo para `gh pr merge` y
 `glab mr merge|accept`.
-Esa ruta también niega `glab … mr … --auto-merge`, buscado en el texto sin parsear.
 
 Límites conocidos (es un barandal, no una frontera de seguridad): comandos dinámicos (`$(echo gh) pr
 merge`), envoltorios desconocidos, `make merge`, scripts que llaman la API por su cuenta, el stdin de
@@ -121,8 +121,8 @@ LOCAL_REF = re.compile(r"HEAD(?:[~^]\d*)*")  # solo la propia historia de la ram
 PUSH_VALUE_FLAGS = frozenset({"--repo", "--receive-pack", "--exec"})
 AUTO_MERGE_OPT = re.compile(r"merge_request\.merge_when_pipeline_succeeds|merge_request\.auto_merge|auto_merge", re.I)
 AUTO_MERGE_FLAG = re.compile(r"--auto-merge(?:=|$)")  # la opción de `glab mr` que programa el merge
-# la regla de AUTO_MERGE_FLAG sobre el texto sin parsear; anclada en el primer `glab` y en su primer `mr`, el coste es lineal
-AUTO_MERGE_FALLBACK = re.compile(r"\A(?:(?!\bglab\b).)*(\bglab\b)(?:(?!\bmr\b).)*\bmr\b.*(?<![\w-])--auto-merge(?![\w-])", re.S)
+# AUTO_MERGE_FLAG sobre el texto sin comillas (admite `$` entre letras); anclada en el primer `glab` y su primer `mr`: coste lineal
+AUTO_MERGE_TEXT = re.compile(r"\A(?:(?!\bglab\b).)*\bglab\b(?:(?!\bmr\b).)*\bmr\b.*(?<![\w-])" + r"\$*".join("--auto-merge") + r"(?![\w-])", re.S)
 MCP_MERGE = re.compile(r"mcp__.*(?:merge_merge_request|merge_pull_request|accept_merge_request|merge_mr|merge_pr)", re.I)
 
 
@@ -586,13 +586,15 @@ def scan(text, state, depth=0):
 def decide(command, cwd):
     """Texto del comando ofensor (para citarlo en la razón) o None si se permite."""
     state = {"cwd": cwd, "heads": {}, "git": {"hung": False}}
+    text = prepass(command)
+    flat = re.sub(r"['\"\\]", "", text)  # el shell une `--auto-m""erge`; `cuts` deja cada `{a,b}` en su primera o su última alternativa
+    cuts = [flat] + [re.sub(r"\{([^{}]*)\}", lambda m, i=i: m[1].split(",")[i], flat) for i in (0, -1)]
+    if any(AUTO_MERGE_TEXT.search(cut) for cut in cuts):  # `glab … mr … --auto-merge` en el texto entero, antes de parsear
+        return text[max(text.find("glab"), 0):][:MAX_SHOWN]
     try:
         hit = scan(command, state)
     except ValueError:  # comilla sin cerrar: solo los comandos duros, el resto se permite
         text = prepass(command)
-        auto = AUTO_MERGE_FALLBACK.search(text)  # `glab mr … --auto-merge` también es un comando duro
-        if auto:
-            return text[auto.start(1):auto.start(1) + MAX_SHOWN]
         m = HARD_FALLBACK.search(text)
         return text[m.start():m.start() + MAX_SHOWN] if m else None
     return shlex.join(hit)[:MAX_SHOWN] if hit else None

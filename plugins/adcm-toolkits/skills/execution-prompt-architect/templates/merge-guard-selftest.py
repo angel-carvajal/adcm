@@ -204,6 +204,10 @@ def build_groups(c):
         deny("glab_mr_new_auto_merge", "glab mr new --draft --auto-merge -t x", f, mention="glab mr new --draft --auto-merge"),
         deny("glab_mr_create_auto_merge_help_value", "glab mr create --auto-merge -t --help", f, mention="glab mr create --auto-merge -t --help"),
         deny("glab_mr_create_auto_merge_unclosed_quote", r"glab mr create --auto-merge -t $'it\'s'", f, mention="glab mr create --auto-merge"),  # bash reads $'it\'s' as one word, shlex fails on it
+        deny("glab_mr_create_auto_merge_after_subst", "glab mr create --draft --source-branch $(git branch --show-current) --target-branch main --auto-merge -y", f, mention="glab mr create --draft --source-branch"),
+        deny("glab_mr_create_auto_merge_after_backticks", "glab mr create --draft --source-branch `git branch --show-current` --target-branch main --auto-merge -y", f, mention="glab mr create --draft --source-branch"),
+        deny("glab_mr_create_auto_merge_ansi_c", "glab mr create $'--auto-merge'", f, mention="glab mr create"),
+        deny("glab_mr_create_auto_merge_braces", "glab mr create {--auto-merge,-y}", f, mention="glab mr create {--auto-merge,-y}"),
         allow("glab_mr_create_draft_labels", "glab mr create --draft -l dependencies --remove-source-branch -y", f),
     ]
 
