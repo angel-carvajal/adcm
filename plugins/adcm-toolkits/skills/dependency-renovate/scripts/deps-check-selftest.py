@@ -21,7 +21,9 @@ import http.server
 import json
 import os
 import re
+import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -729,9 +731,11 @@ def case_plan_online_stubbed_waves(ctx, t):
          [("express", "4.21.2", "4.22.3"), ("@playwright/test", "1.58.2", "1.64.0"), ("@types/express", "4.17.23", "4.17.25"),
           ("@types/node", "20.19.9", "20.19.25"), ("@types/react", "18.3.27", "18.3.28")], "patch-minor moves")
     t.eq([c["run"] for c in pm.get("commands", [])],
-         ["npm install --save-prod express@^4.22.3",
-          "npm install --save-dev @playwright/test@^1.64.0 @types/express@^4.17.25 @types/node@^20.19.25 @types/react@^18.3.28"],
+         ["npm install --save-prod 'express@^4.22.3'",
+          "npm install --save-dev '@playwright/test@^1.64.0' '@types/express@^4.17.25' '@types/node@^20.19.25' '@types/react@^18.3.28'"],
          "patch-minor commands")
+    t.eq(shlex.split(dig(pm, "commands", 0, "run") or ""), ["npm", "install", "--save-prod", "express@^4.22.3"],
+         "the quoted command keeps its argv")
     t.ok({"file": ".gitlab-ci.yml", "key": "e2e.image", "from": "mcr.microsoft.com/playwright:v1.55.0-jammy",
           "to": "mcr.microsoft.com/playwright:v1.64.0-jammy", "note": "align"} in pm.get("edits", []), "Playwright image follows")
     t.eq(pm.get("closes"), ["GHSA-2222-3333-4444"], "closes the transitive advisory through express")
@@ -811,7 +815,7 @@ def case_one_major_step(ctx, t):
     plain, data = both(ctx, t, "plan", repo, "--date", DATE, rc=1)
     t.eq(pkg(data, "uuid").get("target"), "14.0.3", "one step: the latest of the next major")
     t.eq(pkg(data, "zeta").get("target"), "3.1.0", "a skipped major goes to the next existing line")
-    t.eq(dig(wave(data, "major:uuid"), "commands", 0, "run"), "npm install --save-prod uuid@^14.0.3", "major command")
+    t.eq(dig(wave(data, "major:uuid"), "commands", 0, "run"), "npm install --save-prod 'uuid@^14.0.3'", "major command")
 
 
 def case_min_age_and_security_bypass(ctx, t):
@@ -1070,8 +1074,8 @@ def case_commands_generation_styles(ctx, t):
     plain, data = both(ctx, t, "plan", repo, "--date", DATE, rc=1)
     pm = wave(data, "patch-minor") or {}
     t.eq([c["run"] for c in pm.get("commands", [])],
-         ["npm install --save-prod a@^1.2.0", "npm install --save-prod --save-exact b@2.1.0",
-          "npm install --save-dev c@~3.0.5", "npm install --save-dev --save-exact d@4.0.1"], "npm commands keep ^ ~ exact")
+         ["npm install --save-prod 'a@^1.2.0'", "npm install --save-prod --save-exact b@2.1.0",
+          "npm install --save-dev 'c@~3.0.5'", "npm install --save-dev --save-exact d@4.0.1"], "npm commands keep ^ ~ exact")
     t.ok({"file": "package.json", "key": "dependencies.e", "from": ">=1.0.0 <2", "to": ">=1.5.0", "note": "manual"}
          in pm.get("edits", []), "a complex range becomes a manual edit")
     mono = pnpm_repo(ctx)
@@ -1079,7 +1083,8 @@ def case_commands_generation_styles(ctx, t):
     plain, data = both(ctx, t, "plan", mono, "--date", DATE, rc=1)
     pm = wave(data, "patch-minor") or {}
     runs = [c["run"] for c in pm.get("commands", [])]
-    t.eq(runs, ["pnpm add -w express@^4.22.3", "pnpm --filter ./packages/ui add -D vitest@^2.1.0", "pnpm install"], "pnpm commands")
+    t.eq(runs, ["pnpm add -w 'express@^4.22.3'", "pnpm --filter ./packages/ui add -D 'vitest@^2.1.0'", "pnpm install"],
+         "pnpm commands")
     t.ok({"file": "pnpm-workspace.yaml", "key": "catalog.typescript", "from": "^5.3.0", "to": "^5.9.4"} in pm.get("edits", []),
          "catalog entries are edits on pnpm-workspace.yaml")
     comp = npm_project(ctx, ctx.path("acme/projects/acme-php"), {"left-pad": ("prod", "^1.0.0", "1.0.0")})
@@ -1096,8 +1101,8 @@ def case_commands_generation_styles(ctx, t):
     plain, data = both(ctx, t, "plan", comp, "--date", DATE, rc=1)
     pm = wave(data, "patch-minor") or {}
     t.eq([c["run"] for c in pm.get("commands", [])],
-         ["composer require acme/lib:^2.1.0 --no-update && composer update acme/lib --with-dependencies",
-          "npm install --save-prod left-pad@^1.3.0"], "each ecosystem gets its own tool in a mixed repo")
+         ["composer require 'acme/lib:^2.1.0' --no-update && composer update acme/lib --with-dependencies",
+          "npm install --save-prod 'left-pad@^1.3.0'"], "each ecosystem gets its own tool in a mixed repo")
     t.ok({"file": "requirements.txt", "key": "flask", "from": "==2.0.1", "to": "==2.0.3", "note": "pin"} in pm.get("edits", []),
          "a pip pin moves by an edit (PyPI)")
     t.eq(dig(wave(data, "major:flask"), "edits", 0, "to"), "==3.0.0", "the pip major is its own wave")
@@ -1559,6 +1564,110 @@ def case_pnpm_audit_exit1_ok(ctx, t):
     t.eq(helper(ctx, repo, ["pnpm", "outdated"]).get("problem"), "not-json", "empty stdout with exit 1 is not JSON")
 
 
+def case_commands_shell_safe(ctx, t):
+    deps = {"react": ("prod", "18.3.0", "18.3.0"), "@types/node": ("dev", "20.11.0", "20.11.0"),
+            "evil;touch pwned": ("prod", "^1.0.0", "1.0.0"), "left-pad": ("prod", "^1.0.0", "1.0.0"),
+            "right-pad": ("prod", "^1.0.0", "1.0.0")}
+    repo = npm_project(ctx, ctx.path("acme/projects/acme-shell"), {k: v for k, v in deps.items() if k not in ("left-pad", "right-pad")},
+                       extra={"node_modules/left-pad": {"version": "1.0.0"}, "node_modules/right-pad": {"version": "1.0.0"}})
+    data = json.loads(read(os.path.join(repo, "package.json")))
+    data["workspaces"] = ["apps/*"]
+    write(os.path.join(repo, "package.json"), json.dumps(data, indent=2) + "\n")
+    bad_ws = "apps/w$(touch pwned)"
+    for ws, dep in (("apps/web", "left-pad"), (bad_ws, "right-pad")):
+        write(os.path.join(repo, ws, "package.json"), json.dumps({"name": dep + "-app", "version": "1.0.0",
+                                                                  "dependencies": {dep: "^1.0.0"}}, indent=2) + "\n")
+    write(os.path.join(repo, "composer.json"), json.dumps({"require": {"acme/lib": "^2.0", "Acme/Lib;id": "^1.0"}}, indent=2) + "\n")
+    write(os.path.join(repo, "composer.lock"), json.dumps({"packages": [{"name": "acme/lib", "version": "2.0.0"},
+                                                                        {"name": "Acme/Lib;id", "version": "1.0.0"}]}) + "\n")
+    ctx.init_git(repo)
+    old = {"react": ("18.3.0", "18.3.1"), "@types/node": ("20.11.0", "20.11.1"), "evil;touch pwned": ("1.0.0", "1.1.0"),
+           "left-pad": ("1.0.0", "1.3.0"), "right-pad": ("1.0.0", "1.3.0")}
+    ctx.config["npm"]["times"] = {n: {a: iso(OLD), b: iso(OLD)} for n, (a, b) in old.items()}
+    ctx.config["npm"]["outdated"] = {"stdout": {n: {"current": a, "wanted": b, "latest": b} for n, (a, b) in old.items()}, "exit": 1}
+    ctx.config["composer"]["outdated"] = {"stdout": {"installed": [
+        {"name": "acme/lib", "version": "2.0.0", "latest": "2.1.0", "latest-status": "semver-safe-update"},
+        {"name": "Acme/Lib;id", "version": "1.0.0", "latest": "1.1.0", "latest-status": "semver-safe-update"}]}, "exit": 0}
+    ctx.save()
+    plain, data = both(ctx, t, "plan", repo, "--date", DATE, rc=1)
+    runs = [c["run"] for w in data.get("waves") or [] for c in w["commands"]]
+    t.ok("npm install --save-prod --save-exact react@18.3.1" in runs, "a plain token comes out unchanged: %r" % runs)
+    t.ok("npm install --save-dev --save-exact @types/node@20.11.1" in runs, "a scoped exact token comes out unchanged")
+    web = next((r for r in runs if "--workspace" in r), "")
+    t.eq(web, "npm install --save-prod --workspace apps/web 'left-pad@^1.3.0'", "a safe workspace path stays unquoted")
+    t.eq(shlex.split(web), ["npm", "install", "--save-prod", "--workspace", "apps/web", "left-pad@^1.3.0"], "argv intact")
+    t.ok("composer require 'acme/lib:^2.1.0' --no-update && composer update acme/lib --with-dependencies" in runs, "composer quoted")
+    joined = "\n".join(runs)
+    for needle in ("evil", "pwned", "touch", "$(", "Lib;id"):
+        t.ok(needle not in joined, "no command carries %r" % needle)
+    review = data.get("review") or []
+    for line in ("review: 'evil;touch pwned' dropped from patch-minor: not a valid npm package name",
+                 "review: 'apps/w$(touch pwned)' dropped from patch-minor: not a valid workspace path",
+                 "review: 'Acme/Lib;id' dropped from patch-minor: not a valid composer package name"):
+        t.eq(review.count(line), 1, "one review line: %s" % line)
+    t.has(plain.lines, "review: 'evil;touch pwned' dropped from patch-minor", "the digest shows the dropped name")
+    t.eq((pkg(data, "evil;touch pwned").get("wave"), pkg(data, "right-pad", bad_ws).get("wave")), ("held", "held"),
+         "dropped entries are held")
+    t.ok(all(f["name"] not in ("evil;touch pwned", "Acme/Lib;id") and f["workspace"] != bad_ws
+             for w in data.get("waves") or [] for f in w["from_to"]), "dropped entries leave the wave")
+    t.ok(not os.path.exists(os.path.join(repo, "pwned")) and not os.path.exists(ctx.path("pwned")), "nothing ran")
+
+
+def case_scratch_private_atomic_write(ctx, t):
+    repo = ctx.fixture()
+    root = ctx.path("tmp/deps-renovate")
+    sha = ctx.git(repo, "rev-parse", "--short=7", "main")
+    run_dir = os.path.join(root, "acme-site", "%s-%s" % (DATE, sha))
+    plan = os.path.join(run_dir, "plan.json")
+    mode = lambda p: stat.S_IMODE(os.stat(p).st_mode)
+    os.makedirs(root)
+    os.chmod(root, 0o755)
+    r = ctx.run("plan", repo, "--offline", "--date", DATE, "--write")
+    t.eq(r.rc, 1, "plan --write exit code (last %r)" % r.last[:90])
+    t.eq([mode(p) for p in (root, os.path.dirname(run_dir), run_dir)], [0o700] * 3, "scratch root and run dirs are 0o700")
+    t.eq(mode(plan), 0o600, "plan.json is private")
+    victim = write(ctx.path("victim.txt"), "keep these bytes\n")
+    os.remove(plan)
+    os.symlink(victim, plan)
+    r = ctx.run("plan", repo, "--offline", "--date", DATE, "--write")
+    t.ok(not os.path.islink(plan) and json.loads(read(plan) or "{}").get("command") == "plan", "the symlink was replaced")
+    t.eq(read(victim), "keep these bytes\n", "the old symlink target keeps its bytes")
+    victim2 = write(ctx.path("victim2.txt"), "changelog victim\n")
+    log = os.path.join(repo, "docs", "dependencies", "CHANGELOG.md")
+    os.makedirs(os.path.dirname(log))
+    os.symlink(victim2, log)
+    r = ctx.run("changelog", repo, "--plan", plan, "--wave", "patch-minor", "--offline", "--date", DATE, "--write")
+    t.ok(r.rc == 1 and r.last.startswith("CHANGELOG: written docs/dependencies/CHANGELOG.md"), "changelog written: %r" % r.last)
+    t.ok(not os.path.islink(log) and (read(log) or "").startswith("# Dependency changelog"), "changelog symlink replaced")
+    t.eq(read(victim2), "changelog victim\n", "its old target keeps its bytes")
+    r = ctx.run("changelog", repo, "--plan", plan, "--wave", "patch-minor", "--format", "mr", "--offline", "--date", DATE, "--write")
+    t.eq((mode(os.path.join(run_dir, "mr")), mode(os.path.join(run_dir, "mr", "patch-minor.md"))), (0o700, 0o600), "mr dir private")
+    skill = ctx.skill()
+    victim3 = write(ctx.path("victim3.md"), delivery_file("acme-site"))
+    os.symlink(victim3, os.path.join(skill, "dependencies.md"))
+    r = ctx.run("context", repo, "--context", skill, "--offline", "--date", DATE, "--write")
+    target = os.path.join(skill, "dependencies.md")
+    t.ok(r.rc == 0 and not os.path.islink(target) and "| express | prod |" in (read(target) or ""), "context symlink replaced")
+    t.eq(read(victim3), delivery_file("acme-site"), "the context symlink target keeps its bytes")
+    shutil.rmtree(skill)
+    for bits in (0o770, 0o777):
+        os.chmod(root, bits)
+        for extra in ((), ("--write",)):
+            plain, data = both(ctx, t, "plan", repo, "--offline", "--date", DATE, *extra, rc=2)
+            t.eq(plain.last, "DEPS: unparsed (scratch dir not private: %s)" % root, "%o root refused %r" % (bits, extra))
+        plain, _ = both(ctx, t, "context", repo, "--offline", "--date", DATE, rc=2)
+        t.eq(plain.last, "CONTEXT: unparsed (scratch dir not private: %s)" % root, "%o root refused by context" % bits)
+    os.chmod(root, 0o700)
+    loose = ctx.path("loose")
+    os.makedirs(loose)
+    os.chmod(loose, 0o775)
+    plain, _ = both(ctx, t, "plan", repo, "--offline", "--date", DATE, "--scratch", loose, "--write", rc=2)
+    t.eq(plain.last, "DEPS: unparsed (scratch dir not private: %s)" % loose, "a group-writable --scratch is refused")
+    os.chmod(run_dir, 0o770)
+    r = ctx.run("changelog", repo, "--plan", plan, "--wave", "patch-minor", "--format", "mr", "--offline", "--date", DATE, "--write")
+    t.eq((r.rc, r.last), (2, "CHANGELOG: unparsed (scratch dir not private: %s)" % run_dir), "a group-writable plan dir is refused")
+
+
 CASES = [
     ("help_and_usage_64", case_help_and_usage_64),
     ("unparsed_not_repo", case_unparsed_not_repo),
@@ -1607,6 +1716,8 @@ CASES = [
     ("routes_auto", case_routes_auto),
     ("external_missing", case_external_missing),
     ("preflight_behind", case_preflight_behind),
+    ("commands_shell_safe", case_commands_shell_safe),
+    ("scratch_private_atomic_write", case_scratch_private_atomic_write),
 ]
 
 

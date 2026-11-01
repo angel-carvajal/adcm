@@ -6,7 +6,10 @@ skill, queries the registries read-only and plans one dependency run: a patch+mi
 family per wave, holds, never-auto packages and the owner decisions. Stdlib only, Python 3.8+, deterministic
 (the only clock read is the --date default; lists are sorted). Every subcommand is read-only unless --write
 is given, and without it prints `would write <path> (+a -b)`. It never installs, never runs `npm audit` or
-`pnpm audit`, never prints a value of .npmrc or .env, and never touches the machine tooling.
+`pnpm audit`, never prints a value of .npmrc or .env, and never touches the machine tooling. A write goes to a
+temp file in the target folder that then replaces the target, so a symlink at the target is replaced, never
+followed. Every token of a generated command is shell-quoted, and a package name or workspace path outside the
+npm, composer or path patterns is dropped from its wave with a review line.
 
 Usage
   deps-check preflight <repo> [--context PATH] [--expect-email ADDR] [--date D] [--offline] [--json]
@@ -47,7 +50,8 @@ Flags
   --routes auto|none smoke routes: the Smoke table of dependencies.md rules; without it, / alone, or with
                      auto / plus up to 3 static GET routes of the code-project-context-generator scanner
                      (its api_surface); none = no smoke
-  --scratch DIR      run dir (default: $TMPDIR/deps-renovate/<repo>/<run-id>)
+  --scratch DIR      run dir (default: $TMPDIR/deps-renovate/<repo>/<run-id>); scratch dirs are created 0700,
+                     and one owned by another user or writable by group or others is refused
   --plan FILE        a plan.json written by `plan --write`
   --wave ID          patch-minor or major:<family> (a wave of the plan)
   --verify KEY=VALUE verification result, repeatable (build=pass, e2e=pass 24/24 (base 24/24), ci:lint=pass)
@@ -103,7 +107,9 @@ import glob
 import json
 import os
 import re
+import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -278,12 +284,81 @@ def diff_counts(old, new):
     return added, removed
 
 
-def write_file(path, text):
-    folder = os.path.dirname(path)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(text)
+def write_file(path, text, private=False):
+    """Write `text` to a temp file in the target folder, then replace `path` with it (atomic; a symlink at
+    `path` is replaced, never followed). A replaced regular file keeps its mode; private files are 0o600."""
+    folder = os.path.dirname(os.path.abspath(path))
+    if not os.path.isdir(folder):
+        os.makedirs(folder, mode=0o700 if private else 0o777)
+    try:
+        st = os.lstat(path)
+        mode = stat.S_IMODE(st.st_mode) if stat.S_ISREG(st.st_mode) else None
+    except OSError:
+        mode = None
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".deps-check-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+        os.chmod(tmp, 0o600 if private else 0o644 if mode is None else mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def private_problem(path):
+    """`path` when it exists and is not a directory owned by the current user that group and others cannot
+    write; None when it is missing or private."""
+    uid = os.getuid() if hasattr(os, "getuid") else None
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return path
+    try:
+        if stat.S_ISLNK(st.st_mode):
+            if uid is not None and st.st_uid != uid:
+                return path
+            st = os.stat(path)
+    except OSError:
+        return path
+    if not stat.S_ISDIR(st.st_mode) or (uid is not None and st.st_uid != uid) or st.st_mode & 0o022:
+        return path
+    return None
+
+
+def scratch_problem(levels):
+    return next((p for p in (private_problem(level) for level in levels) if p), None)
+
+
+def make_private(levels):
+    """Create the missing scratch levels with mode 0o700 and tighten the existing ones; the first level that
+    turns out not to be private is returned, else None."""
+    parent = os.path.dirname(levels[0])
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent, exist_ok=True)
+    for level in levels:
+        try:
+            os.mkdir(level, 0o700)
+        except FileExistsError:
+            if private_problem(level):
+                return level
+        os.chmod(level, 0o700)
+    return None
+
+
+def shell_path(path):
+    """A shell-quoted path for an owner command, keeping a leading ~/ expandable."""
+    short = home_short(path)
+    if short == "~":
+        return short
+    if short.startswith("~/"):
+        return "~/" + shlex.quote(short[2:])
+    return shlex.quote(short)
 
 
 def day(text):
@@ -1041,7 +1116,7 @@ def resolve_node(manifest, folder, date, table):
     if pick:
         env["node_version"], env["node_found"] = vstr(pick[0]), found
         env["node_bin"] = os.path.join(folder, pick[1], "bin")
-        env["path_prefix"] = "PATH=%s:$PATH" % env["node_bin"]
+        env["path_prefix"] = "PATH=%s:$PATH" % shlex.quote(env["node_bin"])
     return env
 
 
@@ -1970,6 +2045,7 @@ def gather(repo, args, schedule=True):
     s.default_min_age = s.renovate["min_age"] if s.renovate["min_age"] is not None else DEFAULT_MIN_AGE
     s.advisories, s.transitive, s.entries, s.planned, s.pending = [], [], [], [], []
     s.graph, s.roots, s.lock, s.pypi, s.info, s.eco = LockGraph(), {}, None, {}, {}, {}
+    s.dropped = []
     return s
 
 
@@ -2093,6 +2169,39 @@ def requirement_file(s, name):
     return "pyproject.toml" if os.path.isfile(os.path.join(s.repo, "pyproject.toml")) else "requirements.txt"
 
 
+NPM_NAME = re.compile(r"^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$")
+COMPOSER_NAME = re.compile(r"^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$")
+WORKSPACE_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+def unsafe_token(e, eco):
+    """(why, token) when the name or workspace of an entry may not go into a shell command, else None."""
+    if eco == "composer" and not COMPOSER_NAME.match(e["name"]):
+        return "not a valid composer package name", e["name"]
+    if eco == "node" and not NPM_NAME.match(e["name"]):
+        return "not a valid npm package name", e["name"]
+    ws = e["workspace"]
+    if ws != "." and (not WORKSPACE_PATH.match(ws) or os.pardir in ws.split("/")):
+        return "not a valid workspace path", ws
+    return None
+
+
+def safe_moves(s, moves, wave_id):
+    """The moves whose package name and workspace path pass the strict patterns; each other one leaves the
+    wave, is held and gets one review line."""
+    keep = []
+    for e, target in moves:
+        why = unsafe_token(e, s.eco.get((e["name"], e["workspace"]), "node"))
+        if why is None:
+            keep.append((e, target))
+            continue
+        line = "review: %r dropped from %s: %s" % (why[1], wave_id, why[0])
+        if line not in s.dropped:
+            s.dropped.append(line)
+        e.update(wave="held", target=None, bump_type="none", age_days=None, blocked="%s (dropped)" % why[0])
+    return keep
+
+
 def wave_commands(s, moves):
     """[{cwd, run}] and [{file, key, from, to}] that move each package to its target."""
     pm = s.manifest["package_manager"]["name"]
@@ -2122,25 +2231,27 @@ def wave_commands(s, moves):
             continue
         groups.setdefault((eco, e["workspace"], e["kind"], exact), []).append("%s@%s" % (e["name"], spec))
     commands = []
+    q = shlex.quote
     for (eco, ws, kind, exact), specs in sorted(groups.items(), key=lambda kv: (
             kv[0][0], kv[0][1] != ".", kv[0][1], KIND_ORDER.get(kv[0][2], 9), kv[0][3])):
-        specs = " ".join(sorted(set(specs)))
+        specs = sorted(set(specs))
+        quoted = " ".join(q(x) for x in specs)
         tool = "composer" if eco == "composer" else node_pm
         if tool == "pnpm":
-            where = ("pnpm add -w" if workspace_file else "pnpm add") if ws == "." else "pnpm --filter ./%s add" % ws
+            where = ("pnpm add -w" if workspace_file else "pnpm add") if ws == "." else "pnpm --filter %s add" % q("./" + ws)
             flag = {"dev": " -D", "optional": " -O", "peer": " --save-peer"}.get(kind, "")
-            run = "%s%s%s %s" % (where, flag, " --save-exact" if exact else "", specs)
+            run = "%s%s%s %s" % (where, flag, " --save-exact" if exact else "", quoted)
         elif tool == "composer":
-            names = " ".join(sorted(x.rsplit("@", 1)[0] for x in specs.split()))
-            req = " ".join("%s:%s" % tuple(x.rsplit("@", 1)) for x in specs.split())
+            pairs = [x.rsplit("@", 1) for x in specs]
             run = "composer require%s %s --no-update && composer update %s --with-dependencies" % (
-                " --dev" if kind == "dev" else "", req, names)
+                " --dev" if kind == "dev" else "", " ".join(q("%s:%s" % (n, v)) for n, v in pairs),
+                " ".join(q(n) for n in sorted(n for n, _ in pairs)))
         elif tool == "npm":
             run = "npm install %s%s%s %s" % (SAVE_FLAG.get(kind, "--save-prod"), " --save-exact" if exact else "",
-                                            "" if ws == "." else " --workspace " + ws, specs)
+                                            "" if ws == "." else " --workspace " + q(ws), quoted)
         else:
             edits.extend({"file": "package.json", "key": x.rsplit("@", 1)[0], "from": None, "to": x.rsplit("@", 1)[1],
-                          "note": "manual (%s)" % tool} for x in specs.split())
+                          "note": "manual (%s)" % tool} for x in specs)
             continue
         commands.append({"cwd": ".", "run": run})
     edits.extend(catalog[k] for k in sorted(catalog))
@@ -2180,6 +2291,8 @@ def build_waves(s):
     date = s.date
     pm = s.manifest["package_manager"]["name"]
     pm_moves = [(e, e["step"]) for e in s.entries if e["step"] and not e["never_auto"] and e["wave"] != "held"]
+    pm_moves = safe_moves(s, pm_moves, "patch-minor")
+    kept = {e["name"] for e, _ in pm_moves}
     items, ci_edits, manual = ci_alignment(s)
     s.ci_items, s.ci_manual = items, manual
     ov_edits = override_edits(s, s.transitive)
@@ -2193,7 +2306,7 @@ def build_waves(s):
         closes = set()
         for e, target in pm_moves:
             closes.update(closes_of(target, e["advisories"]))
-        closes.update(t["id"] for t in s.transitive if t["fix"] in ("parent", "override"))
+        closes.update(t["id"] for t in s.transitive if t["fix"] == "override" or (t["fix"] == "parent" and t["parent"] in kept))
         waves.append({"id": "patch-minor", "branch": "deps/%s-patch-minor" % date, "base": default,
                       "packages": sorted({e["name"] for e, _ in pm_moves}),
                       "from_to": [{"name": e["name"], "workspace": e["workspace"], "kind": e["kind"], "from": e["locked"],
@@ -2206,8 +2319,12 @@ def build_waves(s):
     if s.online and pairs:
         refs = collect_refs(s.repo, pairs, s.tenv, s.partial)
     base = waves[-1]["branch"] if waves else default
+    planned = []
     for f in s.planned:
-        moves = [(e, e["major_target"]) for e in f["members"]]
+        moves = safe_moves(s, [(e, e["major_target"]) for e in f["members"]], "major:" + f["family"])
+        if not moves and not f.get("edits"):
+            continue
+        planned.append(f)
         commands, edits = wave_commands(s, moves)
         edits = edits + f.get("edits", [])
         if f.get("edits") and not commands:
@@ -2224,6 +2341,7 @@ def build_waves(s):
                       "commands": commands, "edits": edits, "closes": f["closes"], "risk": f["risk"],
                       "migration_refs": mig})
         base = branch
+    s.planned = planned
     return waves
 
 
@@ -2231,10 +2349,13 @@ def build_waves(s):
 # The plan: assembly, digest and verdict
 # ---------------------------------------------------------------------------
 
-def scratch_dir(s, arg):
+def scratch_levels(s, arg):
+    """The scratch dirs a run uses, outermost first: --scratch DIR alone, else the default root, the repo
+    folder and the run dir."""
     if arg:
-        return os.path.abspath(os.path.expanduser(arg))
-    return os.path.join(tempfile.gettempdir(), "deps-renovate", s.name, run_id(s.date, s.git))
+        return [os.path.abspath(os.path.expanduser(arg))]
+    root = os.path.join(tempfile.gettempdir(), "deps-renovate")
+    return [root, os.path.join(root, s.name), os.path.join(root, s.name, run_id(s.date, s.git))]
 
 
 def holds_view(s):
@@ -2345,6 +2466,7 @@ def review_lines(s, extra=()):
             "pypi": "PyPI lookups failed", "composer": "composer outdated failed",
             "mr-list": "glab mr list failed", "routes": "the cpcg scanner is unavailable",
             "migration-refs": "migration references unavailable"}.get(step, step)))
+    out.extend(s.dropped)
     out.extend(s.policy["review"])
     out.extend(s.renovate["review"])
     out.extend(extra)
@@ -2520,8 +2642,12 @@ def run_plan(args):
     holds, never = holds_view(s), never_auto_view(s)
     counts = counts_view(s, waves, holds, never)
     smoke = smoke_view(s, args.routes)
-    scratch = scratch_dir(s, args.scratch)
+    levels = scratch_levels(s, args.scratch)
+    scratch = levels[-1]
     plan_path = os.path.join(scratch, "plan.json")
+    bad = scratch_problem(levels)
+    if bad:
+        return fail("scratch dir not private: %s" % home_short(bad))
     extra = []
     git = s.git or {}
     if git.get("branch") and git.get("default_branch") and git["branch"] != git["default_branch"]:
@@ -2572,7 +2698,10 @@ def run_plan(args):
     lines = plan_lines(s, waves, counts, holds, never, scratch_line, review)
     data["text"] = lines
     if args.write:
-        write_file(plan_path, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        bad = make_private(levels)
+        if bad:
+            return fail("scratch dir not private: %s" % home_short(bad))
+        write_file(plan_path, json.dumps(data, ensure_ascii=False, indent=2) + "\n", private=True)
     return emit(args, data, lines, code)
 
 
@@ -2599,10 +2728,10 @@ def run_preflight(args):
         return fail("no dependency manifest")
     git, env, blockers, para, review = s.git, s.env, [], [], []
     ident = identity_view(s)
-    who = "<the repo identity>" if not s.expected else s.expected
+    who = "<the repo identity>" if not s.expected else shlex.quote(s.expected)
     if ident["state"] != "ok":
         blockers.append("identity")
-        para.append("Para ti: git -C %s config user.email %s" % (home_short(repo), who))
+        para.append("Para ti: git -C %s config user.email %s" % (shell_path(repo), who))
     if not ident["email"]:
         id_desc = "user.email not set"
     elif ident["inherited_from_global"]:
@@ -2631,7 +2760,7 @@ def run_preflight(args):
         para.append("Para ti: commit or stash the %s in %s" % (plural(git["dirty_count"], "change"), home_short(repo)))
     if git["behind"]:
         blockers.append("behind")
-        para.append("Para ti: git -C %s pull --ff-only (%s is behind origin)" % (home_short(repo), git["default_branch"]))
+        para.append("Para ti: git -C %s pull --ff-only (%s is behind origin)" % (shell_path(repo), git["default_branch"]))
     mrs, problem = glab_mrs(repo, args.offline, s.partial)
     if mrs:
         blockers.append("open-run")
@@ -3170,7 +3299,11 @@ def run_changelog(args):
     after, problem = audit_after(repo, man, args.offline, partial)
     if args.format == "mr":
         scratch = os.path.dirname(os.path.abspath(os.path.expanduser(args.plan)))
-        target = os.path.join(scratch, "mr", slug(wave["id"].replace(":", "-")) + ".md")
+        levels = [scratch, os.path.join(scratch, "mr")]
+        bad = scratch_problem(levels)
+        if bad:
+            return fail("scratch dir not private: %s" % home_short(bad))
+        target = os.path.join(levels[1], slug(wave["id"].replace(":", "-")) + ".md")
         new = render_mr(plan, wave, locked_now, args, after, problem)
         old = read_text(target)
         shown = home_short(target)
@@ -3195,7 +3328,11 @@ def run_changelog(args):
     if old == new:
         verdict, code = "CHANGELOG: ok", 0
     elif args.write:
-        write_file(target, new)
+        if args.format == "mr":
+            bad = make_private(levels[1:])
+            if bad:
+                return fail("scratch dir not private: %s" % home_short(bad))
+        write_file(target, new, private=args.format == "mr")
         verdict, code = "CHANGELOG: written %s" % shown, 0
     else:
         added, removed = diff_counts(old, new)
@@ -3377,9 +3514,11 @@ def run_context(args):
         target = context_target(ctx, args.file)
         layout = ctx["layout"]
     else:
-        scratch = os.path.abspath(os.path.expanduser(args.scratch)) if args.scratch else os.path.join(
-            tempfile.gettempdir(), "deps-renovate", s.name, run_id(s.date, s.git))
-        target, layout = os.path.join(scratch, args.file or CONTEXT_FILE), "scratch"
+        levels = scratch_levels(s, args.scratch)
+        bad = scratch_problem(levels)
+        if bad:
+            return fail("scratch dir not private: %s" % home_short(bad))
+        target, layout = os.path.join(levels[-1], args.file or CONTEXT_FILE), "scratch"
     old = read_text(target)
     if old is not None:
         recorded = parse_policy(old, s.date).get("repo")
@@ -3417,7 +3556,11 @@ def run_context(args):
     if old == new:
         verdict, code = "CONTEXT: current", 0
     elif args.write:
-        write_file(target, new)
+        if layout == "scratch":
+            bad = make_private(levels)
+            if bad:
+                return fail("scratch dir not private: %s" % home_short(bad))
+        write_file(target, new, private=layout == "scratch")
         verdict, code = "CONTEXT: written %s" % home_short(target), 0
     else:
         added, removed = diff_counts(old, new)
