@@ -212,6 +212,7 @@ def build_groups(c):
         deny("glab_mr_create_auto_merge_uppercase", "GLAB mr create --auto-merge -t x", f, mention="GLAB mr create --auto-merge"),
         deny("glab_mr_create_opaque_ansi_c_hex", r'''glab mr create -d "x$(echo 'a"b')y" $'\x2d\x2dauto\x2dmerge' -t "z"''', f, mention="glab mr create -d"),  # the shell decodes the escapes into the flag; the quotes inside the substitution must not hide it
         allow("glab_mr_create_draft_labels", "glab mr create --draft -l dependencies --remove-source-branch -y", f),
+        deny("glab_mr_create_opaque_ansi_c_after_escaped_quote", r"echo $'\''; glab mr create $'\x2d\x2dauto\x2dmerge'", f, mention="glab mr create"),  # an escaped quote inside an earlier ANSI-C string must not unpair the stripper
         allow("glab_mr_list_jq_double_quoted_braces", 'glab mr list -F json | jq "{iid, title}"', f),
         allow("glab_mr_view_jq_single_quoted_braces", "glab mr view 5 | jq '{iid, state}'", f),
     ]

@@ -123,7 +123,7 @@ AUTO_MERGE_OPT = re.compile(r"merge_request\.merge_when_pipeline_succeeds|merge_
 AUTO_MERGE_FLAG = re.compile(r"--auto-merge(?:=|$)")  # la opción de `glab mr` que programa el merge
 AUTO_MERGE_TEXT = re.compile(r"\A(?:(?!\bglab\b).)*\bglab\b(?:(?!\bmr\b).)*\bmr\b.*(?<![\w-])" + r"\$*".join("--auto-merge") + r"(?![\w-])", re.S | re.I)  # anclada en el primer `glab` y su primer `mr`: coste lineal
 GLAB_MR_OPAQUE = re.compile(r"\A(?:(?!\bglab\b).)*\bglab\b(?:(?!\bmr\b).)*\bmr\b.*(?:\$'[^']*\\|\{(?:[^{},.]|\.(?!\.))*(?:,|\.\.)[^{}]*\}|\{[^{}]*\{)".replace("glab", r"g['\"\\$]*l['\"\\$]*a['\"\\$]*b").replace("mr", r"m['\"\\$]*r"), re.S | re.I)
-def unquoted(t): return t if re.search(r"\$[({]|`", t) else re.sub(r'(?s)\\.|\x27[^\x27]*\x27|"(?:[^"\\]|\\.)*"', lambda m: re.sub("[{}$]", "", m[0]), t)  # bash no abre llaves entre comillas: se quitan de esas cadenas; con `$(`, `${` o `` ` `` no se fía del emparejamiento
+def unquoted(t): return t if re.search(r"\$[({']|`", t) else re.sub(r'(?s)\\.|\x27[^\x27]*\x27|"(?:[^"\\]|\\.)*"', lambda m: re.sub("[{}$]", "", m[0]), t)  # bash no abre llaves entre comillas: se quitan de esas cadenas; con `$(`, `${`, `$'` o `` ` `` no se fía del emparejamiento
 MCP_MERGE = re.compile(r"mcp__.*(?:merge_merge_request|merge_pull_request|accept_merge_request|merge_mr|merge_pr)", re.I)
 
 
