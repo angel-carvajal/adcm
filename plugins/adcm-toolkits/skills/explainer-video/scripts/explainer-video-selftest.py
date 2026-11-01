@@ -1081,7 +1081,8 @@ def case_no_package_json(c, t):
     found = []
     for base in roots:
         for dirpath, dirs, files in os.walk(base):
-            dirs[:] = [d for d in dirs if d != ".git"]
+            # a fixture of a sibling skill is test data, not a dependency of the plugin
+            dirs[:] = [d for d in dirs if d not in (".git", "fixtures")]
             found += [os.path.join(dirpath, d) for d in dirs if d == "node_modules"]
             found += [os.path.join(dirpath, f) for f in files if f in banned]
     t.eq(sorted(set(found)), [], "dependency manifests in the skill or the plugin")
