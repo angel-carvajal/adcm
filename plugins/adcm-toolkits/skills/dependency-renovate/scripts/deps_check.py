@@ -686,10 +686,11 @@ def remote_host(url):
         return None, None
     m = re.match(r"^[\w.+-]+://(?:[^@/]*@)?([^/:]+)", url) or re.match(r"^(?:[^@/]+@)?([^:/]+):", url)
     host = m.group(1).lower() if m else None
-    forge = None
-    if host:
-        forge = "gitlab" if "gitlab" in host else "github" if "github" in host else None
-    return host, forge
+    if host and "gitlab" in host:
+        return host, "gitlab"
+    if host and "github" in host:
+        return host, "github"
+    return host, None
 
 
 def _default_branch(g, current):
@@ -809,6 +810,12 @@ def reviewer_of(value):
     return ("@" + m.group(1)) if m else None, forge.group(1).lower() if forge else None
 
 
+def reviewer_text(rev):
+    if not rev.get("handle"):
+        return PENDING
+    return "%s%s" % (rev["handle"], " (%s)" % rev["forge"] if rev.get("forge") else "")
+
+
 def find_brain(repo, top):
     seen = []
     for start in unique([repo] + ([top] if top else [])):
@@ -898,8 +905,7 @@ def _cells(line):
 
 def parse_policy(text, date, label=CONTEXT_FILE):
     """Rules, Verification, Smoke and Delivery of the Policy section; review lines for rows it ignores."""
-    out = {"rules": [], "verification": [], "smoke": [], "delivery": {}, "review": [], "repo": None,
-           "source_ref": None}
+    out = empty_policy()
     lines = text.splitlines()
     for line in lines:
         m = re.match(r"^- \*\*Repo:\*\* `([^`]+)`", line)
@@ -1039,9 +1045,8 @@ def node_schedule(online, partial):
         for key, row in data.items():
             m = re.match(r"^v(\d+)$", key)
             if m and isinstance(row, dict):
-                table[int(m.group(1))] = {k: row.get(src) if isinstance(row.get(src), str) else None
-                                          for k, src in (("start", "start"), ("lts", "lts"),
-                                                         ("maintenance", "maintenance"), ("end", "end"))}
+                table[int(m.group(1))] = {k: row.get(k) if isinstance(row.get(k), str) else None
+                                          for k in ("start", "lts", "maintenance", "end")}
         source = "online"
     for row in index if isinstance(index, list) and not problem2 else []:
         v = parse_version(as_dict(row).get("version"))
@@ -1074,8 +1079,7 @@ def resolve_node(manifest, folder, date, table):
     for pin in pins:
         by_source.setdefault(pin["source"], pin["value"])
     order = (".nvmrc", ".node-version", "engines.node", "devEngines.runtime", ".tool-versions", "volta.node")
-    chosen = next(((s, by_source[s]) for s in order if s in by_source), (None, None))
-    source, value = chosen
+    source, value = next(((s, by_source[s]) for s in order if s in by_source), (None, None))
     installs = installed_nodes(folder)
     env = {"node_pin": value, "node_source": source, "node_version": None, "node_found": "none", "node_bin": None,
            "nvm_dir": folder, "path_prefix": "", "pin_major": None}
@@ -1128,13 +1132,15 @@ def check_pm(repo, manifest, env, offline):
            "corepack": {"COREPACK_ENABLE_DOWNLOAD_PROMPT": "0", "COREPACK_ENABLE_STRICT": "1"}}
     if name not in ("npm", "pnpm", "yarn", "bun"):
         return out
-    rc, stdout, problem = run_text([name, "--version"], repo, tool_env(env.get("node_bin"), offline), timeout=60)
+    rc, stdout, _ = run_text([name, "--version"], repo, tool_env(env.get("node_bin"), offline), timeout=60)
     version = stdout.strip().splitlines()[-1].strip() if rc == 0 and stdout.strip() else None
     out["pm_version"] = version
-    if declared:
-        out["pm_found"] = "ok" if version == declared else ("mismatch" if version else "missing")
+    if not version:
+        out["pm_found"] = "missing"
+    elif declared and version != declared:
+        out["pm_found"] = "mismatch"
     else:
-        out["pm_found"] = "ok" if version else "missing"
+        out["pm_found"] = "ok"
     return out
 
 
@@ -1193,21 +1199,25 @@ def npm_lock_graph(repo, lock_rel):
             deps.update({k: v for k, v in as_dict(entry.get(field)).items() if isinstance(v, str)})
         requires[key] = deps
     for key, deps in requires.items():
-        for child, spec in deps.items():
-            base = key
-            while True:
-                cand = base + "/node_modules/" + child
-                if cand in packages:
-                    graph.edge(key, cand)
-                    break
-                if "node_modules/" not in base:
-                    break
-                base = base.rsplit("/node_modules/", 1)[0] if "/node_modules/" in base else ""
-                if not base:
-                    if "node_modules/" + child in packages:
-                        graph.edge(key, "node_modules/" + child)
-                    break
+        for child in deps:
+            found = resolve_child(packages, key, child)
+            if found:
+                graph.edge(key, found)
     return graph, roots, requires
+
+
+def resolve_child(packages, key, child):
+    base = key
+    while True:
+        cand = base + "/node_modules/" + child
+        if cand in packages:
+            return cand
+        if "node_modules/" not in base:
+            return None
+        base = base.rsplit("/node_modules/", 1)[0] if "/node_modules/" in base else ""
+        if not base:
+            top = "node_modules/" + child
+            return top if top in packages else None
 
 
 _PNPM_KEY = re.compile(r"^  ['\"]?/?((?:@[^/@'\"]+/)?[^@/'\"(]+)[@/]([^('\":]+)")
@@ -1339,7 +1349,7 @@ def collect_manifests(pairs, partial):
     with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for pair, data in pool.map(one, pairs):
             out[pair] = data
-    if pairs and all(v is None for v in out.values()):
+    if all(v is None for v in out.values()):
         partial.add("registry")
     return out
 
@@ -1513,8 +1523,7 @@ def family_of(name, direct, group=None):
     if name == "@types/node":
         return "runtime-node"
     if name.startswith("@types/"):
-        base = name[len("@types/"):]
-        target = "@" + base.replace("__", "/", 1) if "__" in base else base
+        target = types_target(name)
         if target in direct:
             return family_of(target, ())
     return name
@@ -1562,6 +1571,10 @@ def pick(cands, times, date, min_age, vulns):
     return best, False
 
 
+def hold_text(hold):
+    return "%s%s (%s)" % (hold["rule"], " " + str(hold["value"]) if hold["value"] else "", hold["source"])
+
+
 def evaluate(s, e, info, runtime_major):
     rules = rules_for(s, e["name"])
     name, locked = e["name"], e["locked"]
@@ -1607,13 +1620,13 @@ def evaluate(s, e, info, runtime_major):
             inline = [c for c in inline if cap_allows(hold["value"], vstr(c))]
             nextline = [c for c in nextline if cap_allows(hold["value"], vstr(c))]
         if before != (bool(inline), bool(nextline)):
-            out["blocked"] = "%s%s (%s)" % (hold["rule"], " " + str(hold["value"]) if hold["value"] else "", hold["source"])
+            out["blocked"] = hold_text(hold)
     min_age = rules["min_age"] if rules["min_age"] is not None else s.default_min_age
     vulns = [a for a in s.advisories if a["package"] == name and a["version"] == locked]
     times = info.get("times") or {}
     step, bypass = pick(inline, times, s.date, min_age, vulns)
-    major, bypass2 = pick(nextline, times, s.date, min_age, [] if step and all(
-        satisfies(vstr(step), a["range"]) is not True for a in vulns if a.get("range")) else vulns)
+    step_safe = step and all(satisfies(vstr(step), a["range"]) is not True for a in vulns if a.get("range"))
+    major, bypass2 = pick(nextline, times, s.date, min_age, [] if step_safe else vulns)
     out["step"] = vstr(step) if step else None
     out["major_target"] = vstr(major) if major else None
     out["bypass"] = bypass or bypass2
@@ -1694,6 +1707,14 @@ def collect_package_data(s):
     return info
 
 
+def base_risk(e):
+    if e["name"].startswith("@types/"):
+        return 1
+    if e["name"] in FRAMEWORKS:
+        return 4
+    return 2 if e["kind"] == "dev" else 3
+
+
 def plan_packages(s, args):
     m = s.manifest
     info = s.info = collect_package_data(s)
@@ -1750,8 +1771,7 @@ def plan_packages(s, args):
         for e in movers:
             if e["name"] not in grep_cache:
                 grep_cache[e["name"]] = import_count(s.g, e["name"])
-            base = 1 if e["name"].startswith("@types/") else 4 if e["name"] in FRAMEWORKS else 2 if e["kind"] == "dev" else 3
-            e["risk"] = min(5, base + (1 if grep_cache[e["name"]] >= 20 else 0))
+            e["risk"] = min(5, base_risk(e) + (1 if grep_cache[e["name"]] >= 20 else 0))
         fam_vulns = [a for a in s.advisories if any(a["package"] == e["name"] and a["version"] == e["locked"] for e in movers)]
         closes = sorted({i for e in movers for i in closes_of(e["major_target"], [a for a in fam_vulns if a["package"] == e["name"]])})
         sev = max([SEVERITY.get(a["severity"], 0) for a in fam_vulns if a["id"] in closes] or [-1])
@@ -1788,7 +1808,7 @@ def plan_packages(s, args):
         elif e["major_target"]:
             e["bump_type"] = "major"
         if e["risk"] is None and (e["step"] or e["major_target"]):
-            e["risk"] = 1 if e["name"].startswith("@types/") else 4 if e["name"] in FRAMEWORKS else 2 if e["kind"] == "dev" else 3
+            e["risk"] = base_risk(e)
     s.entries, s.planned, s.pending, s.held_fams = entries, planned, pending, held_fams
     s.families = families
     return entries
@@ -1810,8 +1830,7 @@ def transitive_advisories(s, entries, steps):
             target = steps.get(parent)
             spec = as_dict(as_dict(manifests.get((parent, target))).get("dependencies")).get(t["package"])
             low = range_min(spec) if spec else None
-            closes = (found and vkey(low) >= vkey(found)) or (found is None and satisfies(vstr(low), t["range"] or "") is False) if low else False
-            if target and closes:
+            if target and floor_closes(low, found, t["range"]):
                 t["fix"], t["parent"], t["parent_target"] = "parent", parent, target
                 break
         if t["fix"] is None:
@@ -1821,6 +1840,14 @@ def transitive_advisories(s, entries, steps):
             else:
                 t["fix"] = "para-ti"
     return sorted(out, key=lambda t: (-SEVERITY.get(t["severity"], 0), t["id"], t["package"], t["version"]))
+
+
+def floor_closes(low, fixed, vulnerable):
+    if not low:
+        return False
+    if fixed:
+        return vkey(low) >= vkey(fixed)
+    return satisfies(vstr(low), vulnerable or "") is False
 
 
 # ---------------------------------------------------------------------------
@@ -1945,7 +1972,7 @@ def ci_alignment(s):
             mt = re.match(r"^v(\d+\.\d+\.\d+)(.*)$", img["tag"])
             pw = by_name.get("@playwright/test") or by_name.get("playwright")
             if mt and pw and pw["locked"]:
-                target = pw["step"] if pw["wave"] in ("patch-minor",) or (pw["step"] and pw["wave"].startswith("major:")) else pw["locked"]
+                target = pw["step"] if pw["wave"] == "patch-minor" or (pw["step"] and pw["wave"].startswith("major:")) else pw["locked"]
                 if mt.group(1) != pw["locked"]:
                     items.append("%s:v%s ≠ %s %s" % (img["image"], mt.group(1), pw["name"], pw["locked"]))
                 if mt.group(1) != target:
@@ -1975,7 +2002,7 @@ def ci_alignment(s):
                               "to": "supabase %s" % target, "note": "align"})
                 items.append("%s:%d supabase %s ≠ devDependency %s" % (pin["file"], pin["line"], pin["version"], supa["locked"]))
         elif pin["kind"] == "pip":
-            versions = [parse_version(v) for v in getattr(s, "pypi", {}).get(pin["name"], [])]
+            versions = [parse_version(v) for v in s.pypi.get(pin["name"], [])]
             cur = parse_version(pin["version"])
             same = [v for v in versions if v and cur and line_of(v) == line_of(cur) and vkey(v) > vkey(cur)]
             if same:
@@ -2019,8 +2046,6 @@ def gather(repo, args, schedule=True):
     text = read_text(s.ctx["file"]) if s.ctx.get("file") else None
     s.policy = parse_policy(text, s.date, s.policy_label) if text is not None else empty_policy()
     s.table, s.node_latest, s.table_source = node_schedule(s.online and schedule, s.partial)
-    if not (s.online and schedule):
-        s.table_source = "embedded " + LTS_DATE
     s.env = resolve_node(s.manifest, nvm_dir(), s.date, s.table)
     s.env.update(check_pm(repo, s.manifest, s.env, args.offline))
     if s.env["pm_declared"] and s.env["pm_found"] in ("mismatch", "missing"):
@@ -2450,11 +2475,15 @@ def para_ti_view(s, never, waves):
     return out
 
 
+def step_rank(step):
+    return STEP_ORDER.index(step) if step in STEP_ORDER else 99
+
+
 def review_lines(s, extra=()):
     out = []
     if "offline" in s.partial:
         out.append("review: offline: registry, advisory, schedule and MR lookups skipped (Node table %s)" % LTS_DATE)
-    for step in sorted(s.partial - {"offline"}, key=lambda x: STEP_ORDER.index(x) if x in STEP_ORDER else 99):
+    for step in sorted(s.partial - {"offline"}, key=step_rank):
         out.append("review: partial(%s): %s" % (step, {
             "git": "not a git repo: base, branches and identity unknown",
             "pm-version": "the package-manager version does not match packageManager",
@@ -2485,10 +2514,11 @@ def plan_lines(s, waves, counts, holds, never, scratch_line, review):
         (s.git or {}).get("base_ref") or "none", s.date)
     if rt["pin"]:
         status = "eol %s" % rt["eol"] if rt["status"] == "eol" else "%s · EOL %s" % (rt["status"], rt["eol"] or "?")
-        node_ci = rt["ci"][0]["ref"] if rt["ci"] else None
-        ci_state = ("aligned" if all(i["aligned"] for i in rt["ci"]) else "mismatch") if rt["ci"] else ""
+        node_ci = "none"
+        if rt["ci"]:
+            node_ci = "%s %s" % (rt["ci"][0]["ref"], "aligned" if all(i["aligned"] for i in rt["ci"]) else "mismatch")
         runtime = "RUNTIME node %s (%s) · %s · newest LTS %s · CI %s" % (
-            rt["pin"], rt["source"], status, rt["newest_lts"] or "?", "%s %s" % (node_ci, ci_state) if node_ci else "none")
+            rt["pin"], rt["source"], status, rt["newest_lts"] or "?", node_ci)
     else:
         runtime = "RUNTIME node none (no pin) · newest LTS %s" % (rt["newest_lts"] or "?")
     if rt["shadowed_by"]:
@@ -2527,20 +2557,8 @@ def plan_lines(s, waves, counts, holds, never, scratch_line, review):
         counts["majors"], counts["majors_this_run"], s.max_majors,
         (": " + ", ".join(major_items[:5]) + (" +%d" % (len(major_items) - 5) if len(major_items) > 5 else "")) if major_items else "",
         counts["pending_majors"])
-    adv = []
-    for a in s.advisories:
-        fix = next((t for t in s.transitive if t["id"] == a["id"] and t["package"] == a["package"] and t["version"] == a["version"]), None)
-        if fix:
-            how = "%s %s" % (fix["parent"], fix["parent_target"]) if fix["fix"] == "parent" else (
-                "override %s" % fix["override"] if fix["fix"] == "override" else "Para ti")
-        else:
-            e = next((e for e in s.entries if e["name"] == a["package"] and e["locked"] == a["version"]), None)
-            how = ("%s %s" % (a["package"], e["target"])) if e and e["target"] and a["id"] in closes_of(e["target"], [a]) else (
-                "fixed in %s" % a["fixed_in"] if a["fixed_in"] else "no fix known")
-        item = "%s %s %s → %s" % (a["id"], a["severity"], a["package"], how)
-        if item not in adv:
-            adv.append(item)
-    hold_items = ["%s %s%s (%s)" % (h["name"], h["rule"], " " + str(h["value"]) if h["value"] else "", h["source"]) for h in holds]
+    adv = unique("%s %s %s → %s" % (a["id"], a["severity"], a["package"], advisory_fix(s, a)) for a in s.advisories)
+    hold_items = ["%s %s" % (h["name"], hold_text(h)) for h in holds]
     never_items = ["%s %s" % (n["name"], n["declared"]) for n in never]
     ci_line = "CI images %d%s · actions %d manual · docker %d" % (
         len(m["ci"]["images"]), " (%s)" % ", ".join(s.ci_items[:3]) + (" +%d" % (len(s.ci_items) - 3) if len(s.ci_items) > 3 else "")
@@ -2565,6 +2583,20 @@ def plan_lines(s, waves, counts, holds, never, scratch_line, review):
             limits[i] -= 1
             lines = render(*limits)
     return lines
+
+
+def advisory_fix(s, a):
+    fix = next((t for t in s.transitive if t["id"] == a["id"] and t["package"] == a["package"] and t["version"] == a["version"]), None)
+    if fix:
+        if fix["fix"] == "parent":
+            return "%s %s" % (fix["parent"], fix["parent_target"])
+        if fix["fix"] == "override":
+            return "override %s" % fix["override"]
+        return "Para ti"
+    e = next((e for e in s.entries if e["name"] == a["package"] and e["locked"] == a["version"]), None)
+    if e and e["target"] and a["id"] in closes_of(e["target"], [a]):
+        return "%s %s" % (a["package"], e["target"])
+    return "fixed in %s" % a["fixed_in"] if a["fixed_in"] else "no fix known"
 
 
 def major_item(w, rt):
@@ -2603,7 +2635,7 @@ def plan_verdict(s, counts):
     if s.runtime["status"] == "eol":
         tail += " runtime(eol)"
     if s.partial:
-        steps = sorted(s.partial, key=lambda x: STEP_ORDER.index(x) if x in STEP_ORDER else 99)
+        steps = sorted(s.partial, key=step_rank)
         return "DEPS: partial(%s) %s" % (",".join(steps), tail), 1
     work = counts["outdated"] or counts["majors"] or counts["advisories"] or counts["edits"] or s.runtime["status"] == "eol"
     return ("DEPS: " + tail, 1) if work else ("DEPS: current", 0)
@@ -2663,14 +2695,14 @@ def run_plan(args):
         extra.append("review: context-ambiguous: %s — pass --context" % ", ".join(os.path.basename(c) for c in s.ctx["candidates"]))
     para = para_ti_view(s, never, waves)
     review = review_lines(s, extra)
-    verdict_line, code = plan_verdict(s, counts)
+    _, code = plan_verdict(s, counts)
     families = [{"family": f, "members": sorted({e["name"] for e in members}),
                  "risk": max([e["risk"] or 1 for e in members] or [1]),
                  "held": s.held_fams.get(f)} for f, members in sorted(s.families.items())
                 if len({e["name"] for e in members}) > 1 or any(e["major_target"] or e["wave"].startswith("major:") for e in members)]
     data.update({
         "state": "partial" if s.partial else ("current" if code == 0 else "needed"),
-        "partial": sorted(s.partial, key=lambda x: STEP_ORDER.index(x) if x in STEP_ORDER else 99),
+        "partial": sorted(s.partial, key=step_rank),
         "git": s.git, "brain": s.brain,
         "context": dict(s.ctx, policy_rules=len(s.policy["rules"]), delivery=s.policy["delivery"], label=s.policy_label,
                         reviewer=s.reviewer, expected_identity=s.expected, scratch=scratch),
@@ -2744,7 +2776,7 @@ def run_preflight(args):
     rev = s.reviewer
     if rev["handle"]:
         where = ("%s:%s" % (home_short(s.brain["file"]), s.brain["line"])) if rev["source"] == "brain" else rev["source"]
-        rev_line = "REVIEWER %s %s%s → ok" % (where, rev["handle"], " (%s)" % rev["forge"] if rev["forge"] else "")
+        rev_line = "REVIEWER %s %s → ok" % (where, reviewer_text(rev))
     else:
         blockers.append("reviewer")
         if s.brain and s.brain.get("line"):
@@ -2860,9 +2892,12 @@ def fill(template, values):
     out = []
     for line in template.splitlines():
         key = line.strip()
-        if key.startswith("{{") and key.endswith("}}") and key[2:-2] in values and line.strip() == key:
+        if key.startswith("{{") and key.endswith("}}") and key[2:-2] in values:
             value = values[key[2:-2]]
-            out.extend(value if isinstance(value, list) else ([value] if value else []))
+            if isinstance(value, list):
+                out.extend(value)
+            elif value:
+                out.append(value)
             continue
         out.append(re.sub(r"\{\{([A-Z_]+)\}\}", lambda m: str(values.get(m.group(1), m.group(0))), line))
     return "\n".join(out) + "\n"
@@ -2988,7 +3023,7 @@ def held_rows(plan, dropped_rows):
         rows.append("- runtime node %s (%s) — eol %s — owner decision (newest LTS %s)" % (
             rt.get("pin"), rt.get("source"), rt.get("eol"), rt.get("newest_lts")))
     for h in plan.get("holds") or []:
-        rows.append("- %s — %s%s (%s)" % (h["name"], h["rule"], " " + str(h["value"]) if h["value"] else "", h["source"]))
+        rows.append("- %s — %s" % (h["name"], hold_text(h)))
     for p in plan.get("pending_majors") or []:
         rows.append("- %s %s → %s — pending (%s)" % (p["name"], p["from"], p["to"] or "?", p["reason"]))
     pending = {p["name"] for p in plan.get("pending_majors") or []}
@@ -3009,6 +3044,11 @@ def audit_after(repo, man, offline, partial):
     before = set(partial)
     found = collect_advisories(graph, partial)
     return (None, "failed") if "audit" in partial - before else (found, None)
+
+
+def audit_counts(after):
+    c = {k: len({a["id"] for a in after if a["severity"] == k}) for k in ("critical", "high", "moderate", "low")}
+    return "critical %d · high %d · moderate %d · low %d" % (c["critical"], c["high"], c["moderate"], c["low"])
 
 
 def security_rows(plan, present, after, problem, date):
@@ -3032,23 +3072,17 @@ def security_rows(plan, present, after, problem, date):
     if not rows:
         rows.append("- Closed: none")
     if after is not None:
-        counts = {k: len({a["id"] for a in after if a["severity"] == k}) for k in ("critical", "high", "moderate", "low")}
         ids = sorted({a["id"] for a in after})
-        rows.append("- Audit after (bulk advisories, %s): critical %d · high %d · moderate %d · low %d · open: %s" % (
-            date, counts["critical"], counts["high"], counts["moderate"], counts["low"], ", ".join(ids[:6]) or "none"))
+        rows.append("- Audit after (bulk advisories, %s): %s · open: %s" % (date, audit_counts(after), ", ".join(ids[:6]) or "none"))
     else:
         rows.append("- Audit after: not run (%s)" % problem)
-    return rows, after
+    return rows
 
 
 def summary_line(changed_rows, major_rows, after, problem):
     pkgs = len([r for r in changed_rows if not r.startswith("- edit ") and r != "- none"])
     fams = [re.match(r"^- (\S+)", r).group(1) for r in major_rows if r != "- none" and re.match(r"^- (\S+)", r)]
-    if after is not None:
-        c = {k: len({a["id"] for a in after if a["severity"] == k}) for k in ("critical", "high", "moderate", "low")}
-        audit = "critical %d · high %d · moderate %d · low %d" % (c["critical"], c["high"], c["moderate"], c["low"])
-    else:
-        audit = "not run (%s)" % problem
+    audit = audit_counts(after) if after is not None else "not run (%s)" % problem
     pm = "Patch and minor: %s in 1 MR" % plural(pkgs, "package") if changed_rows and changed_rows != ["- none"] else "Patch and minor: none"
     mj = "majors: %s (%s)" % (plural(len(fams), "MR"), ", ".join(fams)) if fams else "majors: none"
     return "%s · %s · audit after: %s" % (pm, mj, audit)
@@ -3104,7 +3138,7 @@ def render_entry(plan, wave, existing, locked_now, args, after, problem):
     verify = [r for r in sec("verification")["rows"] if not r.startswith("- %s:" % label) and r != "- none"]
     verify.append(verify_row(wave["id"], args.verify or [], smoke_summary(args.smoke)))
     verify.sort(key=lambda r: labels.get(r[2:].split(":", 1)[0], len(labels)))
-    security, _ = security_rows(plan, present, after, problem, args.date)
+    security = security_rows(plan, present, after, problem, args.date)
     pm_wave = next((w for w in plan["waves"] if w["id"] == "patch-minor"), None)
     git = as_dict(plan.get("git"))
     values = {"DATE": plan["date"], "BASE_REF": git.get("base_ref") or "none@0000000",
@@ -3145,6 +3179,11 @@ def resolve_conflicts(text):
     return "\n".join(ours) + "\n", "\n".join(theirs) + "\n"
 
 
+def row_key(section, row):
+    m = re.search(r"· branch `([^`]+)`", row) if section == "majors" else re.match(r"^- ([^:]+):", row)
+    return m.group(1) if m else row
+
+
 def merge_entries(ours, theirs):
     """One entry from both sides of a conflict: theirs first, plus the rows and prose only ours records."""
     if ours is None or theirs is None:
@@ -3155,15 +3194,10 @@ def merge_entries(ours, theirs):
         mine, other = a["sections"][name], b["sections"].get(name)
         if other is None:
             continue
-        keys = set()
-        for row in other["rows"]:
-            m = re.search(r"· branch `([^`]+)`", row) if name == "majors" else re.match(r"^- ([^:]+):", row)
-            keys.add(m.group(1) if m else row)
+        keys = {row_key(name, row) for row in other["rows"]}
         extra = []
-        for row in mine["rows"] if name in ("majors", "verification") else []:
-            m = re.search(r"· branch `([^`]+)`", row) if name == "majors" else re.match(r"^- ([^:]+):", row)
-            if (m.group(1) if m else row) not in keys:
-                extra.append(row)
+        if name in ("majors", "verification"):
+            extra = [row for row in mine["rows"] if row_key(name, row) not in keys]
         extra += [line for line in mine["prose"] if line not in other["prose"]]
         if extra:
             title = "### " + other["title"]
@@ -3206,8 +3240,7 @@ def render_mr(plan, wave, locked_now, args, after, problem):
     tmpl = read_text(os.path.join(OWN_TEMPLATES, "mr-description.md.tmpl"))
     if tmpl is None:
         raise RuntimeError("mr-description template missing")
-    later = {}
-    rows, dropped = package_rows(wave, locked_now, later)
+    rows, dropped = package_rows(wave, locked_now, {})
     changed = rows + (edit_rows(wave) if wave["id"] == "patch-minor" else []) or ["- none"]
     if wave["id"] == "patch-minor":
         title = "Dependencies: patch and minor bumps (%s)" % plan["date"]
@@ -3216,9 +3249,9 @@ def render_mr(plan, wave, locked_now, args, after, problem):
         title = "Dependencies: major %s %s → %s (%s)" % (wave["id"].split(":", 1)[1], f["from"], f["to"], plan["date"])
     ctx = as_dict(plan.get("context"))
     rev = as_dict(ctx.get("reviewer"))
-    reviewer = "%s%s" % (rev.get("handle") or PENDING, " (%s)" % rev["forge"] if rev.get("handle") and rev.get("forge") else "")
+    reviewer = reviewer_text(rev)
     closes = set(wave["closes"])
-    sec_rows = [r for r in security_rows(plan, {wave["id"]}, after, problem, args.date)[0]
+    sec_rows = [r for r in security_rows(plan, {wave["id"]}, after, problem, args.date)
                 if not r.startswith("- Closed") or any(i in r for i in closes)] or ["- none"]
     if not any(r.startswith("- Closed") for r in sec_rows):
         sec_rows.insert(0, "- Closed: none")
@@ -3287,8 +3320,8 @@ def run_changelog(args):
     rid = "%s-%s" % key
     base.update(run_id=rid, path=path)
     if args.check:
-        g = Git(repo) if os.path.isdir(repo) else None
-        names = check_rows(plan, existing, locked_now, g if g and g.ok("rev-parse", "--git-dir") else None)
+        g = Git(repo)
+        names = check_rows(plan, existing, locked_now, g if g.ok("rev-parse", "--git-dir") else None)
         lines = ["CHANGELOG %s · run %s · %s" % (s_name(repo), rid, path),
                  "CHECK waves %s" % ", ".join(w["id"] for w in plan["waves"]) if plan["waves"] else "CHECK no waves"]
         verdict = "CHANGELOG: mismatch(%s)" % ",".join(names) if names else "CHANGELOG: ok"
@@ -3311,7 +3344,7 @@ def run_changelog(args):
         entry = render_entry(plan, wave, existing, locked_now, args, after, problem)
         if text is None or not text.startswith("# Dependency changelog"):
             head_lines = CHANGELOG_HEADER.rstrip("\n").split("\n")
-            rest = (text or "").rstrip("\n").split("\n") if text else []
+            rest = text.rstrip("\n").split("\n") if text else []
             header, entries = split_entries("\n".join(rest)) if rest else ([], [])
             header = head_lines + [""] + [l for l in header if l.strip()]
         out_entries = [lines for k, lines in entries]
@@ -3476,8 +3509,7 @@ def context_values(s, plan, mrs, mr_problem, is_new):
                        "SMOKE_ROWS": [md_row(r.get("route"), r.get("name"), r.get("mask")) for r in routes],
                        "SMOKE_SERVER": smoke.get("server") or PENDING, "SHOT_COMMAND": smoke.get("shot_command") or "built-in (deps-smoke)",
                        "CHANGELOG_PATH": "`%s`" % DEFAULT_CHANGELOG,
-                       "REVIEWER": ("%s%s" % (rev["handle"], " (%s)" % rev["forge"] if rev.get("forge") else "")
-                                    if rev.get("handle") else PENDING),
+                       "REVIEWER": reviewer_text(rev),
                        "COMMIT_IDENTITY": expected or PENDING,
                        "PRIORITY_MAJORS": ", ".join(as_list(as_dict(plan).get("prioritize"))) or "none", "DELIVERY_NOTES": "none"})
     return values
@@ -3521,14 +3553,15 @@ def run_context(args):
         target, layout = os.path.join(levels[-1], args.file or CONTEXT_FILE), "scratch"
     old = read_text(target)
     if old is not None:
-        recorded = parse_policy(old, s.date).get("repo")
+        old_policy = parse_policy(old, s.date)
+        recorded = old_policy.get("repo")
         if recorded and recorded != s.name:
             return fail("%s records repo %s, not %s — use --file dependencies-%s.md" % (
                 os.path.basename(target), recorded, s.name, s.name))
         if START_MARK not in old or END_MARK not in old:
             return fail("%s has no auto-generated markers" % os.path.basename(target))
         if args.if_merged:
-            ref = parse_policy(old, s.date).get("source_ref")
+            ref = old_policy.get("source_ref")
             if ref and s.git and ref == s.git.get("base_ref"):
                 lines = ["CONTEXT %s · %s · base %s unchanged" % (s.name, home_short(target), ref), "CONTEXT: current"]
                 base.update(state="current", target=target)
@@ -3554,19 +3587,18 @@ def run_context(args):
                                                                         len([b for b in values["OPEN_BRANCHES"] if b != "none"]),
                                                                         " · policy seeded (new file)" if old is None else " · policy kept")]
     if old == new:
-        verdict, code = "CONTEXT: current", 0
+        verdict, code, state = "CONTEXT: current", 0, "current"
     elif args.write:
         if layout == "scratch":
             bad = make_private(levels)
             if bad:
                 return fail("scratch dir not private: %s" % home_short(bad))
         write_file(target, new, private=layout == "scratch")
-        verdict, code = "CONTEXT: written %s" % home_short(target), 0
+        verdict, code, state = "CONTEXT: written %s" % home_short(target), 0, "written"
     else:
         added, removed = diff_counts(old, new)
-        verdict, code = "CONTEXT: would write %s (+%d -%d)" % (home_short(target), added, removed), 1
-    base.update(state="current" if code == 0 and old == new else ("written" if args.write else "would-write"), target=target,
-                layout=layout, open_branches=mrs)
+        verdict, code, state = "CONTEXT: would write %s (+%d -%d)" % (home_short(target), added, removed), 1, "would-write"
+    base.update(state=state, target=target, layout=layout, open_branches=mrs)
     return emit(args, base, lines + [verdict], code)
 
 
@@ -3624,16 +3656,16 @@ def run_status(args):
             groups["nopipeline"].append(tag)
         elif m["pipeline"] in FAILED:
             groups["failed"].append(tag)
-        elif m["pipeline"] != "success" and m["pipeline"] != "skipped":
+        elif m["pipeline"] not in ("success", "skipped"):
             groups["running"].append(tag)
     bad = " ".join("%s(%s)" % (k, ",".join(v)) for k, v in groups.items() if v)
     if not mrs:
-        verdict, code = "STATUS: none", 0
+        verdict, code, state = "STATUS: none", 0, "none"
     elif bad:
-        verdict, code = "STATUS: " + bad, 1
+        verdict, code, state = "STATUS: " + bad, 1, "blocked"
     else:
-        verdict, code = "STATUS: ok(%s)" % ",".join("!%s" % m["iid"] for m in mrs), 0
-    base.update(state="none" if not mrs else ("blocked" if code else "ok"), mrs=mrs)
+        verdict, code, state = "STATUS: ok(%s)" % ",".join("!%s" % m["iid"] for m in mrs), 0, "ok"
+    base.update(state=state, mrs=mrs)
     return emit(args, base, lines + [verdict], code)
 
 

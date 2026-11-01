@@ -1058,7 +1058,8 @@ def case_lts_boundaries(ctx, t):
     for pin, date, status, lts in cases:
         write(os.path.join(repo, ".nvmrc"), pin + "\n")
         for online in (False, True):
-            ctx.stubs() if online else None
+            if online:
+                ctx.stubs()
             plain, data = both(ctx, t, "plan", repo, "--date", date, *(() if online else ("--offline",)),
                                rc=1 if (not online or status == "eol") else 0)
             node = dig(data, "runtimes", "node") or {}
