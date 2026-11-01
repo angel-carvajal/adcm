@@ -1169,7 +1169,7 @@ def case_pm_version_mismatch(ctx, t):
 def case_routes_auto(ctx, t):
     app = ("const express = require('express');\nconst app = express();\nconst router = express.Router();\n"
            "app.get('/', home);\napp.get('/about', about);\nrouter.get('/pricing', pricing);\napp.get('/api/items', items);\n"
-           "app.get('/users/:id', user);\napp.post('/contact', contact);\napp.get('/health', health);\n"
+           "app.get('/members/:id', user);\napp.post('/contact', contact);\napp.get('/health', health);\n"
            "app.get('/logo.png', logo);\napp.get('/blog', blog);\napp.get('/extra', extra);\n")
     repo = synth(ctx, "acme-routes", {"express": ("prod", "^4.21.0", "4.21.2")}, {}, files={"src/routes/pages.js": app})
     plain, data = both(ctx, t, "plan", repo, "--offline", "--date", DATE, "--routes", "auto", rc=1)
