@@ -116,6 +116,14 @@ def write(path, content):
     return path
 
 
+def file_digest(path):
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except OSError:
+        return "?"
+
+
 def snap(*roots):
     out = {}
     for root in roots:
@@ -123,11 +131,7 @@ def snap(*roots):
             dn[:] = [d for d in dn if d != ".git"]
             for f in fn:
                 p = os.path.join(dp, f)
-                try:
-                    with open(p, "rb") as fh:
-                        out[p] = hashlib.sha256(fh.read()).hexdigest()
-                except OSError:
-                    out[p] = "?"
+                out[p] = file_digest(p)
     return out
 
 
