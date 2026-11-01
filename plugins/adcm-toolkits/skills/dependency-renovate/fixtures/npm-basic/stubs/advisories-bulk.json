@@ -1,0 +1,13 @@
+{
+  "body-parser": [
+    {
+      "id": 1100001,
+      "url": "https://advisories.example.com/GHSA-2222-3333-4444",
+      "title": "Acme fixture advisory: request body denial of service",
+      "severity": "high",
+      "vulnerable_versions": "<1.20.4",
+      "cwe": ["CWE-400"],
+      "cvss": {"score": 7.5, "vectorString": null}
+    }
+  ]
+}

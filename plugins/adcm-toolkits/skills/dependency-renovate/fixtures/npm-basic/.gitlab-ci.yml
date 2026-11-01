@@ -1,0 +1,29 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+stages:
+  - guard
+  - test
+
+guard:
+  stage: guard
+  image: node:20
+  script:
+    - npm ci
+    - npm run build
+
+audit:
+  stage: guard
+  image: node:20
+  allow_failure: true
+  script:
+    - npm audit --audit-level=high
+
+e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.55.0-jammy
+  script:
+    - npm ci
+    - npx playwright test

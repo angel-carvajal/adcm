@@ -1,0 +1,39 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "body-parser": {
+      "name": "body-parser",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1100001,
+          "name": "body-parser",
+          "dependency": "body-parser",
+          "title": "Acme fixture advisory: request body denial of service",
+          "url": "https://advisories.example.com/GHSA-2222-3333-4444",
+          "severity": "high",
+          "range": "<1.20.4"
+        }
+      ],
+      "effects": ["express"],
+      "range": "<1.20.4",
+      "nodes": ["node_modules/body-parser"],
+      "fixAvailable": {"name": "express", "version": "4.22.3", "isSemVerMajor": false}
+    },
+    "express": {
+      "name": "express",
+      "severity": "high",
+      "isDirect": true,
+      "via": ["body-parser"],
+      "effects": [],
+      "range": "<=4.22.2",
+      "nodes": ["node_modules/express"],
+      "fixAvailable": {"name": "express", "version": "4.22.3", "isSemVerMajor": false}
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {"info": 0, "low": 0, "moderate": 0, "high": 2, "critical": 0, "total": 2},
+    "dependencies": {"prod": 7, "dev": 8, "optional": 0, "peer": 0, "peerOptional": 0, "total": 14}
+  }
+}

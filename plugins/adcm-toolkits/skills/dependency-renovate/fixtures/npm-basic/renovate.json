@@ -1,0 +1,19 @@
+{
+  "extends": ["config:recommended"],
+  "minimumReleaseAge": "3 days",
+  "packageRules": [
+    {
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6"
+    },
+    {
+      "matchPackageNames": ["react", "react-dom", "@types/react"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": ["@playwright/test", "playwright"],
+      "groupName": "playwright"
+    }
+  ]
+}
