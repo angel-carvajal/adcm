@@ -25,10 +25,10 @@ Qué se niega:
   sea Bash se permite en silencio; sin `tool_name` (o si no es un texto) se aplica la ruta de Bash.
   Bash (decide por argv[0], basename; nunca por el texto suelto del comando):
   - `gh pr merge …` y `glab mr merge|accept …`, salvo `--help|-h` (y `--disable-auto` en gh).
-  - `glab … mr … --auto-merge` (también `--auto-merge=…`), con cualquier subcomando (`create`, su alias `new`…): el MR
-    nacería con el merge programado. Se busca en el texto de todo comando antes de parsearlo, sin importar comillas,
-    sustituciones ni llaves, y `--help` no lo exime; un `echo` o un mensaje que lo escriba así también se niega. No ve
-    lo que el shell compone al ejecutar (`F=--auto-merge; glab mr create $F`, llaves anidadas). Sin esa opción pasa.
+  - `glab … mr … --auto-merge` (o `--auto-merge=…`) en cualquier subcomando (`create`, `new`…): el MR nacería con el merge
+    programado. Se busca en el texto de todo comando, antes de parsear, sin importar mayúsculas, comillas, sustituciones ni
+    llaves, y `--help` no lo exime; un `echo` que lo escriba también se niega. Un `$'…'` con escapes o un grupo `{a,b}` (o
+    `{a..b}`) tras `mr` se niega por no poder comprobarse. No ve variables (`F=--auto-merge; glab mr create $F`).
   - API de merge con verbo distinto de GET: `gh api` / `glab api` / `curl|http|https|xh|wget` sobre
     `/pulls/N/merge`, `/merges`, `/merge_requests/N/merge`, `/merge_requests/N/merge_when_pipeline_succeeds`;
     `gh api graphql` con `mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest|mergeBranch`.
@@ -122,7 +122,8 @@ PUSH_VALUE_FLAGS = frozenset({"--repo", "--receive-pack", "--exec"})
 AUTO_MERGE_OPT = re.compile(r"merge_request\.merge_when_pipeline_succeeds|merge_request\.auto_merge|auto_merge", re.I)
 AUTO_MERGE_FLAG = re.compile(r"--auto-merge(?:=|$)")  # la opción de `glab mr` que programa el merge
 # AUTO_MERGE_FLAG sobre el texto sin comillas (admite `$` entre letras); anclada en el primer `glab` y su primer `mr`: coste lineal
-AUTO_MERGE_TEXT = re.compile(r"\A(?:(?!\bglab\b).)*\bglab\b(?:(?!\bmr\b).)*\bmr\b.*(?<![\w-])" + r"\$*".join("--auto-merge") + r"(?![\w-])", re.S)
+AUTO_MERGE_TEXT = re.compile(r"\A(?:(?!\bglab\b).)*\bglab\b(?:(?!\bmr\b).)*\bmr\b.*(?<![\w-])" + r"\$*".join("--auto-merge") + r"(?![\w-])", re.S | re.I)
+GLAB_MR_OPAQUE = re.compile(r"\A(?:(?!\bglab\b).)*\bglab\b(?:(?!\bmr\b).)*\bmr\b.*(?:\$'[^']*\\|\{(?:[^{},.]|\.(?!\.))*(?:,|\.\.)[^{}]*\}|\{[^{}]*\{)".replace("glab", r"g['\"\\$]*l['\"\\$]*a['\"\\$]*b").replace("mr", r"m['\"\\$]*r"), re.S | re.I)
 MCP_MERGE = re.compile(r"mcp__.*(?:merge_merge_request|merge_pull_request|accept_merge_request|merge_mr|merge_pr)", re.I)
 
 
@@ -589,8 +590,8 @@ def decide(command, cwd):
     text = prepass(command)
     flat = re.sub(r"['\"\\]", "", text)  # el shell une `--auto-m""erge`; `cuts` deja cada `{a,b}` en su primera o su última alternativa
     cuts = [flat] + [re.sub(r"\{([^{}]*)\}", lambda m, i=i: m[1].split(",")[i], flat) for i in (0, -1)]
-    if any(AUTO_MERGE_TEXT.search(cut) for cut in cuts):  # `glab … mr … --auto-merge` en el texto entero, antes de parsear
-        return text[max(text.find("glab"), 0):][:MAX_SHOWN]
+    if any(AUTO_MERGE_TEXT.search(cut) for cut in cuts) or GLAB_MR_OPAQUE.search(text):  # `glab … mr … --auto-merge` en el texto entero, antes de parsear
+        return text[max(text.lower().find("glab"), 0):][:MAX_SHOWN]
     try:
         hit = scan(command, state)
     except ValueError:  # comilla sin cerrar: solo los comandos duros, el resto se permite
