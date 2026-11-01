@@ -208,10 +208,12 @@ def build_groups(c):
         deny("glab_mr_create_auto_merge_after_backticks", "glab mr create --draft --source-branch `git branch --show-current` --target-branch main --auto-merge -y", f, mention="glab mr create --draft --source-branch"),
         deny("glab_mr_create_auto_merge_ansi_c", "glab mr create $'--auto-merge'", f, mention="glab mr create"),
         deny("glab_mr_create_auto_merge_braces", "glab mr create {--auto-merge,-y}", f, mention="glab mr create {--auto-merge,-y}"),
-        deny("glab_mr_create_opaque_braces", "Glab mr create --draft --{x,{auto,y}}-merge -y", f, mention="Glab mr create --draft"),  # mixed case: the real binary answers to it on a case-insensitive volume
+        deny("glab_mr_create_opaque_braces", r'Glab mr create --draft \" --{x,{auto,y}}-merge -t "z"', f, mention="Glab mr create --draft"),  # mixed case (the real binary answers to it on a case-insensitive volume); escaped quotes do not open a quoted span
         deny("glab_mr_create_auto_merge_uppercase", "GLAB mr create --auto-merge -t x", f, mention="GLAB mr create --auto-merge"),
-        deny("glab_mr_create_opaque_ansi_c_hex", r"glab mr create $'\x2d\x2dauto\x2dmerge'", f, mention="glab mr create"),  # the shell decodes the escapes into the flag
+        deny("glab_mr_create_opaque_ansi_c_hex", r'''glab mr create -d "x$(echo 'a"b')y" $'\x2d\x2dauto\x2dmerge' -t "z"''', f, mention="glab mr create -d"),  # the shell decodes the escapes into the flag; the quotes inside the substitution must not hide it
         allow("glab_mr_create_draft_labels", "glab mr create --draft -l dependencies --remove-source-branch -y", f),
+        allow("glab_mr_list_jq_double_quoted_braces", 'glab mr list -F json | jq "{iid, title}"', f),
+        allow("glab_mr_view_jq_single_quoted_braces", "glab mr view 5 | jq '{iid, state}'", f),
     ]
 
     g3 = [  # false positives: the words are there, the command is not
