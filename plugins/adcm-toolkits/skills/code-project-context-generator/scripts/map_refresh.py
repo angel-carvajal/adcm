@@ -146,11 +146,25 @@ def parse_table(lines):
     while end < len(lines) and lines[end].lstrip().startswith('|'):
         end += 1
     found = [c for c in map(cells, map(paired, lines[start:end])) if not all(re.fullmatch(r':?-+:?', x) for x in c)]
-    return (found[0], [dict(zip(found[0], r)) for r in found[1:]]) if found else ([], [])
+    if not found:
+        return [], []
+    raw = [x for x in lines[start:end] if not re.fullmatch(r'[\s|:-]*', x)]
+    for i in range(1, len(found)):
+        if len(found[i]) != len(found[0]):
+            found[i] = split_plain(raw[i])
+    return found[0], [dict(zip(found[0], r)) for r in found[1:]]
+
+
+def split_plain(row):
+    """The cells of a line whose backticks shift the code spans over the separators: split on every
+    unescaped `|` and quote each cell's unpaired backticks, so every cell keeps its own column."""
+    segs = re.split(r'(?<!\\)\|', row.strip())[1:-1]
+    return [ticks(x.strip()).replace('\\|', '|') for x in segs]
 
 
 def key_of(name, row):
-    return tuple(bare(row.get(c, '')) for c in KEYS[name])
+    """The row's key; a quote left by a broken backtick around a key cell is not part of it."""
+    return tuple(bare(row.get(c, '')).strip("'") for c in KEYS[name])
 
 
 def human(col):

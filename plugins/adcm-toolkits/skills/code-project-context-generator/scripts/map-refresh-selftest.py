@@ -1570,6 +1570,32 @@ def case_code_span_pipe_in_human_cell(ctx, t):
     t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check after the code-span cells")
 
 
+def case_broken_backtick_outside_human_cells(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    fill(path, "`formatMoney`", ["Formats money", "Any amount"])
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text.replace("| `formatMoney` |", "| `formatMoney |", 1))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.lacks(r.out, "1 dropped", "a broken backtick in a key cell drops no row")
+    t.has(r.out, "0 retired", "and retires none")
+    found = row_cells(map_text(ctx, "utilities.md"), "`formatMoney`")
+    t.eq(len(found or []), 8, "the formatMoney row has eight cells again")
+    if found:
+        t.eq(found[2], "`" + MONEY + "`", "the row sits at its path")
+        t.eq(found[-2:], ["Formats money", "Any amount"], "the ✍ text survives the broken key backtick")
+    fill(path, "`roundCents`", ["Prefer `fmt", "use `x` always"])
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    found = row_cells(map_text(ctx, "utilities.md"), "`roundCents`")
+    t.eq(found[-2:] if found else None, ["Prefer 'fmt", "use `x` always"],
+         "an odd backtick in one ✍ cell and a code span in the next stay two cells")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check after the repairs")
+
+
 def case_retired_text_stays_with_its_project(ctx, t):
     writer_tree(ctx, "acme")
     writer_tree(ctx, "billing")
@@ -1744,6 +1770,7 @@ CASES = [
     ("output_line_limit", case_output_line_limit),
     ("backtick_cells_round_trip", case_backtick_cells_round_trip),
     ("code_span_pipe_in_human_cell", case_code_span_pipe_in_human_cell),
+    ("broken_backtick_outside_human_cells", case_broken_backtick_outside_human_cells),
     ("retired_text_stays_with_its_project", case_retired_text_stays_with_its_project),
     ("brain_inside_project", case_brain_inside_project),
     ("consumers_buckets", case_consumers_buckets),
