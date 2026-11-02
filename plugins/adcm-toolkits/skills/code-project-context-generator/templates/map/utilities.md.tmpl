@@ -1,0 +1,39 @@
+# {{PROJECT_NAME}} — Utilities map (reuse before you write)
+
+**Read this file BEFORE writing new code.** Each row is a helper, base class, hook, composable or
+generic function that already exists: consume it, never write a variant of it. Before changing one,
+check who consumes it in the census of the project's `usage-map.md`.
+
+How the file is kept: each project block opens with a `map-refresh: scan` marker comment that names
+the scan date and the project. Its rows regenerate on every refresh; the ✍ columns are human text
+and the refresh preserves them. Edit only the ✍ cells, the Curated table and the Retired table.
+Consumers is a bucket: `1 · 2–5 · 6–20 · 20+`.
+
+{{BLOCKS}}
+
+## Curated (human)
+
+Rows added by hand. The refresh never reads or rewrites this section.
+
+| Symbol | Kind | Path | Signature | Consumers | Exemplar | ✍ What it does | ✍ When to use |
+|---|---|---|---|---|---|---|---|
+
+## Retired (review)
+
+Rows that left a scan while carrying ✍ text, with the date they left. Review them: delete the row,
+or move it to Curated when the symbol still matters.
+
+| Symbol | Kind | Path | Signature | Consumers | Exemplar | ✍ What it does | ✍ When to use | Retired |
+|---|---|---|---|---|---|---|---|---|
+
+## Re-census (freshness guard)
+
+Counts drift as the code evolves. Before relying on a row, recount its consumers from the project root:
+
+```bash
+grep -rl '<Symbol>' . --exclude-dir=node_modules --exclude-dir=.git \
+  --exclude-dir=coverage --exclude-dir=reports --exclude-dir=dist --exclude-dir=.next | wc -l
+```
+
+If the count diverges, refresh the map with `map-refresh --project <root> --brain <dir>`;
+`map-refresh --brain <dir> --check` reports staleness without writing.

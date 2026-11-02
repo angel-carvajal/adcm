@@ -17,12 +17,15 @@ What is asserted (JSON structure of the scanner output, never prose):
 
 The scanner under test defaults to the scan_project.py next to this file; pass --scanner to test another
 copy. --script names the map writer (map_refresh.py), which the writer cases drive and skip when it is
-absent. --keep leaves the temp trees on disk.
+absent. The writer cases lay out a container in the temp tree (the brain at ai/ai-brain, each project under
+projects/) and run the writer from its root; they assert the rendered map files, exit codes and last lines.
+--keep leaves the temp trees on disk.
 """
 import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1014,6 +1017,507 @@ def case_test_file_rule(ctx, t):
         "usage_map surface formatAll (the folder rule is the map's alone)")
 
 
+# ------------------------------------------------------------------ writer cases
+# The container is the case root: the brain lives at ai/ai-brain and each project at projects/<name>, so
+# block headers name the project as `projects/<name>`.
+BRAIN = "ai/ai-brain"
+MAP_FILES = ("utilities.md", "patterns.md", "where-to-look.md")
+MARKER_RX = (r"^<!-- map-refresh: scan (\d{4}-\d{2}-\d{2}) · project (\S+) · format 1 — rows regenerate; "
+             r"✍ columns are human and preserved -->$")
+TODAY = __import__("datetime").date.today().isoformat()
+MONEY = "src/shared/format-money.ts"
+ROUND = "src/shared/round-cents.ts"
+
+
+def writer_tree(ctx, project="acme", extra=None):
+    """A service family, two shared generic functions and a README under projects/<project>; the brain dir."""
+    files = service_tree()
+    files.update({MONEY: generic_fn("formatMoney"), ROUND: generic_fn("roundCents")})
+    files.update(extra or {})
+    ctx.tree(f"projects/{project}", files)
+    os.makedirs(ctx.path(BRAIN), exist_ok=True)
+    return ctx.path(f"projects/{project}"), ctx.path(BRAIN)
+
+
+def refresh(ctx, *flags):
+    """Run the map writer from the case root; a missing writer skips the case."""
+    if not os.path.isfile(ctx.script):
+        raise Skip("map writer not found: " + os.path.basename(ctx.script))
+    p = subprocess.run([sys.executable, ctx.script] + list(flags), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", env=ctx.env, cwd=ctx.root, timeout=120)
+    return R(p)
+
+
+def last(r):
+    lines = r.out.strip().splitlines()
+    return lines[-1] if lines else ""
+
+
+def map_text(ctx, name, brain=BRAIN):
+    with open(ctx.path(f"{brain}/map/{name}"), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def snapshot(top):
+    """{relative path: (kind, bytes or link target, mtime)} for every entry under `top`."""
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(top):
+        for n in dirnames + filenames:
+            p = os.path.join(dirpath, n)
+            rel = os.path.relpath(p, top)
+            if os.path.islink(p):
+                out[rel] = ("link", os.readlink(p), None)
+            elif os.path.isfile(p):
+                with open(p, "rb") as fh:
+                    out[rel] = ("file", fh.read(), os.stat(p).st_mtime_ns)
+            else:
+                out[rel] = ("dir", None, None)
+    return out
+
+
+def row_line(text, first):
+    """The table line whose first cell is `first` (backticks included), else None."""
+    return next((x for x in text.splitlines() if x.startswith(f"| {first} |")), None)
+
+
+def row_cells(text, first):
+    found = row_line(text, first)
+    return [c.strip() for c in re.split(r"(?<!\\)\|", found)[1:-1]] if found else None
+
+
+def fill(path, first, texts):
+    """Write `texts` into the last len(texts) cells of the row whose first cell is `first`, as a human would."""
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().split("\n")
+    i = next(k for k, x in enumerate(lines) if x.startswith(f"| {first} |"))
+    parts = lines[i][2:-2].split(" | ")
+    parts[-len(texts):] = texts
+    lines[i] = "| " + " | ".join(parts) + " |"
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+
+
+def section(text, head):
+    """The text of the `## head` section, up to the next `## ` heading."""
+    start = text.index(head)
+    nxt = text.find("\n## ", start + len(head))
+    return text[start:] if nxt < 0 else text[start:nxt]
+
+
+def module_link(ctx, project, target):
+    link = os.path.join(project, "ai-brain")
+    try:
+        os.symlink(os.path.relpath(target, os.path.dirname(link)), link)
+    except (OSError, NotImplementedError):
+        raise Skip("this filesystem cannot create symlinks")
+
+
+def case_render_creates_three_files(ctx, t):
+    writer_tree(ctx)
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(r.rc, 0, "first render: exit code")
+    t.eq(last(r), "MAP: written", "first render: last line")
+    t.eq(sorted(os.listdir(ctx.path(BRAIN + "/map"))), sorted(MAP_FILES), "map/ holds exactly the three files")
+    heads = {"utilities.md": "| Symbol | Kind | Path | Signature | Consumers | Exemplar | ✍ What it does | ✍ When to use |",
+             "patterns.md": "| Pattern | Kind | Status | Evidence | Exemplar | ✍ When to apply | ✍ Anti-pattern |",
+             "where-to-look.md": "| Path | Kind | Label | ✍ Answers |"}
+    for name in MAP_FILES:
+        text = map_text(ctx, name)
+        t.eq(len(re.findall(MARKER_RX, text, re.M)), 1, f"{name}: one project block")
+        t.has(text, heads[name], f"{name}: column headers")
+        t.ok(text.index("<!-- end map-refresh -->") < text.index("## Curated (human)") < text.index("## Retired (review)"),
+             f"{name}: block, then Curated, then Retired")
+        t.lacks(text, "{{", f"{name}: no placeholder left")
+    u = map_text(ctx, "utilities.md")
+    t.eq(row_cells(u, "`BaseApiService`")[:3], ["`BaseApiService`", "abstract-class", "`src/shared/base-api.service.ts`"],
+         "the generic base heads the utilities")
+    t.eq(row_cells(u, "`formatMoney`")[-2:], ["—", "—"], "a new row starts with empty ✍ cells")
+    p = map_text(ctx, "patterns.md")
+    t.eq(row_cells(p, "`family:BaseApiService`")[1:4],
+         ["family", "applied", "3 · `src/features/invoices/invoices.service.ts`, "
+          "`src/features/payments/payments.service.ts`, `src/features/providers/providers.service.ts`"],
+         "family row: kind, status, evidence led by the count")
+
+
+def case_check_init_shells_fresh(ctx, t):
+    os.makedirs(ctx.path(BRAIN))
+    r = refresh(ctx, "--brain", BRAIN, "--init")
+    t.eq((r.rc, last(r)), (0, "MAP: written"), "--init on an empty brain")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check over the bare shells")
+    t.has(c.out, "  note: no project block", "--check names the empty shells")
+
+
+def case_render_preserves_human_columns(ctx, t):
+    project, _ = writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    fill(ctx.path(BRAIN + "/map/utilities.md"), "`BaseApiService`",
+         ["Shared CRUD calls for one entity \\| path-based", "A new entity needs list/get/save"])
+    fill(ctx.path(BRAIN + "/map/patterns.md"), "`family:BaseApiService`",
+         ["Every entity service", "A base forced on a service with its own protocol"])
+    fill(ctx.path(BRAIN + "/map/where-to-look.md"), "`README.md`", ["Setup and scripts"])
+    ctx.write("projects/acme/" + SERVICES % ("clients", "clients"),
+              "export class ClientsService extends BaseApiService<Client> {}\n")
+    ctx.write("projects/acme/src/shared/to-cents.ts", generic_fn("toCents"))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq((r.rc, last(r)), (0, "MAP: written"), "refresh after the code changed")
+    u = map_text(ctx, "utilities.md")
+    t.eq(row_cells(u, "`BaseApiService`")[-2:],
+         ["Shared CRUD calls for one entity \\| path-based", "A new entity needs list/get/save"],
+         "utilities ✍ cells survive the refresh (the pipe stays escaped)")
+    t.ok(row_line(u, "`toCents`") is not None, "the new utility row appears")
+    p = map_text(ctx, "patterns.md")
+    cells_ = row_cells(p, "`family:BaseApiService`")
+    t.eq(cells_[-2:], ["Every entity service", "A base forced on a service with its own protocol"],
+         "patterns ✍ cells survive")
+    t.ok(cells_[3].startswith("4 · "), "the family row regenerated with the fourth member")
+    t.eq(row_cells(map_text(ctx, "where-to-look.md"), "`README.md`")[-1], "Setup and scripts", "where ✍ cell survives")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "the refreshed map checks fresh")
+
+
+def case_retired_rows_keep_human_text(ctx, t):
+    project, _ = writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    fill(path, "`formatMoney`", ["Formats cents as money", "Any amount shown to a user"])
+    os.remove(ctx.path("projects/acme/" + MONEY))
+    os.remove(ctx.path("projects/acme/" + ROUND))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq((r.rc, last(r)), (0, "MAP: written"), "refresh after two utilities vanished")
+    t.has(r.out, "1 retired · 1 dropped", "the summary counts one retired and one dropped row")
+    u = map_text(ctx, "utilities.md")
+    block = u[:u.index("<!-- end map-refresh -->")]
+    t.lacks(block, "formatMoney", "the vanished row leaves the block")
+    retired = section(u, "## Retired (review)")
+    found = row_cells(retired, "`formatMoney`")
+    t.ok(found is not None, "the vanished row with ✍ text moves to Retired")
+    if found:
+        t.eq(found[-3:], ["Formats cents as money", "Any amount shown to a user", TODAY],
+             "Retired keeps the ✍ text and dates the row")
+    t.lacks(u, "roundCents", "the vanished row without ✍ text is dropped everywhere")
+    again = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(again), "MAP: unchanged", "a retired row is not retired twice")
+    ctx.write("projects/acme/" + MONEY, generic_fn("formatMoney"))
+    back = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(row_cells(map_text(ctx, "utilities.md"), "`formatMoney`")[-2:],
+         ["Formats cents as money", "Any amount shown to a user"], "a row that comes back takes its text from Retired")
+    t.lacks(section(map_text(ctx, "utilities.md"), "## Retired (review)"), "formatMoney",
+            "and leaves Retired")
+    t.eq(back.rc, 0, "return refresh: exit code")
+
+
+def case_moved_symbol_carries_human_text(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    fill(ctx.path(BRAIN + "/map/utilities.md"), "`formatMoney`", ["Formats cents", "Money display"])
+    os.remove(ctx.path("projects/acme/" + MONEY))
+    ctx.write("projects/acme/src/shared/money/format-money.ts", generic_fn("formatMoney"))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq((r.rc, last(r)), (0, "MAP: written"), "refresh after the move")
+    u = map_text(ctx, "utilities.md")
+    found = row_cells(u, "`formatMoney`")
+    t.ok(found is not None, "the moved symbol keeps a row")
+    if found:
+        t.eq(found[2], "`src/shared/money/format-money.ts`", "the row carries the new path")
+        t.eq(found[-2:], ["Formats cents", "Money display"], "the moved symbol keeps its ✍ text")
+    t.lacks(section(u, "## Retired (review)"), "formatMoney", "a moved symbol is not retired")
+
+
+def case_pipe_escaping_in_signature(ctx, t):
+    writer_tree(ctx, extra={"src/shared/pick-one.ts":
+                            "export function pickOne<T>(x: T | null, y: T | undefined): T | null { return x }\n"})
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    u = map_text(ctx, "utilities.md")
+    found = row_line(u, "`pickOne`")
+    t.ok(found is not None and "T \\| null" in found, "the pipes of the signature are escaped")
+    t.eq(len(row_cells(u, "`pickOne`") or []), 8, "the escaped row still has eight cells")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "an escaped signature reads back equal")
+
+
+def case_check_exit_codes(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check right after a render")
+    ctx.write("projects/acme/src/shared/to-cents.ts", generic_fn("toCents"))
+    before = snapshot(ctx.root)
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (1, "MAP: stale(utilities.md)"), "--check after a new utility")
+    t.ok(snapshot(ctx.root) == before, "--check writes nothing (whole tree unchanged)")
+    os.remove(ctx.path(BRAIN + "/map/patterns.md"))
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (2, "MAP: missing(patterns.md)"), "--check with a map file gone")
+    c = refresh(ctx, "--brain", "no-such-brain", "--check")
+    t.eq(c.rc, 2, "--check on a missing brain: exit code")
+    t.ok(last(c).startswith("MAP: unresolved (") or last(c).startswith("MAP: missing("), "missing brain: last line")
+    t.ok(not os.path.exists(ctx.path("no-such-brain")), "--check never creates the brain")
+
+
+def case_idempotent_second_run(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    before = snapshot(ctx.path(BRAIN))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq((r.rc, last(r)), (0, "MAP: unchanged"), "second run: exit code and last line")
+    t.ok(snapshot(ctx.path(BRAIN)) == before, "second run: bytes and mtimes unchanged, no temp file left")
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(re.sub(r"scan \d{4}-\d{2}-\d{2}", "scan 2001-01-01", text))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(r), "MAP: unchanged", "equal rows under an older scan date leave the file untouched")
+    t.has(map_text(ctx, "utilities.md"), "scan 2001-01-01", "the older date stays")
+
+
+def case_module_brain_via_symlink(ctx, t):
+    project, _ = writer_tree(ctx)
+    module = ctx.path(BRAIN + "/modules/billing")
+    os.makedirs(module)
+    module_link(ctx, project, module)
+    r = refresh(ctx, "--project", "projects/acme")
+    t.eq((r.rc, last(r)), (0, "MAP: written"), "refresh through the module symlink")
+    t.eq(sorted(os.listdir(os.path.join(module, "map"))), sorted(MAP_FILES), "the map lands in modules/billing/map")
+    t.ok(not os.path.exists(ctx.path(BRAIN + "/map")), "the root brain gets no map")
+    t.eq(re.findall(MARKER_RX, map_text(ctx, "utilities.md", BRAIN + "/modules/billing"), re.M)[0][1],
+         "projects/acme", "the module block names the project from the container")
+    for brain in (BRAIN + "/modules/billing", "projects/acme/ai-brain"):
+        c = refresh(ctx, "--brain", brain, "--check")
+        t.eq((c.rc, last(c)), (0, "MAP: fresh"), f"--check --brain {brain}")
+
+
+def case_modules_brain_without_symlink(ctx, t):
+    writer_tree(ctx)
+    os.makedirs(ctx.path(BRAIN + "/modules/billing"))
+    before = snapshot(ctx.root)
+    r = refresh(ctx, "--project", "projects/acme")
+    t.eq(r.rc, 2, "a brain with modules/ and no symlink: exit code")
+    t.has(r.out, "pass --brain ai/ai-brain/modules/<mod>", "the suggestion names the module path")
+    t.ok(last(r).startswith("MAP: unresolved ("), "last line")
+    t.ok(snapshot(ctx.root) == before, "nothing written anywhere")
+
+
+def case_no_write_without_brain_or_symlink(ctx, t):
+    writer_tree(ctx)
+    before = snapshot(ctx.root)
+    r = refresh(ctx, "--project", "projects/acme")
+    t.eq(r.rc, 2, "brain two levels up, no --brain, no symlink: exit code")
+    t.has(r.out, "pass --brain ai/ai-brain", "the upward search only suggests the brain")
+    t.ok(last(r).startswith("MAP: unresolved ("), "last line")
+    t.ok(snapshot(ctx.root) == before, "the whole container tree is unchanged")
+
+
+def case_symlinked_map_dir_refused(ctx, t):
+    writer_tree(ctx)
+    elsewhere = ctx.path("elsewhere")
+    os.makedirs(elsewhere)
+    try:
+        os.symlink(elsewhere, ctx.path(BRAIN + "/map"))
+    except (OSError, NotImplementedError):
+        raise Skip("this filesystem cannot create symlinks")
+    for flags in (("--project", "projects/acme", "--brain", BRAIN), ("--brain", BRAIN, "--init"),
+                  ("--brain", BRAIN, "--check")):
+        r = refresh(ctx, *flags)
+        t.eq(r.rc, 2, f"symlinked map/ {flags[-1]}: exit code")
+        t.has(last(r), "symlink", f"symlinked map/ {flags[-1]}: last line names the link")
+    t.eq(os.listdir(elsewhere), [], "nothing written through the map/ link")
+    os.remove(ctx.path(BRAIN + "/map"))
+    os.makedirs(ctx.path(BRAIN + "/map"))
+    target = ctx.write("elsewhere/target.md", "outside\n")
+    os.symlink(target, ctx.path(BRAIN + "/map/patterns.md"))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(r.rc, 2, "symlinked map file: exit code")
+    t.eq(sorted(os.listdir(ctx.path(BRAIN + "/map"))), ["patterns.md"], "no other map file written either")
+    with open(target, encoding="utf-8") as fh:
+        t.eq(fh.read(), "outside\n", "the link target is untouched")
+
+
+def case_multi_project_blocks_do_not_clobber(ctx, t):
+    writer_tree(ctx, "acme")
+    writer_tree(ctx, "billing-api", {"src/shared/invoice-total.ts": generic_fn("invoiceTotal")})
+    for name in ("acme", "billing-api"):
+        r = refresh(ctx, "--project", "projects/" + name, "--brain", BRAIN)
+        t.eq((r.rc, last(r)), (0, "MAP: written"), f"render {name}")
+    fill(ctx.path(BRAIN + "/map/utilities.md"), "`invoiceTotal`", ["Sums an invoice", "Totals"])
+    u = map_text(ctx, "utilities.md")
+    t.eq([m[1] for m in re.findall(MARKER_RX, u, re.M)], ["projects/acme", "projects/billing-api"],
+         "one block per project, in the order they were first written")
+    other = u[u.index("project projects/billing-api"):]
+    ctx.write("projects/acme/src/shared/to-cents.ts", generic_fn("toCents"))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(r), "MAP: written", "refresh acme again")
+    u = map_text(ctx, "utilities.md")
+    t.eq(u[u.index("project projects/billing-api"):], other, "the billing-api block is byte-identical")
+    t.has(u[:u.index("project projects/billing-api")], "toCents", "the acme block took the new row")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check rescans both projects")
+
+
+def case_no_absolute_paths_in_output(ctx, t):
+    writer_tree(ctx, extra={"README.md": "# Acme\n", "docs/guide.md": "# Guide\n"})
+    os.makedirs(ctx.path("acme-context/references"))
+    ctx.write("acme-context/references/security.md", "# Security\n")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN, "--context-skill", "acme-context",
+                "--update", MONEY, "--human", "Ghost@src/none.ts=a|b")
+    j = refresh(ctx, "--brain", BRAIN, "--check", "--json")
+    t.eq(r.rc, 0, "render: exit code")
+    t.eq(sorted(json.loads(j.out)), ["brain", "files", "new_rows", "projects", "state", "text"], "--json keys")
+    real_home = os.path.expanduser("~")
+    user = os.path.basename(real_home)
+    texts = {"stdout": r.out + r.err + j.out}
+    texts.update({name: map_text(ctx, name) for name in MAP_FILES})
+    for what, text in texts.items():
+        t.lacks(text, ctx.root, f"{what}: no absolute case path")
+        t.lacks(text, real_home, f"{what}: no home folder")
+        if len(user) >= 4:
+            t.lacks(text, user, f"{what}: no user name")
+        t.ok(not re.search(r"(^|[\s`(])/[A-Za-z]", text), f"{what}: no absolute path at all")
+
+
+def case_where_to_look_rows(ctx, t):
+    project, _ = writer_tree(ctx, extra={"CLAUDE.md": "# Rules\n", "docs/guide.md": "# Team guide\n",
+                                         "openapi.yaml": "openapi: 3.0.0\n"})
+    ctx.write(BRAIN + "/plan.md", "# Master plan\n")
+    ctx.write(BRAIN + "/decisions/0001-cache.md", "# Cache invoices\n")
+    ctx.write(BRAIN + "/execute" + ".md", "Load the skill `code-project-context-acme`, read\n")
+    ctx.write("acme-context/usage-map.md", "# Usage map\n")
+    ctx.write("acme-context/references/tech-debt.md", "# Tech debt\n")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN, "--context-skill", "acme-context")
+    t.eq(r.rc, 0, "render with a context skill: exit code")
+    w = map_text(ctx, "where-to-look.md")
+    block = w[:w.index("<!-- end map-refresh -->")]
+    got = [tuple(c.strip() for c in re.split(r"(?<!\\)\|", x)[1:4]) for x in block.splitlines()
+           if x.startswith("| `")]
+    t.eq(got, [("`CLAUDE.md`", "agent-instructions", "Claude instructions"),
+               ("`README.md`", "readme", "Project README"),
+               ("`acme-context/references/tech-debt.md`", "context", "Tech debt"),
+               ("`acme-context/usage-map.md`", "context", "Usage map"),
+               ("`ai-brain/decisions/0001-cache.md`", "decision", "Cache invoices"),
+               ("`ai-brain/execute" + ".md`", "brain-doc", "execute"),
+               ("`ai-brain/plan.md`", "brain-doc", "Master plan"),
+               ("`code-project-context-acme`", "skill", "skill loaded by the protocol"),
+               ("`docs/guide.md`", "doc", "Team guide"),
+               ("`openapi.yaml`", "openapi", "OpenAPI spec")],
+         "repo docs, brain docs, decisions, the protocol's skills and the context docs, sorted by path")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(r), "MAP: unchanged", "a refresh without --context-skill keeps the context rows")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check ignores the context rows it cannot rescan")
+
+
+def case_init_writes_three_shells(ctx, t):
+    os.makedirs(ctx.path(BRAIN))
+    r = refresh(ctx, "--brain", BRAIN, "--init")
+    t.eq((r.rc, last(r)), (0, "MAP: written"), "--init: exit code and last line")
+    t.eq(sorted(os.listdir(ctx.path(BRAIN + "/map"))), sorted(MAP_FILES), "--init writes the three shells")
+    for name in MAP_FILES:
+        text = map_text(ctx, name)
+        t.has(text, "map-refresh: scan", f"{name}: names the marker in prose")
+        t.ok(not re.search(r"^<!-- map-refresh: scan", text, re.M), f"{name}: holds no project block")
+        for head in ("## Curated (human)", "## Retired (review)"):
+            t.has(text, head, f"{name}: {head}")
+        t.lacks(text, "{{", f"{name}: no placeholder left")
+    t.has(map_text(ctx, "patterns.md"), "ProvidersService extends BaseApiService<Provider>", "the least-code card")
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write("human note\n")
+    before = snapshot(ctx.path(BRAIN))
+    r = refresh(ctx, "--brain", BRAIN, "--init")
+    t.eq((r.rc, last(r)), (0, "MAP: unchanged"), "a second --init")
+    t.ok(snapshot(ctx.path(BRAIN)) == before, "--init never rewrites an existing file")
+    ctx.tree("projects/acme", service_tree())
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(r.rc, 0, "a render into the shells: exit code")
+    t.has(map_text(ctx, "utilities.md"), "human note", "the render keeps the shell's human text")
+
+
+def case_human_flag_fills_only_named_key(ctx, t):
+    writer_tree(ctx)
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN,
+                "--human", f"formatMoney@{MONEY}=Formats cents as money|Any amount shown to a user",
+                "--human", "Ghost@src/shared/ghost.ts=Nothing|Never")
+    t.eq(r.rc, 0, "--human: exit code")
+    t.has(r.out, f"human: filled formatMoney@{MONEY}", "the known key is reported filled")
+    t.has(r.out, "human: unknown key (not written) Ghost@src/shared/ghost.ts", "the unknown key is reported")
+    u = map_text(ctx, "utilities.md")
+    t.eq(row_cells(u, "`formatMoney`")[-2:], ["Formats cents as money", "Any amount shown to a user"],
+         "the named row gets both ✍ cells")
+    t.eq(row_cells(u, "`roundCents`")[-2:], ["—", "—"], "another row stays empty")
+    t.lacks(u, "Ghost", "an unknown key never becomes a row")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN, "--human", f"roundCents@{ROUND}=Rounds|")
+    t.eq(row_cells(map_text(ctx, "utilities.md"), "`roundCents`")[-2:], ["Rounds", "—"],
+         "an empty part leaves its cell alone")
+    t.eq(row_cells(map_text(ctx, "utilities.md"), "`formatMoney`")[-2:],
+         ["Formats cents as money", "Any amount shown to a user"], "earlier text survives a later --human")
+
+
+def case_marker_contract(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    for name in MAP_FILES:
+        text = map_text(ctx, name)
+        found = [x for x in text.splitlines() if x.startswith("<!-- map-refresh")]
+        t.eq(len(found), 1, f"{name}: one marker line")
+        t.ok(all(re.fullmatch(MARKER_RX[1:-1], x) for x in found), f"{name}: the marker matches the contract")
+        t.eq([m[0] for m in re.findall(MARKER_RX, text, re.M)], [TODAY], f"{name}: the marker carries the scan date")
+        t.ok(re.search("map-refresh: scan", text) is not None, f"{name}: the renovate regex finds it")
+        t.ok(not any(x.lstrip().startswith("<!-- auto-generated") for x in text.splitlines()),
+             f"{name}: no line starts with auto-generated")
+        t.eq(text.count("<!-- end map-refresh -->"), 1, f"{name}: the block is closed")
+
+
+def case_caps_and_determinism(ctx, t):
+    files = {"package.json": '{"name": "acme"}\n', "README.md": "# Acme\n",
+             "apps/api/package.json": '{"name": "api"}\n'}
+    for n in range(45):
+        files[f"shared/widgets/base-widget{n:02d}.ts"] = abstract_class("BaseWidget%02d" % n)
+    for n in range(22):
+        add_family(files, n, f"shared/fam/base-fam{n:02d}.ts")
+    for n in range(30):
+        files[f"apps/api/services/svc{n:02d}/svc{n:02d}.service.ts"] = generic_fn("serve%02d" % n)
+    ctx.tree("projects/acme", files)
+    for brain in (BRAIN, "docs/ai-brain"):
+        os.makedirs(ctx.path(brain))
+        r = refresh(ctx, "--project", "projects/acme", "--brain", brain)
+        t.eq(r.rc, 0, f"render into {brain}")
+    u, p = map_text(ctx, "utilities.md"), map_text(ctx, "patterns.md")
+    count = lambda text: sum(x.startswith("| `") for x in text[:text.index("<!-- end map-refresh -->")].splitlines())
+    t.eq(count(u), 40, "utilities stay capped at 40")
+    t.eq(count(p), 20, "patterns stay capped at 20")
+    t.lacks(u, "serve0", "an application's services/ folder does not flood the utilities")
+    for name in MAP_FILES:
+        t.eq(map_text(ctx, name, "docs/ai-brain").replace("Project `projects/acme`", ""),
+             map_text(ctx, name).replace("Project `projects/acme`", ""), f"{name}: the same tree renders the same bytes")
+
+
+def case_usage_errors_exit_64(ctx, t):
+    os.makedirs(ctx.path(BRAIN))
+    for flags in (("--bogus",), ("--brain", BRAIN), ("--check",), ("--brain", BRAIN, "--check", "--init"),
+                  ("--brain", BRAIN, "--check", "--human", "A@b=c|d"), ("--project", ".", "--human", "nokey")):
+        t.eq(refresh(ctx, *flags).rc, 64, f"usage error {' '.join(flags)}")
+    h = refresh(ctx, "--help")
+    t.eq(h.rc, 0, "--help: exit code")
+    for flag in ("--project", "--brain", "--update", "--human", "--context-skill", "--max-depth", "--dry-run",
+                 "--json", "--check", "--init"):
+        t.has(h.out, flag, "--help lists " + flag)
+    t.lacks(h.out, "--module", "--help has no module flag")
+
+
+def case_output_line_limit(ctx, t):
+    writer_tree(ctx)
+    flags = ["--project", "projects/acme", "--brain", BRAIN, "--dry-run"]
+    for n in range(60):
+        flags += ["--human", f"Ghost{n:02d}@src/none.ts=a|b"]
+    r = refresh(ctx, *flags)
+    lines = r.out.strip().splitlines()
+    t.ok(len(lines) <= 40, f"at most 40 lines (got {len(lines)})")
+    t.eq(lines[-1], "MAP: stale(utilities.md,patterns.md,where-to-look.md)", "a dry run names what it would write")
+    t.eq(r.rc, 1, "a dry run with pending changes exits 1")
+    t.ok(not os.path.exists(ctx.path(BRAIN + "/map")), "a dry run writes nothing")
+
+
 CASES = [
     ("scan_usage_map_golden", case_usage_map_golden),
     ("scan_map_block_keys", case_map_block_keys),
@@ -1040,6 +1544,27 @@ CASES = [
     ("scan_pattern_slots", case_pattern_slots),
     ("scan_detector_order", case_detector_order),
     ("scan_test_file_rule", case_test_file_rule),
+    ("render_creates_three_files", case_render_creates_three_files),
+    ("check_init_shells_fresh", case_check_init_shells_fresh),
+    ("render_preserves_human_columns", case_render_preserves_human_columns),
+    ("retired_rows_keep_human_text", case_retired_rows_keep_human_text),
+    ("moved_symbol_carries_human_text", case_moved_symbol_carries_human_text),
+    ("pipe_escaping_in_signature", case_pipe_escaping_in_signature),
+    ("check_exit_codes", case_check_exit_codes),
+    ("idempotent_second_run", case_idempotent_second_run),
+    ("module_brain_via_symlink", case_module_brain_via_symlink),
+    ("modules_brain_without_symlink", case_modules_brain_without_symlink),
+    ("no_write_without_brain_or_symlink", case_no_write_without_brain_or_symlink),
+    ("symlinked_map_dir_refused", case_symlinked_map_dir_refused),
+    ("multi_project_blocks_do_not_clobber", case_multi_project_blocks_do_not_clobber),
+    ("no_absolute_paths_in_output", case_no_absolute_paths_in_output),
+    ("where_to_look_rows", case_where_to_look_rows),
+    ("init_writes_three_shells", case_init_writes_three_shells),
+    ("human_flag_fills_only_named_key", case_human_flag_fills_only_named_key),
+    ("marker_contract", case_marker_contract),
+    ("caps_and_determinism", case_caps_and_determinism),
+    ("usage_errors_exit_64", case_usage_errors_exit_64),
+    ("output_line_limit", case_output_line_limit),
 ]
 
 

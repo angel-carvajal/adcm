@@ -6,7 +6,8 @@ key. Each resolves the plugin root from its own path (symlinks followed) and run
 
 `courier-preflight` runs `skills/artifact-courier/scripts/courier_preflight.py`; `status-digest`,
 `renovate-check`, `plans-regen` and `prompts-regen` run the `status_digest.py`, `renovate_check.py`,
-`plans-regen.py` and `prompts-regen.py` of `skills/execution-prompt-architect/templates/`.
+`plans-regen.py` and `prompts-regen.py` of `skills/execution-prompt-architect/templates/`; `map-refresh` runs
+`skills/code-project-context-generator/scripts/map_refresh.py`.
 
 `explainer-record` is the one Node launcher: it runs `skills/explainer-video/scripts/record.mjs` with `node` instead of `python3`.
 Recording needs Node 20+, so it puts the newest nvm 2x install (version order) first on PATH and falls back to the `node` already there;

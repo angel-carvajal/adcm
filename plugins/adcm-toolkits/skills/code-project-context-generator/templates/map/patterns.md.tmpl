@@ -1,0 +1,28 @@
+# {{PROJECT_NAME}} — Patterns map (one shape, one base)
+
+> **Least code.** Pattern family = the rule of TWO applied to SHAPE: the same shape twice → ONE generic base, and each member supplies only its model/type and endpoint (`ProvidersService extends BaseApiService<Provider>`).
+> TS utility types (`Partial`, `Pick`, `Omit`, `Record`, `ReturnType`, …) replace hand-written variants.
+> The same-behaviour test decides per member: members that would not change together do not share a base; forcing one is over-abstraction.
+
+How the file is kept: each project block opens with a `map-refresh: scan` marker comment that names
+the scan date and the project. Its rows regenerate on every refresh; the ✍ columns are human text
+and the refresh preserves them. Status is `applied`, `partial k/n` (k of n members extend the base)
+or a candidate shape, which is a signal only. Evidence starts with the count (members, or uses for
+`types:utility`), then the base or the per-type counts, then up to five paths.
+
+{{BLOCKS}}
+
+## Curated (human)
+
+Patterns added by hand. The refresh never reads or rewrites this section.
+
+| Pattern | Kind | Status | Evidence | Exemplar | ✍ When to apply | ✍ Anti-pattern |
+|---|---|---|---|---|---|---|
+
+## Retired (review)
+
+Patterns that left a scan while carrying ✍ text, with the date they left. Review them: delete the
+row, or move it to Curated when the pattern still holds.
+
+| Pattern | Kind | Status | Evidence | Exemplar | ✍ When to apply | ✍ Anti-pattern | Retired |
+|---|---|---|---|---|---|---|---|
