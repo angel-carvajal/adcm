@@ -9,8 +9,9 @@ under modules/<mod>/). Each file holds one block per project, opened by the mark
 and closed by `<!-- end map-refresh -->`, followed by `## Curated (human)` and `## Retired (review)`.
 Rows inside a block regenerate from scan_project.py; a column whose header starts with `✍ ` is human
 text that every refresh keeps, keyed by (Symbol, Path) for utilities, the pattern slug for patterns and
-Path for where-to-look. A row that leaves the scan with ✍ text moves to Retired with the date; without
-text it is dropped; a symbol that moved to another path keeps its text.
+Path for where-to-look. Consumers is a bucket: 0 · 1 · 2–5 · 6–20 · 20+. A row that leaves the scan
+with ✍ text moves to Retired, dated and naming its project; without text it is dropped; a symbol that
+moved to another path keeps its text.
 
 Usage:
   map-refresh --project <root> [--brain <dir>] [--update <paths,>] [--human '<Symbol>@<path>=<what>|<when>']...
@@ -98,7 +99,20 @@ def container_of(brain):
 
 
 # ------------------------------------------------------------------ cells and rows
+def ticks(text):
+    """`text` with every backtick turned into `'` when their count is odd: `cells()` reads an unpaired
+    backtick as an open code span and would swallow the cell separators after it."""
+    return text.replace('`', "'") if text.count('`') % 2 else text
+
+
+def paired(row):
+    """A table line read back with each cell's unpaired backticks turned into quotes, so a backtick
+    typed into one cell never swallows the cells after it."""
+    return '|'.join(ticks(seg) for seg in re.split(r'(?<!\\)\|', row))
+
+
 def code(text):
+    text = ticks(text or '')
     return f'`{text}`' if text and '`' not in text else (text or EMPTY)
 
 
@@ -107,7 +121,7 @@ def bare(cell):
 
 
 def esc(text):
-    text = str(text).replace('\r', ' ').replace('\n', ' ').strip()
+    text = ticks(str(text).replace('\r', ' ').replace('\n', ' ').strip())
     return text.replace('|', '\\|') if text else EMPTY
 
 
@@ -127,7 +141,7 @@ def parse_table(lines):
     end = start
     while end < len(lines) and lines[end].lstrip().startswith('|'):
         end += 1
-    found = [c for c in map(cells, lines[start:end]) if not all(re.fullmatch(r':?-+:?', x) for x in c)]
+    found = [c for c in map(cells, map(paired, lines[start:end])) if not all(re.fullmatch(r':?-+:?', x) for x in c)]
     return (found[0], [dict(zip(found[0], r)) for r in found[1:]]) if found else ([], [])
 
 
@@ -194,8 +208,15 @@ def context_rows(skill):
     return out
 
 
+def inside(path, folder):
+    return os.path.commonpath([path, folder]) == folder
+
+
 def scan_rows(project, brain, depth, ctx_rows):
-    """(scanner result, {file: rendered rows}) for one project."""
+    """(scanner result, {file: rendered rows}) for one project.
+
+    A brain kept inside the project would show up twice in where-to-look, and its map/ would list
+    itself: the scanner rows that resolve into the brain are dropped, its docs come from brain_rows."""
     result = ProjectScanner(Path(project), max_depth=depth).scan()
     m = result['map']
     utilities = [{'Symbol': code(u['symbol']), 'Kind': u['kind'], 'Path': code(u['path']),
@@ -213,18 +234,19 @@ def scan_rows(project, brain, depth, ctx_rows):
         patterns.append({'Pattern': code(p['name']), 'Kind': p['kind'], 'Status': p['status'],
                          'Evidence': ' · '.join(evidence), 'Exemplar': code(p['exemplar'])})
     where = {w['path']: {'Path': code(w['path']), 'Kind': WHERE_KIND.get(w['topic'], 'doc'), 'Label': w['topic']}
-             for w in m['where_to_look']}
+             for w in m['where_to_look'] if not inside(os.path.realpath(os.path.join(project, w['path'])), brain)}
     for r in brain_rows(brain) + (ctx_rows or []):
         where.setdefault(bare(r['Path']), r)
     return result, {'utilities.md': utilities, 'patterns.md': patterns,
                     'where-to-look.md': [where[k] for k in sorted(where)]}
 
 
-def merge(name, new_rows, old_rows, retired_rows, today):
+def merge(name, new_rows, old_rows, retired_rows, today, rel):
     """The new rows carrying their ✍ text, the updated Retired rows and how many rows were dropped.
 
     Text comes from the same key in the old block, else (utilities) from a vanished row of the same
-    Symbol, else from a Retired row of the same key, which then leaves Retired.
+    Symbol, else from a Retired row of the same key and project, which then leaves Retired. A Retired
+    cell reads `<date> · <project>`, so one project never inherits another's text.
     """
     hcols = [c for c in COLUMNS[name] if human(c)]
     old = {key_of(name, r): r for r in old_rows}
@@ -233,7 +255,7 @@ def merge(name, new_rows, old_rows, retired_rows, today):
     moved = {}
     for r in gone if name == 'utilities.md' else ():
         moved.setdefault(bare(r['Symbol']), r)
-    retired = {key_of(name, r): r for r in retired_rows}
+    retired = {(key_of(name, r), r.get('Retired', '').partition(' · ')[2]): r for r in retired_rows}
     rows, taken = [], set()
     for r in new_rows:
         k = key_of(name, r)
@@ -241,7 +263,7 @@ def merge(name, new_rows, old_rows, retired_rows, today):
         if src is None and name == 'utilities.md' and id(moved.get(k[0])) not in taken:
             src = moved.get(k[0])
         if src is None:
-            src = retired.pop(k, None)
+            src = retired.pop((k, rel), None)
         if src is not None:
             taken.add(id(src))
         rows.append(dict(r, **{c: (src or {}).get(c) or EMPTY for c in hcols}))
@@ -250,8 +272,8 @@ def merge(name, new_rows, old_rows, retired_rows, today):
         if id(r) in taken:
             continue
         if has_text(r):
-            retired.pop(key_of(name, r), None)
-            leaving.append(dict(r, Retired=today))
+            retired.pop((key_of(name, r), rel), None)
+            leaving.append(dict(r, Retired=f'{today} · {rel}'))
         else:
             dropped += 1
     return rows, list(retired.values()) + leaving, dropped, len(leaving)
@@ -306,7 +328,7 @@ def refresh_text(name, text, title, rel, new_rows, today, humans, keep_context):
                    if r.get('Kind') == 'context' and key_of(name, r) not in have]
         new_rows = sorted(new_rows + carried, key=lambda r: bare(r['Path']))
     span = retired_table(text)
-    rows, retired, dropped, left = merge(name, new_rows, old_rows, span[2] if span else [], today)
+    rows, retired, dropped, left = merge(name, new_rows, old_rows, span[2] if span else [], today, rel)
     for r in rows if humans else ():
         what, when = humans.get(key_of(name, r), ('', ''))
         r['✍ What it does'] = what or r['✍ What it does']
@@ -319,12 +341,15 @@ def refresh_text(name, text, title, rel, new_rows, today, humans, keep_context):
     else:
         at = anchor(text)
         text = (text[:at] + blk + '\n\n' + text[at:]) if at is not None else text.rstrip('\n') + '\n\n' + blk + '\n'
+    for head in (CURATED, RETIRED):
+        if not re.search('^' + re.escape(head) + '[ \t]*$', text, re.M):
+            sh = shell(name, title)
+            nxt = sh.find('\n## ', sh.index(head))
+            text = text.rstrip('\n') + '\n\n' + (sh[sh.index(head):] if nxt < 0 else sh[sh.index(head):nxt + 1])
     span = retired_table(text)
-    if retired != (span[2] if span else []):
+    if retired != span[2]:
         lines = '\n'.join(table(COLUMNS[name] + ('Retired',), retired))
-        if span is None:
-            text = text.rstrip('\n') + f'\n\n{RETIRED}\n\n{lines}\n'
-        elif span[0] == span[1]:
+        if span[0] == span[1]:
             rest = text[span[0]:]
             text = text[:span[0]].rstrip('\n') + '\n\n' + lines + '\n' + ('\n' + rest if rest else '')
         else:
@@ -447,6 +472,8 @@ def run_project(a, out):
             raise Unresolved('context skill not found')
         ctx_rows = context_rows(a.context_skill)
     rel = os.path.relpath(project, base_of(brain)).replace(os.sep, '/')
+    if rel.split('/').count('..') > 3:
+        raise Unresolved('project too far from the brain container')
     today = datetime.date.today().isoformat()
     out.update(brain=shown(brain), projects=[rel])
     out['text'].append(f'MAP {shown(brain)} · project {rel} · scan {today}')
@@ -560,7 +587,8 @@ class Parser(argparse.ArgumentParser):
 def parse(argv):
     ap = Parser(prog='map-refresh', allow_abbrev=False,
                 description='Render and refresh <brain>/map/{utilities,patterns,where-to-look}.md from a project '
-                            'scan; ✍ columns are human text and survive every refresh.')
+                            'scan; ✍ columns are human text and survive every refresh. Consumers buckets: '
+                            '0 · 1 · 2–5 · 6–20 · 20+.')
     ap.add_argument('--project', metavar='ROOT', help='project to scan and write the block of')
     ap.add_argument('--brain', metavar='DIR', help="brain dir (default: the project's ai-brain symlink)")
     ap.add_argument('--update', metavar='PATHS', help='comma-separated changed paths: report the map rows they touch')
@@ -568,9 +596,9 @@ def parse(argv):
                     help='fill the ✍ cells of that utility row (repeatable); an unknown key is reported')
     ap.add_argument('--context-skill', metavar='DIR', help="add that context skill's usage-map, business-flows, "
                                                            'security and tech-debt docs to where-to-look')
-    ap.add_argument('--max-depth', type=int, default=8, metavar='N', help='scan depth (default: 8)')
+    ap.add_argument('--max-depth', type=int, default=8, metavar='N', help='scan depth (default: 8); pass the same value to --check')
     ap.add_argument('--dry-run', action='store_true', help='write nothing; report what would change')
-    ap.add_argument('--json', action='store_true', help='print {brain, projects, files, state, new_rows, text}')
+    ap.add_argument('--json', action='store_true', help='print {brain, projects, files, state, new_rows, text}: the full object, not capped at 40 lines')
     ap.add_argument('--check', action='store_true', help='with --brain: rescan every block, write nothing')
     ap.add_argument('--init', action='store_true', help='with --brain: write the three shells, no project block')
     a = ap.parse_args(argv)
@@ -589,9 +617,9 @@ def parse(argv):
 
 
 def main(argv=None):
-    a = parse(argv)
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding='utf-8', errors='replace')
+    a = parse(argv)
     out = {'brain': None, 'projects': [], 'files': {}, 'state': None, 'new_rows': {}, 'text': []}
     if a.check:
         mode = run_check

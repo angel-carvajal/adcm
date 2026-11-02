@@ -1194,7 +1194,7 @@ def case_retired_rows_keep_human_text(ctx, t):
     found = row_cells(retired, "`formatMoney`")
     t.ok(found is not None, "the vanished row with ✍ text moves to Retired")
     if found:
-        t.eq(found[-3:], ["Formats cents as money", "Any amount shown to a user", TODAY],
+        t.eq(found[-3:], ["Formats cents as money", "Any amount shown to a user", f"{TODAY} · projects/acme"],
              "Retired keeps the ✍ text and dates the row")
     t.lacks(u, "roundCents", "the vanished row without ✍ text is dropped everywhere")
     again = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
@@ -1519,6 +1519,145 @@ def case_output_line_limit(ctx, t):
     t.ok(not os.path.exists(ctx.path(BRAIN + "/map")), "a dry run writes nothing")
 
 
+def case_backtick_cells_round_trip(ctx, t):
+    long_tag = "export function tagOf<T>(x: T): string { return `id-${x}-" + "a" * 60 + "` }\n"
+    writer_tree(ctx, extra={"src/shared/label.ts": "export function labelOf<T>(x: T): string { return `id-${x}` }\n",
+                            "src/shared/tag.ts": long_tag})
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    u = map_text(ctx, "utilities.md")
+    cut = row_line(u, "`tagOf`")
+    t.ok(cut is not None and cut.count("`") % 2 == 0, "a signature cut inside a template literal emits paired backticks")
+    t.has(cut, "return 'id-", "the unpaired backtick of the cut signature becomes a quote")
+    t.has(row_line(u, "`labelOf`"), "return `id-${x}`", "a paired template literal stays as written")
+    for sym in ("`labelOf`", "`tagOf`"):
+        fill(path, sym, ["Builds an id", "Any id shown to a user"])
+    ctx.write("projects/acme/src/shared/to-cents.ts", generic_fn("toCents"))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(r.rc, 0, "refresh with backticks in signatures: exit code")
+    u = map_text(ctx, "utilities.md")
+    for sym in ("`labelOf`", "`tagOf`"):
+        t.eq(row_cells(u, sym)[-2:], ["Builds an id", "Any id shown to a user"], f"{sym}: ✍ text survives the refresh")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "backtick signatures read back equal")
+    fill(path, "`formatMoney`", ["Wraps `money", "Any amount"])
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN, "--human", f"roundCents@{ROUND}=Rounds `cents|Totals")
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    u = map_text(ctx, "utilities.md")
+    t.eq(row_cells(u, "`formatMoney`")[-2:], ["Wraps 'money", "Any amount"],
+         "an odd backtick typed into a ✍ cell stays in its own cell")
+    t.eq(row_cells(u, "`roundCents`")[-2:], ["Rounds 'cents", "Totals"],
+         "an odd backtick passed with --human stays in its own cell")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check after the ✍ backticks")
+
+
+def case_retired_text_stays_with_its_project(ctx, t):
+    writer_tree(ctx, "acme")
+    writer_tree(ctx, "billing")
+    os.remove(ctx.path("projects/billing/" + MONEY))
+    for name in ("acme", "billing"):
+        refresh(ctx, "--project", "projects/" + name, "--brain", BRAIN)
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    fill(path, "`formatMoney`", ["Formats cents as money", "Any amount shown to a user"])
+    os.remove(ctx.path("projects/acme/" + MONEY))
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    ctx.write("projects/billing/" + MONEY, generic_fn("formatMoney"))
+    r = refresh(ctx, "--project", "projects/billing", "--brain", BRAIN)
+    t.eq(r.rc, 0, "billing gains formatMoney: exit code")
+    u = map_text(ctx, "utilities.md")
+    billing = u[u.index("project projects/billing"):u.index("## Curated (human)")]
+    t.eq(row_cells(billing, "`formatMoney`")[-2:], ["—", "—"], "billing's new row does not inherit acme's text")
+    found = row_cells(section(u, "## Retired (review)"), "`formatMoney`")
+    t.eq(found[-3:] if found else None, ["Formats cents as money", "Any amount shown to a user", f"{TODAY} · projects/acme"],
+         "Retired keeps acme's row, dated and naming its project")
+    ctx.write("projects/acme/" + MONEY, generic_fn("formatMoney"))
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    u = map_text(ctx, "utilities.md")
+    acme = u[u.index("project projects/acme"):u.index("project projects/billing")]
+    t.eq(row_cells(acme, "`formatMoney`")[-2:], ["Formats cents as money", "Any amount shown to a user"],
+         "acme's restored row takes its text back")
+    t.lacks(section(u, "## Retired (review)"), "formatMoney", "and leaves Retired")
+
+
+def case_brain_inside_project(ctx, t):
+    project, _ = writer_tree(ctx, extra={"docs/ai-brain/roadmap.md": "# Master plan\n",
+                                         "docs/guide.md": "# Guide\n"})
+    brain = os.path.join(project, "docs", "ai-brain")
+    try:
+        os.makedirs(os.path.join(project, "ai"))
+        os.symlink(os.path.relpath(brain, os.path.join(project, "ai")), os.path.join(project, "ai", "ai-brain"))
+        os.symlink(os.path.relpath(brain, project), os.path.join(project, "ai-brain"))
+    except (OSError, NotImplementedError):
+        raise Skip("this filesystem cannot create symlinks")
+    r = refresh(ctx, "--project", "projects/acme")
+    t.eq((r.rc, last(r)), (0, "MAP: written"), "run 1 through the project's ai-brain symlink")
+    c = refresh(ctx, "--brain", "projects/acme/ai-brain", "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check right after run 1")
+    before = snapshot(os.path.join(brain, "map"))
+    r = refresh(ctx, "--project", "projects/acme")
+    t.eq(last(r), "MAP: unchanged", "run 2")
+    t.ok(snapshot(os.path.join(brain, "map")) == before, "run 2 leaves the map byte-identical")
+    with open(os.path.join(brain, "map", "where-to-look.md"), encoding="utf-8") as fh:
+        w = fh.read()
+    paths = [x.split(" | ")[0][2:] for x in w[:w.index("<!-- end map-refresh -->")].splitlines() if x.startswith("| `")]
+    t.ok(not any("map/" in p for p in paths), "the brain's map/ is never listed")
+    t.eq([p for p in paths if "roadmap" in p], ["`ai-brain/roadmap.md`"], "the brain doc is listed once")
+    t.ok("`docs/guide.md`" in paths, "repo docs outside the brain stay")
+
+
+def case_consumers_buckets(ctx, t):
+    files = {}
+    for n in range(25):
+        files[f"src/use/u{n:02d}.ts"] = "formatMoney(1)\n"
+    writer_tree(ctx, extra=files)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    u = map_text(ctx, "utilities.md")
+    got = [row_cells(u, x.split(" | ")[0][2:])[4] for x in u[:u.index("<!-- end map-refresh -->")].splitlines()
+           if x.startswith("| `")]
+    t.ok(got and set(got) <= {"0", "1", "2–5", "6–20", "20+"}, f"every Consumers cell is a documented bucket: {got}")
+    t.ok("20+" in got and "0" in got, "the fixture reaches both ends of the buckets")
+
+
+def case_ascii_stdout_help(ctx, t):
+    if not os.path.isfile(ctx.script):
+        raise Skip("map writer not found")
+    env = dict(ctx.env, PYTHONIOENCODING="ascii", PYTHONUTF8="0")
+    p = subprocess.run([sys.executable, ctx.script, "--help"], capture_output=True, env=env, cwd=ctx.root, timeout=60)
+    t.eq(p.returncode, 0, "--help under an ascii stdout: exit code")
+    t.lacks(p.stderr.decode("utf-8", "replace"), "Traceback", "--help under an ascii stdout: no traceback")
+
+
+def case_project_too_far_refused(ctx, t):
+    writer_tree(ctx)
+    os.makedirs(ctx.path("d1/d2/d3/d4/ai/ai-brain"))
+    before = snapshot(ctx.root)
+    r = refresh(ctx, "--project", "projects/acme", "--brain", "d1/d2/d3/d4/ai/ai-brain")
+    t.eq(r.rc, 2, "a project four levels above the brain container: exit code")
+    t.eq(last(r), "MAP: unresolved (project too far from the brain container)", "last line")
+    t.ok(snapshot(ctx.root) == before, "nothing written")
+    near = ctx.tree("sibling/acme", service_tree())
+    os.makedirs(ctx.path("box/ai/ai-brain"))
+    r = refresh(ctx, "--project", near, "--brain", "box/ai/ai-brain")
+    t.eq(r.rc, 0, "a project one level out still renders")
+    t.eq(re.findall(MARKER_RX, map_text(ctx, "utilities.md", "box/ai/ai-brain"), re.M)[0][1], "/".join(["..", "sibling", "acme"]),
+         "its block names the one-level path")
+
+
+def case_hand_notes_file_gains_sections(ctx, t):
+    writer_tree(ctx)
+    ctx.write(BRAIN + "/map/utilities.md", "# Utilities\n\nHand notes kept here.\n")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(r.rc, 0, "refresh into a hand-notes file: exit code")
+    u = map_text(ctx, "utilities.md")
+    t.has(u, "Hand notes kept here.", "the notes are kept")
+    t.eq((u.count("\n## Curated (human)\n"), u.count("\n## Retired (review)\n")), (1, 1),
+         "one Curated and one Retired heading are added")
+    t.ok(u.index("<!-- end map-refresh -->") < u.index("## Curated (human)"), "the sections follow the block")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(r), "MAP: unchanged", "the second refresh leaves it alone")
+
+
 CASES = [
     ("scan_usage_map_golden", case_usage_map_golden),
     ("scan_map_block_keys", case_map_block_keys),
@@ -1566,6 +1705,13 @@ CASES = [
     ("caps_and_determinism", case_caps_and_determinism),
     ("usage_errors_exit_64", case_usage_errors_exit_64),
     ("output_line_limit", case_output_line_limit),
+    ("backtick_cells_round_trip", case_backtick_cells_round_trip),
+    ("retired_text_stays_with_its_project", case_retired_text_stays_with_its_project),
+    ("brain_inside_project", case_brain_inside_project),
+    ("consumers_buckets", case_consumers_buckets),
+    ("ascii_stdout_help", case_ascii_stdout_help),
+    ("project_too_far_refused", case_project_too_far_refused),
+    ("hand_notes_file_gains_sections", case_hand_notes_file_gains_sections),
 ]
 
 
