@@ -1,12 +1,12 @@
 # {{PROJECT_NAME}} — Where to look (which doc or skill answers what)
 
 Open the row that answers your question before searching the tree: the repo docs (README, agent
-instructions, `docs/`, API specs), the brain's own docs and decisions, and the skills the protocol
-loads. Paths under `ai-brain/` resolve through the project's `ai-brain` symlink.
+instructions, `docs/`, API specs), the brain's own docs and decisions, and the skills that `execute.md`
+loads (its `Load the skill` lines). Paths under `ai-brain/` resolve through the project's `ai-brain` symlink.
 
 How the file is kept: each project block opens with a `map-refresh: scan` marker comment that names
 the scan date and the project. Its rows regenerate on every refresh; the ✍ column is human text and
-the refresh preserves it.
+the refresh preserves it. Edit only the ✍ cell, the Curated table and the Retired table.
 
 {{BLOCKS}}
 
@@ -19,7 +19,7 @@ Pointers added by hand. The refresh never reads or rewrites this section.
 
 ## Retired (review)
 
-Pointers that left a scan while carrying ✍ text, with the date they left. Review them: delete the
+Pointers the latest scan no longer finds, kept because they carried ✍ text, with the date they left. Review them: delete the
 row, or move it to Curated when the doc still answers something.
 
 | Path | Kind | Label | ✍ Answers | Retired |
