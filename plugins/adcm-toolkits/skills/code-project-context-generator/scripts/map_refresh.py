@@ -138,27 +138,32 @@ def table(cols, rows):
 
 
 def parse_table(lines):
-    """The first pipe table in `lines` as (header, rows as {column: cell}); ([], []) when there is none."""
+    """The first pipe table in `lines` as (header, rows as {column: cell}); ([], []) when there is none.
+
+    The separator and any all-empty row are skipped, and a row whose cell count misses the header's is
+    split again from its own line."""
     start = next((i for i, x in enumerate(lines) if x.lstrip().startswith('|')), None)
     if start is None:
         return [], []
     end = start
     while end < len(lines) and lines[end].lstrip().startswith('|'):
         end += 1
-    found = [c for c in map(cells, map(paired, lines[start:end])) if not all(re.fullmatch(r':?-+:?', x) for x in c)]
-    if not found:
+    kept = [(x, cells(paired(x))) for x in lines[start:end]]
+    kept = [(x, c) for x, c in kept if not all(re.fullmatch(r'(:?-+:?)?', v) for v in c)]
+    if not kept:
         return [], []
-    raw = [x for x in lines[start:end] if not re.fullmatch(r'[\s|:-]*', x)]
-    for i in range(1, len(found)):
-        if len(found[i]) != len(found[0]):
-            found[i] = split_plain(raw[i])
-    return found[0], [dict(zip(found[0], r)) for r in found[1:]]
+    head = kept[0][1]
+    found = [c if len(c) == len(head) else split_plain(x) for x, c in kept[1:]]
+    return head, [dict(zip(head, r)) for r in found]
 
 
 def split_plain(row):
     """The cells of a line whose backticks shift the code spans over the separators: split on every
     unescaped `|` and quote each cell's unpaired backticks, so every cell keeps its own column."""
-    segs = re.split(r'(?<!\\)\|', row.strip())[1:-1]
+    row = row.strip()
+    segs = re.split(r'(?<!\\)\|', row)
+    segs = segs[1:] if row.startswith('|') else segs
+    segs = segs[:-1] if row.endswith('|') and not row.endswith('\\|') else segs
     return [ticks(x.strip()).replace('\\|', '|') for x in segs]
 
 

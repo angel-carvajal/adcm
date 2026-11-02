@@ -1581,7 +1581,8 @@ def case_broken_backtick_outside_human_cells(ctx, t):
         fh.write(text.replace("| `formatMoney` |", "| `formatMoney |", 1))
     r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
     t.lacks(r.out, "1 dropped", "a broken backtick in a key cell drops no row")
-    t.has(r.out, "0 retired", "and retires none")
+    t.ok(re.search(r"utilities\.md +\d+ rows · \+0 new · 0 retired · 0 dropped", r.out) is not None,
+         "and the utilities line retires and drops none")
     found = row_cells(map_text(ctx, "utilities.md"), "`formatMoney`")
     t.eq(len(found or []), 8, "the formatMoney row has eight cells again")
     if found:
@@ -1594,6 +1595,46 @@ def case_broken_backtick_outside_human_cells(ctx, t):
          "an odd backtick in one ✍ cell and a code span in the next stay two cells")
     c = refresh(ctx, "--brain", BRAIN, "--check")
     t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check after the repairs")
+
+
+def edit_line(path, first, change):
+    """Rewrite the table line whose first cell is `first` with `change(line)`, as a human would."""
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().split("\n")
+    i = next(k for k, x in enumerate(lines) if x.startswith(f"| {first} |"))
+    lines[i] = change(lines[i])
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+
+
+def case_fallback_rows_stay_aligned(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    fill(path, "`formatMoney`", ["Formats money", "Any amount"])
+    fill(path, "`roundCents`", ["Rounds", "Totals"])
+    empty = "|" + "  |" * 8
+    edit_line(path, "`formatMoney`", lambda x: empty + "\n" + x.replace("| `formatMoney` |", "| `formatMoney |", 1))
+    edit_line(path, "`roundCents`", lambda x: x.replace("| `roundCents` |", "| `roundCents |", 1))
+    with open(path, encoding="utf-8") as fh:
+        rows_ = [x for x in fh.read().split("\n") if x.startswith("| `")]
+    t.ok(rows_[-1].startswith("| `roundCents |"), "the fixture breaks the last row of the block")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(r.rc, 0, "an empty row plus broken key backticks: exit code (no internal error)")
+    t.ok(re.search(r"utilities\.md +\d+ rows · \+0 new · 0 retired · 0 dropped", r.out) is not None,
+         f"no utility row is new, retired or dropped: {r.out!r}")
+    u = map_text(ctx, "utilities.md")
+    for sym, text in (("`formatMoney`", ["Formats money", "Any amount"]), ("`roundCents`", ["Rounds", "Totals"])):
+        found = row_cells(u, sym)
+        t.eq(found[-2:] if found else None, text, f"{sym}: ✍ text kept past the empty row")
+    edit_line(path, "`roundCents`", lambda x: x.replace("| `roundCents` |", "| `roundCents |", 1)[:-2])
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    found = row_cells(map_text(ctx, "utilities.md"), "`roundCents`")
+    t.eq(found[-2:] if found else None, ["Rounds", "Totals"], "a broken row without the trailing pipe keeps its last cell")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check after the repairs")
+    again = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(again), "MAP: unchanged", "a second run leaves the repaired map alone")
 
 
 def case_retired_text_stays_with_its_project(ctx, t):
@@ -1771,6 +1812,7 @@ CASES = [
     ("backtick_cells_round_trip", case_backtick_cells_round_trip),
     ("code_span_pipe_in_human_cell", case_code_span_pipe_in_human_cell),
     ("broken_backtick_outside_human_cells", case_broken_backtick_outside_human_cells),
+    ("fallback_rows_stay_aligned", case_fallback_rows_stay_aligned),
     ("retired_text_stays_with_its_project", case_retired_text_stays_with_its_project),
     ("brain_inside_project", case_brain_inside_project),
     ("consumers_buckets", case_consumers_buckets),
