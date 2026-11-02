@@ -144,7 +144,15 @@ def has_text(row):
 
 
 def bucket(n):
-    return '0' if n < 1 else '1' if n == 1 else '2–5' if n <= 5 else '6–20' if n <= 20 else '20+'
+    if n < 1:
+        return '0'
+    if n == 1:
+        return '1'
+    if n <= 5:
+        return '2–5'
+    if n <= 20:
+        return '6–20'
+    return '20+'
 
 
 def heading(path):
@@ -275,7 +283,7 @@ def retired_table(text):
         return None
     nxt = re.compile(r'^## ', re.M).search(text, head.end())
     stop = nxt.start() if nxt else len(text)
-    spans = [x for x in re.finditer(r'^[ \t]*\|.*$', text[head.end():stop], re.M)]
+    spans = list(re.finditer(r'^[ \t]*\|.*$', text[head.end():stop], re.M))
     if not spans:
         return stop, stop, []
     first, last = spans[0], spans[0]
@@ -321,7 +329,8 @@ def refresh_text(name, text, title, rel, new_rows, today, humans, keep_context):
             text = text[:span[0]].rstrip('\n') + '\n\n' + lines + '\n' + ('\n' + rest if rest else '')
         else:
             text = text[:span[0]] + lines + text[span[1]:]
-    new = [r for r in rows if key_of(name, r) not in {key_of(name, o) for o in old_rows}]
+    old_keys = {key_of(name, o) for o in old_rows}
+    new = [r for r in rows if key_of(name, r) not in old_keys]
     return text, {'rows': len(rows), 'new': [' @ '.join(key_of(name, r)) for r in new],
                   'retired': left, 'dropped': dropped}
 
@@ -457,7 +466,7 @@ def run_project(a, out):
                                        name == 'where-to-look.md' and ctx_rows is None)
         if texts[name] != old:
             changed.append(name)
-        out['files'][name] = 'written' if texts[name] != old else 'unchanged'
+        out['files'][name] = 'written' if name in changed else 'unchanged'
         out['new_rows'][name] = st['new']
         out['text'].append(f'  {name:<17} {st["rows"]} rows · +{len(st["new"])} new · {st["retired"]} retired · '
                            f'{st["dropped"]} dropped · ' + ('would write' if a.dry_run and name in changed
@@ -584,8 +593,14 @@ def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding='utf-8', errors='replace')
     out = {'brain': None, 'projects': [], 'files': {}, 'state': None, 'new_rows': {}, 'text': []}
+    if a.check:
+        mode = run_check
+    elif a.init:
+        mode = run_init
+    else:
+        mode = run_project
     try:
-        state = (run_check if a.check else run_init if a.init else run_project)(a, out)
+        state = mode(a, out)
     except Unresolved as exc:
         state = f'unresolved ({exc})'
     except Exception as exc:

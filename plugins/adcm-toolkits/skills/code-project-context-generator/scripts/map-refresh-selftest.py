@@ -22,6 +22,7 @@ projects/) and run the writer from its root; they assert the rendered map files,
 --keep leaves the temp trees on disk.
 """
 import argparse
+import datetime
 import importlib.util
 import json
 import os
@@ -1024,7 +1025,7 @@ BRAIN = "ai/ai-brain"
 MAP_FILES = ("utilities.md", "patterns.md", "where-to-look.md")
 MARKER_RX = (r"^<!-- map-refresh: scan (\d{4}-\d{2}-\d{2}) · project (\S+) · format 1 — rows regenerate; "
              r"✍ columns are human and preserved -->$")
-TODAY = __import__("datetime").date.today().isoformat()
+TODAY = datetime.date.today().isoformat()
 MONEY = "src/shared/format-money.ts"
 ROUND = "src/shared/round-cents.ts"
 
@@ -1149,7 +1150,7 @@ def case_check_init_shells_fresh(ctx, t):
 
 
 def case_render_preserves_human_columns(ctx, t):
-    project, _ = writer_tree(ctx)
+    writer_tree(ctx)
     refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
     fill(ctx.path(BRAIN + "/map/utilities.md"), "`BaseApiService`",
          ["Shared CRUD calls for one entity \\| path-based", "A new entity needs list/get/save"])
@@ -1177,7 +1178,7 @@ def case_render_preserves_human_columns(ctx, t):
 
 
 def case_retired_rows_keep_human_text(ctx, t):
-    project, _ = writer_tree(ctx)
+    writer_tree(ctx)
     refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
     path = ctx.path(BRAIN + "/map/utilities.md")
     fill(path, "`formatMoney`", ["Formats cents as money", "Any amount shown to a user"])
@@ -1377,8 +1378,8 @@ def case_no_absolute_paths_in_output(ctx, t):
 
 
 def case_where_to_look_rows(ctx, t):
-    project, _ = writer_tree(ctx, extra={"CLAUDE.md": "# Rules\n", "docs/guide.md": "# Team guide\n",
-                                         "openapi.yaml": "openapi: 3.0.0\n"})
+    writer_tree(ctx, extra={"CLAUDE.md": "# Rules\n", "docs/guide.md": "# Team guide\n",
+                            "openapi.yaml": "openapi: 3.0.0\n"})
     ctx.write(BRAIN + "/plan.md", "# Master plan\n")
     ctx.write(BRAIN + "/decisions/0001-cache.md", "# Cache invoices\n")
     ctx.write(BRAIN + "/execute" + ".md", "Load the skill `code-project-context-acme`, read\n")
