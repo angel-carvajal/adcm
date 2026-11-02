@@ -1040,12 +1040,14 @@ def writer_tree(ctx, project="acme", extra=None):
     return ctx.path(f"projects/{project}"), ctx.path(BRAIN)
 
 
-def refresh(ctx, *flags):
-    """Run the map writer from the case root; a missing writer skips the case."""
+def refresh(ctx, *flags, home=None):
+    """Run the map writer from the case root (HOME is the case root unless `home` names another folder);
+    a missing writer skips the case."""
     if not os.path.isfile(ctx.script):
         raise Skip("map writer not found: " + os.path.basename(ctx.script))
+    env = dict(ctx.env, HOME=home or ctx.root)
     p = subprocess.run([sys.executable, ctx.script] + list(flags), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", env=ctx.env, cwd=ctx.root, timeout=120)
+                       encoding="utf-8", errors="replace", env=env, cwd=ctx.root, timeout=120)
     return R(p)
 
 
@@ -1552,6 +1554,22 @@ def case_backtick_cells_round_trip(ctx, t):
     t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check after the ✍ backticks")
 
 
+def case_code_span_pipe_in_human_cell(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    fill(path, "`roundCents`", ["use `T \\| null` here", "use `a | b` here"])
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    found = row_cells(map_text(ctx, "utilities.md"), "`roundCents`")
+    t.eq(found[-2:] if found else None, ["use `T \\| null` here", "use `a \\| b` here"],
+         "a code span holding a pipe keeps the whole ✍ cell (an unescaped pipe comes back escaped)")
+    t.eq(len(found or []), 8, "the row keeps its eight cells")
+    again = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(again), "MAP: unchanged", "the code-span cells round-trip unchanged")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "--check after the code-span cells")
+
+
 def case_retired_text_stays_with_its_project(ctx, t):
     writer_tree(ctx, "acme")
     writer_tree(ctx, "billing")
@@ -1581,8 +1599,10 @@ def case_retired_text_stays_with_its_project(ctx, t):
 
 
 def case_brain_inside_project(ctx, t):
-    project, _ = writer_tree(ctx, extra={"docs/ai-brain/roadmap.md": "# Master plan\n",
-                                         "docs/guide.md": "# Guide\n"})
+    extra = {"docs/ai-brain/roadmap.md": "# Master plan\n", "docs/guide.md": "# Guide\n",
+             "docs/zz-runbook.md": "# Runbook\n"}
+    extra.update({f"docs/ai-brain/qa/gate-{n:02d}.md": "# Gate %d\n" % n for n in range(25)})
+    project, _ = writer_tree(ctx, extra=extra)
     brain = os.path.join(project, "docs", "ai-brain")
     try:
         os.makedirs(os.path.join(project, "ai"))
@@ -1603,7 +1623,9 @@ def case_brain_inside_project(ctx, t):
     paths = [x.split(" | ")[0][2:] for x in w[:w.index("<!-- end map-refresh -->")].splitlines() if x.startswith("| `")]
     t.ok(not any("map/" in p for p in paths), "the brain's map/ is never listed")
     t.eq([p for p in paths if "roadmap" in p], ["`ai-brain/roadmap.md`"], "the brain doc is listed once")
-    t.ok("`docs/guide.md`" in paths, "repo docs outside the brain stay")
+    t.ok("`docs/guide.md`" in paths and "`docs/zz-runbook.md`" in paths,
+         "the brain's own docs never crowd the repo docs out of the capped docs sweep")
+    t.ok(not any("qa/gate" in p for p in paths), "no brain doc is listed through docs/")
 
 
 def case_consumers_buckets(ctx, t):
@@ -1629,11 +1651,26 @@ def case_ascii_stdout_help(ctx, t):
 
 
 def case_project_too_far_refused(ctx, t):
+    if not os.path.isfile(ctx.script):
+        raise Skip("map writer not found")
+    writer = load_scanner(ctx.script)
+    container = writer.base_of("/Volumes/ssd/acme/ai/ai-brain")
+    t.eq(container, "/Volumes/ssd/acme", "the container of a brain on another volume")
+    t.ok(writer.too_far(container, "/Users/someone/dev/acme-api"),
+         "a project that meets the container only at / is too far, whatever the count of ..")
+    t.ok(not writer.too_far(container, "/Volumes/ssd/sibling/acme"), "a project one level out is near")
     writer_tree(ctx)
-    os.makedirs(ctx.path("d1/d2/d3/d4/ai/ai-brain"))
+    os.makedirs(ctx.path("d1/ai/ai-brain"))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", "d1/ai/ai-brain", home=ctx.root)
+    t.eq(r.rc, 0, "a project that meets the container at the home folder renders")
+    t.eq(re.findall(MARKER_RX, map_text(ctx, "utilities.md", "d1/ai/ai-brain"), re.M)[0][1],
+         "/".join(["..", "projects", "acme"]), "its block climbs out of the container, naming no user folder")
+    ctx.tree("users/someone/dev/acme-api", service_tree())
+    os.makedirs(ctx.path("users/other/x/ai/ai-brain"))
     before = snapshot(ctx.root)
-    r = refresh(ctx, "--project", "projects/acme", "--brain", "d1/d2/d3/d4/ai/ai-brain")
-    t.eq(r.rc, 2, "a project four levels above the brain container: exit code")
+    r = refresh(ctx, "--project", "users/someone/dev/acme-api", "--brain", "users/other/x/ai/ai-brain",
+                home=ctx.path("users/other"))
+    t.eq(r.rc, 2, "a project that meets the container only at the parent of the home folder: exit code")
     t.eq(last(r), "MAP: unresolved (project too far from the brain container)", "last line")
     t.ok(snapshot(ctx.root) == before, "nothing written")
     near = ctx.tree("sibling/acme", service_tree())
@@ -1706,6 +1743,7 @@ CASES = [
     ("usage_errors_exit_64", case_usage_errors_exit_64),
     ("output_line_limit", case_output_line_limit),
     ("backtick_cells_round_trip", case_backtick_cells_round_trip),
+    ("code_span_pipe_in_human_cell", case_code_span_pipe_in_human_cell),
     ("retired_text_stays_with_its_project", case_retired_text_stays_with_its_project),
     ("brain_inside_project", case_brain_inside_project),
     ("consumers_buckets", case_consumers_buckets),

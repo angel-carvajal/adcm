@@ -579,9 +579,11 @@ def _cap_patterns(rows: list) -> list:
 # ---------------------------------------------------------------------------
 
 class ProjectScanner:
-    def __init__(self, root: Path, max_depth: int = 4):
+    def __init__(self, root: Path, max_depth: int = 4, skip=()):
+        """`skip` holds resolved directory paths that the docs sweep of the map leaves out."""
         self.root = root
         self.max_depth = max_depth
+        self.skip = tuple(skip)
         self.result = {
             "meta": {
                 "root": str(root),
@@ -1524,7 +1526,7 @@ class ProjectScanner:
         return _cap_patterns(rows)
 
     def _map_where(self):
-        """Repo-level pointers: README, agent instructions, docs/ pages and API specs."""
+        """Repo-level pointers: README, agent instructions, docs/ pages (minus the `skip` dirs) and API specs."""
         def rel_of(path) -> str:
             return os.path.relpath(path, self.root).replace(os.sep, "/")
 
@@ -1550,7 +1552,7 @@ class ProjectScanner:
                 topics[name] = topic
         docs = []
         for dirpath, dirnames, filenames in os.walk(self.root / "docs"):
-            dirnames[:] = _walkable(dirnames)
+            dirnames[:] = [d for d in _walkable(dirnames) if Path(dirpath, d).resolve() not in self.skip]
             docs.extend(rel_of(os.path.join(dirpath, f)) for f in filenames if f.lower().endswith(".md"))
         for rel in sorted(docs)[:MAP_MAX_DOCS]:
             topics.setdefault(rel, title(rel))

@@ -106,9 +106,13 @@ def ticks(text):
 
 
 def paired(row):
-    """A table line read back with each cell's unpaired backticks turned into quotes, so a backtick
-    typed into one cell never swallows the cells after it."""
-    return '|'.join(ticks(seg) for seg in re.split(r'(?<!\\)\|', row))
+    """A table line read back with its last backtick turned into a quote when the line holds an odd
+    number: `cells()` would read that backtick as an open code span and swallow the cells after it.
+    An even line stays as it is, so a code span holding a pipe still reads as one cell."""
+    if row.count('`') % 2 == 0:
+        return row
+    at = row.rindex('`')
+    return row[:at] + "'" + row[at + 1:]
 
 
 def code(text):
@@ -217,7 +221,7 @@ def scan_rows(project, brain, depth, ctx_rows):
 
     A brain kept inside the project would show up twice in where-to-look, and its map/ would list
     itself: the scanner rows that resolve into the brain are dropped, its docs come from brain_rows."""
-    result = ProjectScanner(Path(project), max_depth=depth).scan()
+    result = ProjectScanner(Path(project), max_depth=depth, skip=(Path(brain),)).scan()
     m = result['map']
     utilities = [{'Symbol': code(u['symbol']), 'Kind': u['kind'], 'Path': code(u['path']),
                   'Signature': code(u['signature']), 'Consumers': bucket(u['consumers_count']),
@@ -407,6 +411,12 @@ def shown(path):
     return '…/' + '/'.join(rel.split('/')[-2:]) if far else rel
 
 
+def too_far(container, project):
+    """True when the project meets the container only at the root or at the parent of the home folder:
+    the block header would then name a user folder."""
+    return os.path.commonpath([container, project]) in (os.sep, os.path.dirname(os.path.expanduser('~')))
+
+
 def module_root(brain):
     """The root brain of a module brain (<root>/modules/<m>), else the brain itself."""
     parent = os.path.dirname(brain)
@@ -472,7 +482,7 @@ def run_project(a, out):
             raise Unresolved('context skill not found')
         ctx_rows = context_rows(a.context_skill)
     rel = os.path.relpath(project, base_of(brain)).replace(os.sep, '/')
-    if rel.split('/').count('..') > 3:
+    if too_far(base_of(brain), project):
         raise Unresolved('project too far from the brain container')
     today = datetime.date.today().isoformat()
     out.update(brain=shown(brain), projects=[rel])
