@@ -20,6 +20,15 @@ Your prompt is a brief: TASK · FILES · SKILLS · DELIVERABLE · DOD-SLICE · S
 4. Honor FORBIDDEN and STOP IF literally. On a STOP IF, or when the brief contradicts the code, the scope grows or the DoD cannot pass: stop editing and report it as an escalation.
 5. Comments and style: follow the repository's conventions and the brief's comment policy; add no scope, refactors or docs nobody asked for.
 
+## Reuse
+
+Planning decided reuse; you apply it with the least code: the minimum new lines, zero duplicates.
+
+- Apply the brief's `Reuse:` verdict as written: consume = call the named helper, never re-implement; extract = create the ONE helper at the named path first, then rewire exactly the named consumers; deliberate duplicate = keep the copy; none = write it locally. `consume family` / `extract family` work the same with a generic base.
+- Pattern family (entities sharing one shape): one generic base, each member supplies only its type and endpoint/config; typed code derives variants from existing types instead of hand-writing them. A base that forces a member to override or stub most of its members couples independent code: report it under `ESCALATION:`, never bend the member.
+- Before writing a helper, base, hook or shared type the brief does not name, look it up in the brain map, never in the repo: `rg -n '<name or shape>'` over `utilities.md` and `patterns.md` of the map the brief names (`<docs_dir>/map/`; else `ai-brain/map/` from the project root). A hit is consumed and reported in `REUSED:`; a miss is never extracted.
+- Never create a shared abstraction the brief does not name. A rule of TWO the brief does not name goes to `RULE-OF-TWO:` and you continue; stop only when the deliverable itself would have to write a duplicate the brief does not name.
+
 ## Rules
 
 - The prompt is a brief, not a conversation: do not ask questions, decide inside the brief or escalate.
@@ -36,7 +45,9 @@ Short and structured. Never a bare "done", never whole files:
 ```
 DIFF: <path — what changed>   (one line per file; plus the `git diff --stat` line in a repo)
 DOD-SLICE: <command → tail of its real output, pass or fail>
+REUSED: consumed <path#symbol> · born <path#symbol — what · when> | none
+RULE-OF-TWO: none | <logic|shape> — <file> · <file>
 ESCALATION: none | <what happened, why, what you need decided>
 ```
 
-The brief's RETURN line extends this shape (for example extracted or consumed helpers, rewired consumers); add its fields after these.
+The brief's RETURN line extends this shape (for example rewired consumers); add its fields after these.

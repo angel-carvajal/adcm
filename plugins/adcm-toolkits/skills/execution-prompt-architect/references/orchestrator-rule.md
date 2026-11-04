@@ -63,7 +63,7 @@ agents load at the next session or on `/reload-plugins`.
 |---|---|---|---|
 | Main session (orchestrator) | — | Decides design and scope, audits deliverables, writes briefs, runs the DoD, integrates | Executes, reads in bulk, renders, publishes, browses, merges an MR / pushes code to the default branch, prints links in progress turns |
 | `opus` (quota 10 per session; 2 reserved) | `adcm-toolkits:auditor` (reviews, gate verifier) · `adcm-toolkits:researcher` + `model: opus` (investigations) · `adcm-toolkits:executor` + `model: opus` (⚠gate waves) | Investigates, audits, reviews regression, verifies gates, implements ⚠gate waves | Decides scope; merges an MR / pushes code to the default branch |
-| `sonnet` | `adcm-toolkits:executor` · `adcm-toolkits:executor-frontend` (UI waves) · `adcm-toolkits:researcher` (default; also the capture role: browser, no edits) · `adcm-toolkits:courier` · `adcm-toolkits:digester` | Executes, renders, publishes (courier), researches, captures, runs scripts, digests status | Self-approves; merges an MR / pushes code to the default branch; returns URLs (only the courier does) |
+| `sonnet` | `adcm-toolkits:executor` · `adcm-toolkits:executor-frontend` (UI and frontend-code waves — when the wave loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload, ~3.1k tokens) · `adcm-toolkits:researcher` (default; also the capture role: browser, no edits) · `adcm-toolkits:courier` · `adcm-toolkits:digester` | Executes, renders, publishes (courier), researches, captures, runs scripts, digests status | Self-approves; merges an MR / pushes code to the default branch; returns URLs (only the courier does) |
 | `haiku` | `general-purpose` + `model: haiku` | Inventory-only tasks: listing, counting, grepping, file-existence checks | Anything that needs judgement |
 
 The types fix the tool set; the tier rules above still set the model of each call. When
@@ -75,7 +75,7 @@ costs 0.
 
 ## Brief format (≤40 lines)
 
-`TASK` (ID + title) · `FILES` (what to read or touch, and why) · `SKILLS` (the wave's
+`TASK` (ID + title) · `FILES` (what to read or touch, and why; the brain map `<docs_dir>/map/` when the brain has one — absolute, because worktrees lack the `ai-brain` symlink) · `SKILLS` (the wave's
 "Skills to load": what the executor loads with `Skill` before starting) · `DELIVERABLE` (the
 output, with the orchestrator's decisions applied) · `DOD-SLICE` (`command → expected
 result`, run before returning) · `STOP IF` (conditions to stop and report instead of
@@ -87,4 +87,4 @@ of the answer). The brief carries the investigation; the sub-agent never re-deri
 A sub-agent returns a compact structured text: files touched, commands run with their
 real output, rulings and open questions. It never returns HTML or whole files — the
 artifact is the file on disk, not the message. RETURN carries file paths and summaries, never URLs or a links block; only the courier returns links. A bare "done" is not
-a RETURN. The orchestrator reads the RETURN, verifies the DoD-slice itself and decides.
+a RETURN. The executor's RETURN also carries the `REUSED` line and the `RULE-OF-TWO` line: rule-of-two entries follow the wave LOOP rule, resolved by the orchestrator (every implicated file in SCOPE → extract in-wave, helper first; any file outside → follow-up in the logbook Reuse field), and `born` helpers feed the map refresh at doc-sync (§2b step 6, via `--human`). The orchestrator reads the RETURN, verifies the DoD-slice itself and decides.
