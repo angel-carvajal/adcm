@@ -22,17 +22,17 @@ Rules when instantiating:
   `adcm-toolkits:*` type — a per-call `model` overrides the type's default, types fix the TOOL SET and
   the tier rules still set the model; the delivery `adcm-toolkits:courier` is `sonnet` ALWAYS
   (normally 1; each extra batch = 1 more of the 20, 0 quota), whatever the main session's tier.
-  A wave whose "Skills to load" are design skills names `adcm-toolkits:executor-frontend` as
-  its executor type; every other NO-gate wave names `adcm-toolkits:executor`.
-- The `- Reuse:` line in SCOPE is COPIED from the task's card in detailed-plan.md,
+  A wave names `adcm-toolkits:executor-frontend` as its executor type on UI and frontend-code waves — when it loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload (~3.1k tokens);
+  every other NO-gate wave names `adcm-toolkits:executor`.
+- The Reuse and Map lines in SCOPE are COPIED from the task's card in detailed-plan.md,
   never derived here; the executor brief repeats the comment ban in ONE line (the full
   policy lives in detailed-plan §0); WORKFLOW carries the simplify step, and that pass
   counts against the 20 and against the Opus quota.
 - SCOPE budget UNCHANGED: ~15 lines per task (hard cap 25 for legitimately multi-file
-  tasks), ≤60 per wave — the 1–2 line reuse verdict lives INSIDE the ~15. Overflow
+  tasks), ≤60 per wave — the 1–2 line reuse verdict and the Map line live INSIDE the ~15. Overflow
   (long symbol notes, the full consumer list of an extracted helper) stays in the
   task's Scope manifest card in detailed-plan.md; the prompt keeps files + reuse
-  verdict + census. Compress with brace-globs (`bold/{A,B,C}.tsx`) before dropping
+  verdict + Map + census. Compress with brace-globs (`bold/{A,B,C}.tsx`) before dropping
   content.
 - Write for Fable at high effort: dense, precise, zero ambiguity, no filler. Must
   still be executable by any model.
@@ -89,10 +89,13 @@ that manifest, and report the drift in the logbook at close.
   detailed-plan §{{section}}"}}). Keep its contract for ALL of them or their
   adaptation is explicitly part of this task; DoD-auto must cover the consumers
   (build/tests of the affected apps), not just the edited files.
-- Reuse: {{consume `{{path}}` | extract → `{{path}}`; rewire {{A, B, C}} | deliberate
-  duplicate — {{why}} | none}}. This verdict is DECIDED: apply it, never hunt for
-  duplication here (full consumer list: detailed-plan §{{section}}; dup census: the
+- Reuse: {{consume `{{path}}` | consume family `{{base}}` → member `{{file}}` | extract → `{{path}}`;
+  rewire {{A, B, C}} | extract family → `{{base}}<T>`; members {{A, B, C}} (model + endpoint only) |
+  deliberate duplicate — {{why}} | none}}. This verdict is DECIDED: apply it, never hunt for
+  duplication here (a pattern family is ONE generic base, each member supplying only its model/type +
+  endpoint — canon in execute.md §1.9; full consumer list: detailed-plan §{{section}}; dup census: the
   Census line below).
+- Map: {{utilities.md › <name> · patterns.md › <family> | none}} — read only these entries; never edit {{docs_dir}}/map/ (map-refresh writes it at close).
 - Census: `{{command}}` → expected {{N}} (as of {{analysis_date}}) · tolerance
   {{exact | ±1 for small counts (<10); ±X% only for large censuses}} {{· duplication
   flavour when this task extracts: `rg -l '{{distinctive_snippet}}' | wc -l` → {{N}}
@@ -109,8 +112,8 @@ opus → you on ⚠gate waves}}); 3 attempts on the SAME failure at session leve
 without converging → stop and report (don't degrade tests, don't mark done what
 isn't done). The simplify pass consumes NO round: if the FULL DoD-auto fails after it,
 ONE fix round to the SAME simplifier (SendMessage, cost 0); a second failure → revert
-to the checkpoint commit and close on the pre-simplify diff, logged. Duplication an
-executor reports that this SCOPE does not name: if EVERY implicated file is already in
+to the checkpoint commit and close on the pre-simplify diff, logged. Duplication (logic or shape) an
+executor reports — its `RULE-OF-TWO` line — that this SCOPE does not name: if EVERY implicated file is already in
 this wave's SCOPE, amend the brief(s) and extract in-wave (helper first, consumers
 after, serialized) and update the card at close; if ANY file is outside, log it in the
 `Reuse:` follow-up field and refresh the later-wave manifests at doc-sync. Never
@@ -143,8 +146,8 @@ of your own tier. `opus` investigates (`adcm-toolkits:researcher` + `model: opus
 reviews regression and verifies (`adcm-toolkits:auditor`) (quota
 10, 2 reserved: the ⚠gate verifier and the simplify pass; audits pass to `sonnet`
 once the rest is spent); the ⚠gate executor is `adcm-toolkits:executor` + `model: opus`.
-`sonnet` ({{`adcm-toolkits:executor` | `adcm-toolkits:executor-frontend` when this
-wave's Skills to load are design skills}}) IMPLEMENTS NO-gate tasks from your briefs — ≤4 in parallel with
+`sonnet` ({{`adcm-toolkits:executor` | `adcm-toolkits:executor-frontend` on UI and frontend-code
+waves (design skills loaded OR FILES are frontend app code)}}) IMPLEMENTS NO-gate tasks from your briefs — ≤4 in parallel with
 EXCLUSIVE ownership of disjoint files, each in its own worktree; a shared helper is
 NOT a disjoint file, so the task extracting it closes before its consumers start and
 never runs beside them — and return diff
@@ -217,26 +220,30 @@ close but do not block delivery policy."}}
 - TASK: {{ID}} — {{title}} · executor: {{adcm-toolkits:executor | adcm-toolkits:executor-frontend}} · model: {{sonnet | opus (⚠gate)}}
 - FILES: {{Modify/Create with why + Read-first exemplars — copied from # SCOPE; on an
   extraction: the helper to create or consume + every consumer to rewire (name the
-  helper and the consumer count when the list is long — the full list is in the card)}}
+  helper and the consumer count when the list is long — the full list is in the card) +
+  the Map: entries — read only those}}
 - SKILLS: {{this wave's "Skills to load" (task.md wave map) — the executor loads each with
   `Skill` BEFORE starting; "none" when the cell is empty}}
 - DELIVERABLE: {{filled in session: Opus's audited deliverable with your decisions}}
 - DESIGN DECISIONS: {{filled in session: what is settled and not negotiable — incl.
-  the reuse verdict (consume / extract to this exact path / deliberate duplicate) and
-  the helper's home; the executor does not re-litigate it}}
+  the family verdict (consume / extract to this exact path / deliberate duplicate / none; `family`
+  qualifies it) and the helper's home; the executor does not re-litigate it}}
 - DOD-SLICE: {{command}} → {{expected}} {{· the lines of the DoD-auto this task owns ·
   on an extraction: the build/test of every rewired consumer + the dup census → 1}}
 - STOP IF: {{an expected file is missing · the census diverges · a consumer contract
-  would change · a test would have to be degraded · duplication this brief does not name
-  · {{on an extraction: a consumer the census does not name · a helper home crossing a
+  would change · a test would have to be degraded · the deliverable would have to WRITE a duplicate
+  (logic or shape) the brief does not name (a sighting goes to the `RULE-OF-TWO`
+  line and the executor continues) · {{on an extraction: a consumer the census does not name · a helper home crossing a
   repo boundary (detailed-plan §0 coupling rule)}} · {{task-specific condition}}}} —
   stop and report, do not improvise.
 - FORBIDDEN: {{paths outside this task — the shared helper and its named consumers ARE
   in scope}} · no dependency upgrades · no secrets · no shared abstraction this brief
-  does not name · no comments narrating decisions, rationale, wave/task IDs or
+  does not name · no hand-written variant of a type a TS utility type derives · no edit to
+  `{{docs_dir}}/map/` (map-refresh writes it at close) · no comments narrating decisions, rationale, wave/task IDs or
   execution-doc names (full policy: detailed-plan §0)
 - RETURN: diff summary per file · every DOD-SLICE command with its output · what you
-  extracted or consumed and which consumers you rewired · open
+  extracted or consumed and which consumers you rewired (the `REUSED` line of your agent
+  definition) · its `RULE-OF-TWO` line · open
   questions. Never report "done" — the orchestrator verifies.
 
 ## Simplifier brief ({{one per wave; ≤20 lines}})
@@ -251,7 +258,8 @@ close but do not block delivery policy."}}
   or restructure try/catch), component/type patterns, "redundant abstraction" removal;
   respect `.prettierignore` carve-outs.
 - DESIGN DECISIONS: this wave's executor briefs are NOT negotiable — do not undo them,
-  re-architect, rename public surfaces, or inline/delete/rename a helper this wave extracted.
+  re-architect or rename public surfaces; never inline, delete or rename a helper or a
+  pattern-family base or member this wave extracted (this overrides your redundant-abstraction default).
 - COMMENTS: remove narration, obvious restatements and plan references (task IDs, wave
   numbers, execution-doc names); KEEP why-comments and public-API docstrings; add none.
 - FORBIDDEN: files outside FILES · behavior changes · dependency changes · formatting-only
@@ -275,9 +283,9 @@ AFTER it: open the MR (pipeline green), assign it to `{{reviewer_handle}}` and N
 (execute.md §3), then run the FULL doc-sync at close (`execute.md`
 §2b — "append the logbook" means ALL of it): logbook entry in `{{docs_dir}}/task.md`
 (TODAY's date — never hardcoded — + branch/MR + tasks closed + **blocked** (ids + pending DoD-human) + **files touched +
-manifest drift** + notes + wall clock + **reuse** (helpers consumed/extracted ·
-consumers rewired · dup census before → after · unplanned duplication found →
-follow-up | none) + **simplifier** (carrier: packaged | fallback sub-agent · ran over
+manifest drift** + notes + wall clock + **reuse** (helpers or pattern family bases consumed/extracted ·
+consumers or members rewired · dup census before → after · unplanned duplication found (logic or shape) →
+follow-up | none) + **map** (map-refresh summary | not refreshed (why) | n/a) + **simplifier** (carrier: packaged | fallback sub-agent · ran over
 {{checkpoint_sha}}..HEAD · files touched · DoD re-verified | reverted (why) | not run (why)) + **orchestrator fix**
 (none, or `<file>` — <why a brief would have cost more than the change>, ≤~20 lines —
 an unlogged one is a protocol violation) + **agents used n/20 (opus a · sonnet
@@ -288,7 +296,10 @@ prompt's `execute.md §7` header (⛔ while the MR awaits the Reviewer's merge o
 `detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
 refresh the Scope manifests of LATER waves whose surfaces this wave changed (and
 regenerate their §7 prompts), and delta-refresh the project context skill for the
-files touched. The doc-sync ENDS with `git -C {{docs_dir}} add -A && git commit -m
+files touched, then run ONE `map-refresh --project <repo root> --brain {{docs_dir}} --update <files touched there>
+--human '<Symbol>@<path>=<what>|<when>'…` per repo the wave touched (one `--human` per `born` entry of the
+executors' `REUSED` lines; its last `MAP:` line goes into the logbook map field; no `map/` yet or no plugin →
+`not refreshed (why)`; never edit `{{docs_dir}}/map/` by hand). The doc-sync ENDS with `git -C {{docs_dir}} add -A && git commit -m
 "docs({{wave}}): …" && git push` — `{{docs_dir}}` is its own NESTED git repo (the
 harness reports the container as "not a git repo": don't believe it); an unpushed
 logbook does not exist for the next session.

@@ -59,8 +59,7 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
    and verify (`adcm-toolkits:auditor`) (quota 10 per session, 2 reserved — the
    ⚠gate verifier and the simplify pass; audits pass to `sonnet` once the rest is
    spent), and the ⚠gate executor is `adcm-toolkits:executor` + `model: opus`.
-   `sonnet` agents (`adcm-toolkits:executor`; `adcm-toolkits:executor-frontend`
-   when the wave's *Skills to load* are design skills) implement NO-gate tasks from briefs, ≤4 in
+   `sonnet` agents (`adcm-toolkits:executor`; `adcm-toolkits:executor-frontend` on UI and frontend-code waves — when the wave loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload (~3.1k tokens)) implement NO-gate tasks from briefs, ≤4 in
    parallel with disjoint files in their own worktrees (a shared helper is not a
    disjoint file: the task that extracts it closes before its consumers start), and
    never self-approve. ONE packaged `code-simplifier:code-simplifier` pass per wave,
@@ -94,18 +93,23 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
    `references/orchestrator-rule.md`.
 8. **Executor brief.** What the orchestrator hands to an executor, ≤40 lines:
    `TASK · FILES (from the Scope manifest — the shared helper and EVERY consumer to
-   rewire included when the manifest says so) · SKILLS (the wave's Skills to load —
+   rewire included when the manifest says so — plus the `Map:` entries, read only those) · SKILLS (the wave's Skills to load —
    the executor loads them with `Skill` before starting) · DELIVERABLE (Opus's audited deliverable
-   with the orchestrator's decisions) · DESIGN DECISIONS (incl. the reuse verdict and
+   with the orchestrator's decisions) · DESIGN DECISIONS (incl. the family verdict —
+   `consume` · `extract` · `deliberate duplicate` · `none`, *family* as a qualifier — and
    the helper's home — not negotiable) · DOD-SLICE (command →
    expected; an extraction adds every rewired consumer's build/test and the duplication
    census → 1) · STOP IF (stop and report instead of improvising — including a consumer
-   the census does not name, a helper home crossing repos, or duplication the brief
-   does not name) · FORBIDDEN (paths outside the brief — the named helper and its
-   consumers ARE in scope —, dependency changes, and comments narrating decisions,
+   the census does not name or a helper home crossing repos; it fires on duplication
+   only when the deliverable would have to WRITE a duplicate (logic or shape) the brief
+   does not name — a sighting goes to the `RULE-OF-TWO` line and the executor continues) ·
+   FORBIDDEN (paths outside the brief — the named helper and its
+   consumers ARE in scope —, dependency changes, no hand-written variant of a type a TS
+   utility type derives, no edit to `{{docs_dir}}/map/`, and comments narrating decisions,
    rationale or plan references, §1.10) ·
    RETURN (diff summary per file · commands + output · what was extracted or consumed
-   and which consumers were rewired · open questions)`. Every §7
+   and which consumers were rewired, as the agent's `REUSED` line · its `RULE-OF-TWO`
+   line · open questions)`. Every §7
    prompt carries one pre-filled block per task, plus the wave's `## Simplifier brief`
    (§1.11). A poor brief produces poor code.
 
@@ -113,12 +117,18 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
    consumed; logic two or more components use or need is extracted ONCE into a shared
    helper both consume (rule of TWO, guarded by the same-behavior test: extract only
    when both consumers would change together — otherwise it is a deliberate duplicate
-   with its why recorded). The verdict travels in the task's Scope manifest and in the
+   with its why recorded). Pattern family — the rule of TWO applied to SHAPE: two or more entities/components with the same shape (CRUD/API calls per entity, list/detail/form, table columns, validation, data fetching) share ONE generic base (an abstract class with generics, or a generic function/hook/composable) and each member supplies only its model/type and endpoint (`ProvidersService extends BaseApiService<Provider>`). TS utility types (`Partial`, `Pick`, `Omit`, `Record`, `ReturnType`, `Parameters`, `Awaited`, `NonNullable`) replace hand-written variants. Least code: the minimum lines, zero duplicates. The same-behavior guard holds per member; a base forced onto members that would not change together is over-abstraction. The verdict is exactly one of `consume` ·
+   `extract` · `deliberate duplicate` · `none`; *family* qualifies it, never a fifth verdict
+   (`consume family: <base path> → member <file> (supplies <Model> + <endpoint>)` ·
+   `extract family: <base path> (<Base><T>) <- members: <Entity: file, …> (each supplies only
+   its model/type + endpoint)`). The map is consulted in PLANNING (verdicts and `Map:` lines
+   cite its entries) and updated only by its script at close (§2b step 6), never by hand.
+   The verdict travels in the task's Scope manifest and in the
    prompt's `# SCOPE`; an executing session APPLIES it and runs the duplication census
    FIRST, it never hunts for duplication. The helper plus the rewiring of ALL its
    current consumers is ONE task — every consuming task lists it under `Depends on`, so
    it closes before they start and is never parallelised with them — and its DoD covers
-   every rewired consumer. Duplication found anyway is reported, not improvised on: if
+   every rewired consumer. Duplication found anyway is reported (the executor's `RULE-OF-TWO` line), not improvised on: if
    every implicated file is already in this wave's SCOPE the orchestrator amends the
    briefs and extracts in-wave (helper first, consumers after, serialized); if any file
    is outside, it goes to the logbook `Reuse:` field as a follow-up candidate and into
@@ -190,15 +200,17 @@ verification. Checkpoint commit (Conventional) at each internal task close.
 <per task, inlined from its Scope manifest card in detailed-plan.md: Modify/Create
 with a 1-line why per file · Read first exemplars · Impact (shared surface ← N
 consumers; contract kept or adaptation in scope; DoD covers the consumers) · Reuse in
-1–2 lines (consume <path> | extract → <path>; rewire <A,B,C> | deliberate duplicate —
-<why> | none; the dup census rides the Census line) · Census
+1–2 lines (consume <path> | consume family <base> → member <file> | extract → <path>;
+rewire <A,B,C> | extract family → <base><T>; members <A,B,C> (model + endpoint only) |
+deliberate duplicate — <why> | none; the dup census rides the Census line) · Map: the
+entries the task consumes, or none · Census
 command → expected N · tolerance (exact/±1 for small counts; ±X% only for large) ·
 Symbol notes when they fit the budget, else the pointer to the card. The
 investigation already ran: do NOT re-derive these lists and do NOT hunt for
 duplication — apply the reuse verdict. Census FIRST; divergence
 beyond tolerance ⇒ STOP and re-scope against detailed-plan. Budget UNCHANGED ~15
-lines/task (hard cap 25 for multi-file tasks), ≤60/wave — the reuse line lives inside
-the ~15, overflow stays in the card.>
+lines/task (hard cap 25 for multi-file tasks), ≤60/wave — the reuse and Map lines live
+inside the ~15, overflow stays in the card.>
 
 # LOOP
 brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → repeat, then ONE
@@ -226,8 +238,8 @@ DoD-auto yourself, integrate; you never implement first. `opus` investigates
 (`adcm-toolkits:researcher` + `model: opus`), reviews regression and verifies
 (`adcm-toolkits:auditor`) (quota 10, 2 reserved: the ⚠gate verifier and the
 simplify pass); the ⚠gate executor is `adcm-toolkits:executor` + `model: opus`;
-`sonnet` (`adcm-toolkits:executor`; `adcm-toolkits:executor-frontend`
-when this wave's Skills to load are design skills) implements NO-gate tasks from briefs
+`sonnet` (`adcm-toolkits:executor`; `adcm-toolkits:executor-frontend` on UI and
+frontend-code waves — design skills loaded OR the task's FILES are frontend app code) implements NO-gate tasks from briefs
 (≤4 parallel, disjoint files, own worktrees; an extraction task runs before its
 consumers, never beside them), never self-approves. ONE `code-simplifier:code-simplifier`
 pass per wave with an explicit `model: opus` (1 of the 20, 1 of the quota, never
@@ -244,11 +256,15 @@ execute → verify/escalate → integrate the worktrees → regression review �
 commit + simplify pass → run the FULL DoD-auto; on ⚠gates: `executor` + `model: opus`, the simplify
 pass BEFORE the adversarial verification by ANOTHER `adcm-toolkits:auditor` with the attack checklist from §6>
 ## Executor brief — <ID>
-<TASK · FILES (from SCOPE, the helper and its consumers included) · SKILLS (the wave's
+<TASK · FILES (from SCOPE, the helper and its consumers included, plus the `Map:`
+entries — read only those) · SKILLS (the wave's
 Skills to load) · DELIVERABLE ·
-DESIGN DECISIONS (incl. the reuse verdict) · DOD-SLICE · STOP IF · FORBIDDEN (the
-helper and its named consumers ARE in scope; no narrating comments) · RETURN (+ what
-was extracted or consumed and which consumers were rewired) — one block per task, ≤40
+DESIGN DECISIONS (incl. the family verdict) · DOD-SLICE · STOP IF (soft: the deliverable
+would have to WRITE a duplicate (logic or shape) the brief does not name) · FORBIDDEN (the
+helper and its named consumers ARE in scope; no hand-written variant of a type a TS utility
+type derives; no edit to `{{docs_dir}}/map/`; no narrating comments) · RETURN (+ what
+was extracted or consumed and which consumers were rewired — the agent's `REUSED` line —
+and its `RULE-OF-TWO` line) — one block per task, ≤40
 lines, see §1.8>
 ## Simplifier brief
 <one per wave, ≤20 lines, see §1.11: AGENT (code-simplifier:code-simplifier, model:
@@ -273,8 +289,9 @@ merges the wave's MR) — updates ALL plan docs in ONE pass, one Conventional co
 
 1. **`task.md`** — logbook entry with the extended schema (date of execution ·
    branch/MR · tasks closed · **blocked** · **files touched** · **manifest drift** · notes · wall
-   clock · **reuse** (helpers consumed/extracted · consumers rewired · dup census
-   before → after · unplanned duplication found → follow-up | none) · **simplifier**
+   clock · **reuse** (helpers or pattern family bases consumed/extracted · consumers or members rewired · dup census
+   before → after · unplanned duplication found (logic or shape) → follow-up | none) · **map** (map-refresh
+   summary | not refreshed (why) | n/a) · **simplifier**
    (carrier: packaged | fallback sub-agent · ran over `{{checkpoint_sha}}..HEAD` · files
    touched · DoD re-verified | reverted (why) | not run (why)) · **agents used n/20 (opus a · sonnet b)** with roles investigate /
    execute / review / simplify / verify / capture / courier (record the NUMBER of couriers: 1, or more
@@ -285,9 +302,9 @@ merges the wave's MR) — updates ALL plan docs in ONE pass, one Conventional co
    `🔄` / `⛔`).
 3. **`detailed-plan.md`** — mark the tasks done; update their Scope manifests with
    what was ACTUALLY touched; for every LATER wave whose manifest names surfaces this
-   wave changed, refresh its file lists and census expected counts. A helper born in
-   this wave is written into the `Reuse:` verdict and the Read-first list of every
-   later wave that needs the same logic, so the next wave consumes it instead of
+   wave changed, refresh its file lists and census expected counts. A helper or
+   pattern-family base born in this wave is written into the `Reuse:` verdict, the `Map:` line and the
+   Read-first list of every later wave that needs the same logic, so the next wave consumes it instead of
    duplicating it again.
 4. **`execute.md` §7** — regenerate the prompt of any later wave whose manifest
    changed in (3): its `# SCOPE` must match detailed-plan.
@@ -339,9 +356,16 @@ merges the wave's MR) — updates ALL plan docs in ONE pass, one Conventional co
    bump their `last_scanned`. Use the generator's incremental mode
    (`scan_project.py --update <paths>`) when available. Every closed wave leaves the
    brain AND the code map fresh — freshness never depends on manual re-scans.
+   Then refresh the brain's map with ONE call per repo the wave touched — `map-refresh --project <repo root>
+   --brain {{docs_dir}} --update <files touched there> --human '<Symbol>@<path>=<what>|<when>'…` (bare
+   launcher; one `--human` per `born` entry of the executors' `REUSED` lines) — never by re-deriving rows
+   in prose: it adds or updates the auto rows of `map/utilities.md` and `map/patterns.md` for the helpers
+   and pattern-family bases the wave created, keeps every human field, and its last line (`MAP: …`) goes
+   into the logbook `Map:` field. No `map/` yet, or no plugin in this session → `Map: not refreshed
+   (<why>)` (`renovate-check`'s MAP block brings it). The `map/` diff rides the step-9 commit+push of `{{docs_dir}}`.
 7. **`master-plan.md` execution-state block, `plans.html` and `prompts.html` —
    REGENERATE AND REPUBLISH, by the courier**: flip the row/badge in master-plan's
-   execution-state block and finish the doc-sync of steps 1–4 and 9 — commit and push
+   execution-state block and finish the doc-sync of steps 1–4, 6 (the map) and 9 — commit and push
    it FIRST (a project pre-commit may regenerate HTML when it commits the `.md`). The
    main session never opens, renders or edits brain HTML and never calls the Artifact
    tool: it delegates the delivery to one `adcm-toolkits:courier` per batch (it preloads the skill
@@ -420,7 +444,7 @@ review: list an "advisory checklist" here the same way; the reviewer's findings 
 fixed before close but don't change the delivery policy (§3).}}
 Maintainability findings are in scope for BOTH tiers, with the same license as
 indentation hell: leftover duplication (logic the manifest said to extract, or the
-same logic written twice) and comment noise (narration of decisions, rationale or plan
+same logic written twice, or the same shape written per entity instead of one generic base) and comment noise (narration of decisions, rationale or plan
 references — §1.10) are legitimate findings, reported and fixed like any other.
 
 ## 7. Wave prompts (instantiated, copy-paste)

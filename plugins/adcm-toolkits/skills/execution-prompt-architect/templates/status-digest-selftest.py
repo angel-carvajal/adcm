@@ -261,6 +261,7 @@ def case_en_template_exact(ctx, t):
             "- **Notes/decisions:** invoices are rounded half-up",
             "- **Wall clock:** 2h",
             "- **Reuse:** none",
+            "- **Map:** n/a (no map)",
             "- **Simplifier:** packaged `code-simplifier:code-simplifier` ran over `abc1234..HEAD`",
             "- **Orchestrator fix:** none",
             "- **Agents used:** 7/20 (opus 3 · sonnet 4) — opus: audit x3; sonnet: execute",
