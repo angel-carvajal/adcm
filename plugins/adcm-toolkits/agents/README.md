@@ -17,7 +17,7 @@ Claude never merges an MR/PR and never pushes code to the default branch (the Re
 
 ## Reuse block
 
-The shared `## Reuse` section is a deliberate duplicate: identical in `executor` and `executor-frontend`, because an agent body has no include mechanism. Edit both copies together; a prefix check of the two bodies catches drift. The frontend sub-block lives only in `executor-frontend`. Both agents add the `REUSED` line and the `RULE-OF-TWO` line to their RETURN.
+The shared `## Reuse` section is a deliberate duplicate: identical in `executor` and `executor-frontend`, because an agent body has no include mechanism. Edit both copies together; a prefix check of the two `## Reuse` sections catches drift. The frontend sub-block lives only in `executor-frontend`. Both agents add the `REUSED` line and the `RULE-OF-TWO` line to their RETURN.
 
 ## Fallback
 
@@ -25,7 +25,7 @@ In a session without this plugin, call `Agent(subagent_type: "general-purpose", 
 
 ## Preload cost
 
-`skills:` preloading is eager: the full skill text enters the context of every spawn of that agent, used or not. Measured sizes: `artifact-courier` SKILL.md 4,666 B; `frontend-design` SKILL.md 9,390 B (about 2.5k tokens); `impeccable` SKILL.md 12,883 B (a user-level skill, not shipped here). Body sizes: `executor` about 4.1 KB, `executor-frontend` about 5.7 KB (about 15 KB with `frontend-design`). Preloading both design skills would cost 22,273 B, about 7.4k tokens, over the 6k cap; with `frontend-design` alone it is about 3.1k tokens (9,390 B). So `executor-frontend` preloads only `frontend-design`; `impeccable` and any other design skill are loaded by the brief's `SKILLS:` line with `Skill`. Only courier and `executor-frontend` preload. If preloading does not resolve a name, `executor-frontend` loads `frontend-design` itself as its first step.
+`skills:` preloading is eager: the full skill text enters the context of every spawn of that agent, used or not. Measured sizes: `artifact-courier` SKILL.md 4,666 B; `frontend-design` SKILL.md 9,390 B (about 3.1k tokens); `impeccable` SKILL.md 12,883 B (a user-level skill, not shipped here). Body sizes: `executor` 4,233 B, `executor-frontend` 5,900 B (15,290 B with `frontend-design`). Preloading both design skills would cost 22,273 B, about 7.4k tokens, over the 6k cap; with `frontend-design` alone it is about 3.1k tokens (9,390 B). So `executor-frontend` preloads only `frontend-design`; `impeccable` and any other design skill are loaded by the brief's `SKILLS:` line with `Skill`. Only courier and `executor-frontend` preload. If preloading does not resolve a name, `executor-frontend` loads `frontend-design` itself as its first step.
 
 ## Loading
 
