@@ -4,7 +4,7 @@ description: >
   Loads the architecture context of the {{PROJECT_NAME}} project. Loads ONLY the
   high-level map; details of each area live in complementary files (stack, architecture,
   entry-points, conventions, glossary, api-surface, data-models, config-env, testing,
-  dependencies, business-flows, security, tech-debt, folders/*) and are read on-demand with
+  dependencies, business-flows, security, tech-debt, folders/*, and the brain map when the project keeps one) and are read on-demand with
   Read when the current task needs them (do not load everything up front — do it lazily).
   Triggers when the user mentions '{{PROJECT_NAME}}', {{ALIASES_LIST}}, or any variation
   related to working on the code, architecture, routes, modules, data models, auth,
@@ -45,6 +45,7 @@ Read only what the task needs. `auto` files are regenerated on every scan — ne
 | `business-flows.md` | critical end-to-end journeys | ← touching a money/user-critical flow | human |
 | `security.md` | auth, sensitive data, gaps, human-first zones | ← auth/permissions/PII work | human |
 | `tech-debt.md` | known quirks & gotchas (`file:line`) | ← something behaves weirdly | human |
+{{MAP_ROW — if the project keeps an execution brain, add: "| `{{AI_BRAIN_PATH}}/map/` | reusable helpers, patterns, where-to-look pointers | ← before writing any new code | mixed |"}}
 
 **Suggested reading order:** **L1** (orient) this file → `stack.md` · **L2** (build) `architecture.md` + `data-models.md` + `entry-points.md` · **L3** (work) `api-surface.md` + `business-flows.md` + `security.md` + `config-env.md` + `conventions.md` · **L4** (deep) `testing.md` + `tech-debt.md` + `dependencies.md` + `glossary.md` + `folders/*`.
 
@@ -61,6 +62,9 @@ Read only what the task needs. `auto` files are regenerated on every scan — ne
 | Dependency bump / security advisory / lockfile change | `dependencies.md` · `stack.md` · `testing.md` · `tech-debt.md` |
 | First session in this repo | this file · `stack.md` · `architecture.md` |
 {{EXTRA_ROUTING_ROWS}}
+{{MAP_ROUTING_ROWS — if the project keeps an execution brain, add:
+"| Write new code / touch shared logic | `{{AI_BRAIN_PATH}}/map/utilities.md` + `patterns.md` FIRST (`rg -n '<name\|shape>'` before any Read) · `usage-map.md` (census) · `conventions.md` |
+| Business rule / where is X decided | `{{AI_BRAIN_PATH}}/map/where-to-look.md` · `business-flows.md` |"}}
 
 {{AI_BRAIN_ROW — if the project keeps an execution brain (e.g. `ai-brain/`), add:
 "**Planned work:** for a task with an ID, open `{{AI_BRAIN_PATH}}/tasks/<ID>.md` FIRST —
@@ -124,9 +128,10 @@ its spec embeds the pre-resolved read list and scope; this map covers unplanned 
 
 1. **Lazy loading:** read only the complementary files the current task routes to (use the routing table above) — never the whole context.
 2. **Verify before touching:** the map is scan-derived and may be stale — confirm real locations with `Glob`/`Read`, and re-census `usage-map.md` counts before relying on them.
-3. **Impact first on shared surfaces:** before modifying anything under {{SHARED_ROOTS}}, open `usage-map.md` and check its consumers. Keep the contract for ALL of them or bring their adaptation into scope — and make the verification cover the consumers, not just the edited file.
+3. **Impact first on shared surfaces:** before modifying anything under {{SHARED_ROOTS}}, open `usage-map.md` and check its consumers. Keep the contract for ALL of them or bring their adaptation into scope — and make the verification cover the consumers, not just the edited file. Consume a helper the map lists; never write a variant of it.
 4. **Respect conventions:** follow `conventions.md`. Honor the **human-first zones** in `security.md`.
 5. **Danger zones:** {{DANGER_ZONES}}
 6. **Auto vs human files:** `auto` files are overwritten on re-scan — don't hand-edit them. Put durable notes in the `human` files (`business-flows.md`, `security.md`, `tech-debt.md`).
-7. **When stale:** if the map drifts from the code, tell the user and suggest re-running `code-project-context-generator` — full refresh, or delta after a closed wave: `scan_project.py <root> --update <changed-paths>` regenerates only the affected `folders/*.md` and `usage-map.md` rows (auto files only; `human` ones are always preserved).
+7. **When stale:** if the map drifts from the code, tell the user and suggest re-running `code-project-context-generator` — full refresh, or delta after a closed wave: `scan_project.py <root> --update <changed-paths>` regenerates only the affected `folders/*.md` and `usage-map.md` rows (auto files only; `human` ones are always preserved). `map-refresh --project <root> --brain <dir> --update <changed-paths>` refreshes the brain map at the same close.
 8. **Dependencies:** never bump, pin, override or remove a dependency, runtime or CI image ad hoc. Read `dependencies.md` first (its `## Policy` section is binding), run upgrades through the dependency-renovate skill, and record every new pin or hold, with its why, in that Policy table.
+9. **Maintain the map:** before writing a helper or a per-entity variant, open `{{AI_BRAIN_PATH}}/map/utilities.md` + `patterns.md` (`rg -n` first) and consume what is listed. Every helper you consume or extract is reported in your `REUSED` line and reaches the map through `map-refresh` at the wave's close (`--human '<Symbol>@<path>=<what>|<when>'` fills the ✍ cells of the rows it prints as new); add a `## Curated (human)` row only when the scanner cannot see it, and type it with its leading `|` (a row without it ends the table). Report every rule of TWO you notice; never invent an abstraction the brief did not ask for.

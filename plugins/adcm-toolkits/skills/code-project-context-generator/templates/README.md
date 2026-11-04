@@ -4,7 +4,7 @@ These templates are the base for generating the `code-project-context-[project-n
 
 ## Inventory
 
-Each template is **`auto`** (scan-derived; wrapped in `<!-- auto-generated -->` markers and rewritten on every scan) or **`human`** (semantic; written once by Claude in Step 3.5 and **preserved** across re-scans). `dependencies.md.tmpl` is **`mixed`**: an auto block plus a human `## Policy` section, rendered by script (`deps-check context`) with exact placeholders.
+Each template is **`auto`** (scan-derived; wrapped in `<!-- auto-generated -->` markers and rewritten on every scan) or **`human`** (semantic; written once by Claude in Step 3.5 and **preserved** across re-scans). `dependencies.md.tmpl` is **`mixed`**: an auto block plus a human `## Policy` section, rendered by script (`deps-check context`) with exact placeholders. The `map/*.tmpl` templates are **`mixed`** too (script-rendered rows plus human ✍ columns, a Curated section and a Retired section) and land in the brain, not in the generated skill.
 
 | Template | Destination in the generated skill | What it contains | Kind |
 |----------|------------------------------------|------------------|------|
@@ -23,11 +23,14 @@ Each template is **`auto`** (scan-derived; wrapped in `<!-- auto-generated -->` 
 | `business-flows.md.tmpl` | `business-flows.md` | Critical end-to-end journeys — on-demand | human |
 | `security.md.tmpl` | `security.md` | Auth, sensitive data, gaps, human-first zones — on-demand | human |
 | `tech-debt.md.tmpl` | `tech-debt.md` | Known quirks & tech debt (`file:line`) — on-demand | human |
+| `map/utilities.md.tmpl` | `<ai-brain>/map/utilities.md` | Reusable helpers, bases, hooks — rows by script, ✍ columns by hand | mixed |
+| `map/patterns.md.tmpl` | `<ai-brain>/map/patterns.md` | Recurring shapes and where to apply them — rows by script, ✍ columns by hand | mixed |
+| `map/where-to-look.md.tmpl` | `<ai-brain>/map/where-to-look.md` | Pointers to where a question is decided — rows by script, ✍ column by hand | mixed |
 
 ## Placeholders used
 
 Placeholders have the format `{{NAME_UPPERCASE}}` and are replaced by Claude when rendering. They are descriptive by design — there is no rigid list; Claude decides what to put based on what the scanner extracted and what the user provided.
-Exception: `dependencies.md.tmpl` placeholders are exact and filled by `deps-check context`, never by hand.
+Exception: `dependencies.md.tmpl` placeholders are exact and filled by `deps-check context`, never by hand. The `map/*.tmpl` placeholders (`{{PROJECT_NAME}}`, `{{BLOCKS}}`) are exact too and filled by `map_refresh.py` (`map-refresh`), never by hand.
 
 Common placeholders:
 

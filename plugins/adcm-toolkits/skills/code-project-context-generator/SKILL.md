@@ -4,14 +4,15 @@ description: >
   Scans a code project, builds a structured map of its architecture, and generates
   an installable skill of the form `code-project-context-[project-name]` with lazy-loading
   (the resulting SKILL.md loads only the index, and per-folder details are read on-demand).
+  It also keeps the brain map (utilities, patterns, where-to-look) that tells new work what to reuse.
   Triggers when the user asks to 'create project context', 'new code project',
   'scan repo', 'map architecture', 'code project context', 'analyze project',
   'load code context', 'new repo', 'register project', 'create project skill',
   'project init', 'architecture map', 'give me context for another project', 'I have another repo',
-  'map code', 'code map', or any variation where they want Claude to understand and
+  'map code', 'code map', 'utilities map', 'patterns map', 'reuse map', 'refresh the map', or any variation where they want Claude to understand and
   remember the architecture of a code project for future working sessions.
 compatibility: >
-  Python 3 (stdlib only, no external dependencies) for the scanner.
+  Python 3 (stdlib only, no external dependencies) for the scanner and `map-refresh`.
 ---
 
 # Code Project Context Generator
@@ -30,6 +31,7 @@ Solve the problem of "starting work on a project without having to explain to Cl
 
 - Python 3 (stdlib only, no external packages) for the scanner.
 - Script bundled in this skill: `scripts/scan_project.py` (relative to the skill root).
+- The brain map renderer `scripts/map_refresh.py`, run through the plugin launcher `bin/map-refresh` (Python 3, stdlib only).
 - When an absolute path is needed, the skill lives at
   `${CLAUDE_PLUGIN_ROOT}/skills/code-project-context-generator/`, so the scanner is at
   `${CLAUDE_PLUGIN_ROOT}/skills/code-project-context-generator/scripts/scan_project.py`.
@@ -44,6 +46,7 @@ Solve the problem of "starting work on a project without having to explain to Cl
 - **STEP 3.5 semantic sections** (`business-flows.md`, `security.md`, `tech-debt.md`) — one `adcm-toolkits:executor` called with `model: "opus"` per section, with a brief and a bounded list of files to read.
 - **STEP 4 template filling** — one `adcm-toolkits:executor` per file family.
 - **STEP 4.5 delta refresh** — an `adcm-toolkits:executor`.
+- **STEP 4.6 brain map** — `map-refresh` is run by an `adcm-toolkits:executor`; the ✍ cells of the rows it prints as new are curated by ONE `adcm-toolkits:executor` called with `model: "opus"`.
 - **Main session** — interviews the user (STEP 1 and STEP 3), audits every RETURN against the DoD of its brief, and assembles the index `SKILL.md`.
 
 Escape hatch, in the user's own words: `sin tanto lío` (direct mode for that one task) or `modo directo` (stays on until `modo orquestador`). Canonical rule, brief format and tiers: `../execution-prompt-architect/references/orchestrator-rule.md`.
@@ -72,6 +75,8 @@ may hold `<slug>-{ai|ia}-admin` and `-common` marketplaces, or venture-specific
 variants (`-commercial`, `-platform`, `-academic`) — record the container path; the
 generated skill must describe the whole container in its architecture map and route
 planned work and docs to the sibling `ai-brain/`, wherever it actually lives.
+
+The brain map (STEP 4.6) lives where the project's `ai-brain` symlink resolves: the brain root `map/`, or `modules/<mod>/map/` for a module brain (project-structure rule 4). A brain with modules and no symlink is passed to `map-refresh` with `--brain`.
 
 ### STEP 1: Collect minimal metadata
 
@@ -146,8 +151,9 @@ The scanner produces a JSON with:
   Runtime pins are listed in a fixed order, with no precedence; one read from a CI file or a Dockerfile carries `kind:<file>` in `source` (`ci-image:<file>`, `docker:<file>`, `setup-node:<file>`; likewise `setup-python`, `setup-php`, `setup-deno`).
   `notes` lists what it could not read: `<file> uses include: the included files are not followed`, `locked versions are not read for yarn|bun`, `<file> not parsed (tomllib needs Python 3.11)`, `unparsed <file> (invalid JSON|YAML|TOML)`, `conflicting lockfiles: …`.
   Without `skip_dirs` it uses `DEFAULT_SKIP`, a 33-member mirror of the scanner's `SKIP_DIRS`. `update.affected_context_files`, the 5th key of `update`, comes from `dependency_update_targets`, which also recognises `.renovaterc.json5`, `.php-version`, `.dvmrc`, `runtime.txt` and `patches/<name>+<version>.patch`.
+- `map` — the reuse-map candidates (`{utilities, patterns, where_to_look, count}`) that `map-refresh` renders into the brain map; STEP 4.6. `SHARED_DIR_HINTS` is unchanged (the map uses its own wider hints) and so is `usage_map`.
 - `usage_map` — shared surfaces → consumer census (`{shared_roots, surfaces:[{symbol, defined_in, consumers_count, consumers, census_cmd}]}`) — exports defined under shared/lib/packages/components-style folders, with who consumes them across the rest of the project. This is what makes impact analysis ("this component is rendered by 10 more pages") a lookup instead of a re-derivation.
-- `update` — only with `--update <paths>`: `{paths, affected_folders, affected_surfaces, affected_context_files}` for delta refreshes (STEP 4.5); `affected_context_files` names `dependencies.md` and the `stack.md` sections to refresh when a manifest, lockfile, runtime pin, CI file or Dockerfile changed — root paths included.
+- `update` — only with `--update <paths>`: `{paths, affected_folders, affected_surfaces, affected_context_files, affected_map_rows}` for delta refreshes (STEP 4.5); `affected_map_rows` is `{utilities: ['<symbol>@<path>'], patterns: ['<slug>']}`, the map rows the paths touch, and `update` ends with its 5 sorted keys (`affected_context_files, affected_folders, affected_map_rows, affected_surfaces, paths`); `affected_context_files` names `dependencies.md` and the `stack.md` sections to refresh when a manifest, lockfile, runtime pin, CI file or Dockerfile changed — root paths included.
 
 These feed the **auto** sections (`api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `usage-map.md`) and the auto block of `dependencies.md`. The scanner does not produce the **semantic** sections — those are authored in STEP 3.5.
 
@@ -221,6 +227,8 @@ and ends with `<!-- end auto-generated -->`. The `human` files carry no such mar
 4. Index of detailed files: "For details on X, read `architecture.md`. For the full stack, read `stack.md`. For the `src/api/` folder, read `folders/src-api.md`."
 5. Rules for Claude on how to use this context
 
+The brain map (`map/`) is NOT part of the generated skill: it is a brain artifact, generated and kept by STEP 4.6.
+
 Use the templates in `templates/` (relative to the skill root) as a base. The templates include placeholders that are filled in with the scanner's data.
 
 ### STEP 4.5: Refresh mode (when the context already exists)
@@ -233,15 +241,27 @@ changed (e.g. the wave-close doc-sync has the logbook's files-touched list), run
 `update` block names: the affected `folders/*.md`, the `usage-map.md` rows in
 `affected_surfaces`, and the `last_scanned` stamps of those files. Everything else —
 including all `human` files — stays untouched. This is what keeps the map fresh at
-every wave close without paying a full refresh. When `update.affected_context_files` names `dependencies.md`, re-run `deps-check context <root> --context <skill-dir> --write` (auto block only); when it names `stack.md`, refresh only the listed sections.
+every wave close without paying a full refresh. The same executor also runs `map-refresh --project <root> --brain <dir> --update <paths>`, which reports the map rows those paths touch (STEP 4.6). When `update.affected_context_files` names `dependencies.md`, re-run `deps-check context <root> --context <skill-dir> --write` (auto block only); when it names `stack.md`, refresh only the listed sections.
 
 **Full refresh** (no known path list):
 
-1. **Regenerate the `auto` files** wholesale from the fresh scan: `stack.md`, `architecture.md`, `entry-points.md`, `api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `conventions.md`, `glossary.md`, `usage-map.md`, `folders/*.md`, the auto block of `dependencies.md` (through `deps-check context … --write`), and the wrapped block of `SKILL.md`. (These start with the `<!-- auto-generated -->` marker — safe to overwrite.)
+1. **Regenerate the `auto` files** wholesale from the fresh scan: `stack.md`, `architecture.md`, `entry-points.md`, `api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `conventions.md`, `glossary.md`, `usage-map.md`, `folders/*.md`, the auto block of `dependencies.md` (through `deps-check context … --write`), and the wrapped block of `SKILL.md`.
+   (These start with the `<!-- auto-generated -->` marker — safe to overwrite.)
 2. **Preserve the `human` files** untouched: `business-flows.md`, `security.md`, `tech-debt.md`, the `## Policy` section of `dependencies.md`, and the identity/danger-zone prose of `SKILL.md` (anything outside the markers).
 3. **Update `last_scanned`** in the `SKILL.md` frontmatter and the wrapper comments.
-4. **Flag drift:** if the scan changed materially (new modules, stack change, endpoints added/removed), prepend a one-line note to the affected human files: `> ⚠ possible drift since last scan — review.` Do not edit their content.
-5. Tell the user what was refreshed vs preserved. A refresh is not finished until the installed plugin loads it: STEP 5 Option A (patch bump + commit); push when the owner asked for it (renovate's CONTEXT block does), then `claude plugin marketplace update <mk>` + `claude plugin update <plugin>@<mk>` + `/reload-plugins` (or a new session).
+4. **Brain map:** map/ is never a full-refresh target; STEP 4.6 keeps it, and its marker (`map-refresh: scan`) matches no wrapper above.
+5. **Flag drift:** if the scan changed materially (new modules, stack change, endpoints added/removed), prepend a one-line note to the affected human files: `> ⚠ possible drift since last scan — review.` Do not edit their content.
+6. Tell the user what was refreshed vs preserved. A refresh is not finished until the installed plugin loads it: STEP 5 Option A (patch bump + commit); push when the owner asked for it (renovate's CONTEXT block does), then `claude plugin marketplace update <mk>` + `claude plugin update <plugin>@<mk>` + `/reload-plugins` (or a new session).
+
+### STEP 4.6: Brain map (reuse before you write)
+
+The brain map is three files in the brain, `map/utilities.md`, `map/patterns.md` and `map/where-to-look.md`, that answer "does a helper, a base or a pattern for this already exist?" before new code is written. Python keeps the rows; humans edit only the ✍ cells. Without an `ai-brain` symlink (and no `--brain`) skip this step and say so.
+
+1. **Generate.** An `adcm-toolkits:executor` runs `map-refresh --project <root> --brain <dir> --context-skill <generated skill dir>` and returns its summary and the rows printed as new.
+2. **Curate.** ONE `adcm-toolkits:executor` called with `model: "opus"` fills the ✍ cells of those new rows from the code (`—` when unsure) with `--human '<Symbol>@<path>=<what>|<when>'`.
+3. **Refresh at wave close.** The wave-close doc-sync runs `map-refresh --project <root> --brain <dir> --update <files touched>` plus one `--human` per helper born in the wave (0 agents).
+4. **Freshness.** `map-refresh --brain <dir> --check` rescans every block and writes nothing: exit 0 fresh · 1 stale · 2 missing or unresolved; its last line is `MAP: …`.
+5. **Commit.** The map is committed with the brain doc-sync; no plugin bump. It reflects the working branch until that branch merges, and `--check` at the next planning Step 1 catches the drift.
 
 ### STEP 5: Package and install
 
@@ -281,10 +301,10 @@ The canonical skeleton is `templates/SKILL.md.tmpl` (render its `{{placeholders}
 
 1. Frontmatter: `name`, a generous `description` (triggers), plus `status`, `stack`, `default_branch`, `last_scanned`.
 2. Identity (1–2 lines): what it does, type, owner, status — **human, outside the wrapper**.
-3. **Context files table** — the index of every complementary doc, each tagged `auto` or `human`, with a **"Start here when…" entry hint per row**, the suggested L1–L4 reading order, and a **routing-by-task-type table** (endpoint work → api-surface+conventions+testing; shared-surface work → usage-map FIRST; auth → security+tech-debt; …). If the project has an execution brain, a "Planned work" pointer routes task IDs to `<ai-brain>/tasks/<ID>.md` before this map.
+3. **Context files table** — the index of every complementary doc, each tagged `auto` or `human`, with a **"Start here when…" entry hint per row**, the suggested L1–L4 reading order, and a **routing-by-task-type table** (endpoint work → api-surface+conventions+testing; shared-surface work → usage-map FIRST; auth → security+tech-debt; …). If the project has an execution brain, a "Planned work" pointer routes task IDs to `<ai-brain>/tasks/<ID>.md` before this map, and routing rows send new code to `<ai-brain>/map/utilities.md` + `patterns.md` first.
 4. The wrapped **auto block**: stack one-liner, high-level tree, entry-points summary, an "at a glance" line (API/data/config/tests), conventions + glossary shortlists.
 5. **Related Skills** (optional) — links to sibling/`client-context-*` skills; human, outside the wrapper. Omit if none.
-6. **Rules For Claude** — lazy loading, verify-before-touch, respect conventions/human-first zones, auto-vs-human files, refresh-when-stale.
+6. **Rules For Claude** — lazy loading, verify-before-touch, respect conventions/human-first zones, auto-vs-human files, refresh-when-stale, and for a project with a brain, maintain the map (rule 9).
 
 Never inline per-folder or per-section detail into the SKILL.md — that defeats the lazy-loading.
 
@@ -300,4 +320,5 @@ Never inline per-folder or per-section detail into the SKILL.md — that defeats
 - **Generous triggers:** the resulting skill's `description` must include the project name, aliases, base paths, key module names — anything the user might mention.
 - **Stack-agnostic:** supports Node/TS, PHP, Python, Go, Rust, Ruby and any mix; degrade gracefully when a detector finds nothing.
 - **Living, not fossilized:** re-runnable as the project evolves — refresh mode (STEP 4.5) updates `auto` files and `last_scanned` while preserving `human` ones; the `--update` delta mode makes per-wave freshness cheap enough to be routine.
+- **Reuse is a lookup too:** the brain map answers "does a helper or base exist?" before anything is written; Python keeps the rows, humans only the ✍ cells; pattern family: one generic base per shape two or more entities share.
 - **Impact is a lookup, not a re-derivation:** `usage-map.md` exists so that touching a shared surface starts with "who consumes this?" answered from the map (then re-censused cheaply), never re-derived with exploratory greps.
