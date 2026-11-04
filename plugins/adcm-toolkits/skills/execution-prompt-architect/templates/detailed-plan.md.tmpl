@@ -42,6 +42,13 @@ deployments: plan-detallado.md) — one set per container, consistently.
   the task's Scope manifest (`Reuse:`), never improvised at execution time — and the
   helper plus the rewiring of ALL its current consumers is ONE task, which every
   consuming task lists under `Depends on`.
+- **Pattern families**: Pattern family — the rule of TWO applied to SHAPE: two or more entities/components with the same shape (CRUD/API calls per entity, list/detail/form, table columns, validation, data fetching) share ONE generic base (an abstract class with generics, or a generic function/hook/composable) and each member supplies only its model/type and endpoint (`ProvidersService extends BaseApiService<Provider>`). TS utility types (`Partial`, `Pick`, `Omit`, `Record`, `ReturnType`, `Parameters`, `Awaited`, `NonNullable`) replace hand-written variants. Least code: the minimum lines, zero duplicates. The same-behavior guard holds per member; a base forced onto members that would not change together is over-abstraction.
+- **Utility types over hand-written variants**: derive a variant from the model type
+  (`Partial<Provider>`, `Pick<Provider, 'id' | 'name'>`, `Omit<Provider, 'id'>`) instead of
+  declaring a parallel type by hand.
+- **Least code + the map**: the planner reads `{{docs_dir}}/map/utilities.md` and
+  `map/patterns.md` before deciding the verdict (names, never copies); what a task creates
+  reaches the map through `map-refresh` at the wave's close, never by hand.
 - **Comments explain the WHY, never the plan**: a comment earns its place when it
   explains non-obvious logic (an invariant, a workaround for a named external bug, a
   gotcha, a non-obvious algorithm), documents a public API in this repo's existing
@@ -52,7 +59,7 @@ deployments: plan-detallado.md) — one set per container, consistently.
   these task cards and in the `task.md` logbook; a comment repeating them is a second
   record that rots.
 - **Scope manifests**: every task card carries a `Scope manifest` — the structured
-  output of the analysis (files + why + impact + reuse + census). It DEFINES the task's
+  output of the analysis (files + why + impact + reuse + map + census). It DEFINES the task's
   scope — the shared helper and the consumers it names are inside it — and it is the
   POSITIVE scope:
   wave prompts inline it as `# SCOPE` so executing sessions never re-derive it. It is
@@ -98,20 +105,26 @@ deployments: plan-detallado.md) — one set per container, consistently.
     does this) · extract: `{{path}}` ← consumers: `{{files}}` (rule of TWO; this task
     creates the helper AND rewires every listed consumer; every consuming task lists
     this one under Depends on; the duplication census rides the Census line below) ·
-    deliberate duplicate: {{why they are expected to diverge}} · none}}
+    deliberate duplicate: {{why they are expected to diverge}} · none. A pattern family is
+    a qualifier, never a fifth verdict — consume family: `{{base_path}}` → member
+    `{{file}}` (supplies {{Model}} + {{endpoint}}) · extract family: `{{base_path}}`
+    ({{Base}}<T>) ← members: {{Entity: file, …}} (each supplies only its model/type +
+    endpoint); the base and its existing members are ONE task, new members depend on it}}
+  - **Map:** {{`utilities.md › <name>` · `patterns.md › <family>` | none}} — names, never copies.
   - **Census:** `{{command}}` → expected {{N}} (as of {{analysis_date}}) · tolerance
     {{exact | ±1 for small counts (<10); ±X% only for large censuses}}. Divergence
     beyond tolerance at execution ⇒ STOP, re-scope against this card, update this
     manifest, log the drift in task.md. {{· duplication flavour when this card's Reuse
     verdict is `extract`: `rg -l '{{distinctive_snippet}}' | wc -l` → {{N}} today,
-    expected 1 after this task — same STOP-on-divergence semantics}}
+    expected 1 after this task — same STOP-on-divergence semantics; for a family, the
+    per-entity duplicated body line → 1 (the base)}}
   - **Symbol notes:** {{exact members to delete/preserve/rename, file:line — when the
     analysis already has them; this is the overflow home when the prompt budget is
-    hit, including the full consumer list of an extracted helper}}
+    hit, including the full consumer list of an extracted helper and a family's members}}
 - **DoD:**
   - [ ] {{command}} → {{expected_result}}
   - [ ] {{observable_assertion}}
-  - [ ] {{On an extraction: the build/test command of EVERY rewired consumer → exit 0 ·
+  - [ ] {{On an extraction: the build/test command of EVERY rewired consumer or member → exit 0 ·
     the duplication census → 1}}
 - **Depends on:** {{task_ids_or_none}}. **Blocks:** {{task_ids_or_what_it_unblocks}}.
 

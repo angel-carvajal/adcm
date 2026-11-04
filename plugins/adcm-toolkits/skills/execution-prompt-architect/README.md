@@ -13,7 +13,7 @@ comment policy, and a code-simplifier pass that closes every wave.
 > writes executor briefs, runs the DoD itself — and never implements first; Opus
 > agents (`adcm-toolkits:researcher`, `adcm-toolkits:auditor`) investigate, review regression and verify gates, and
 > `adcm-toolkits:executor` + `model: opus` implements ⚠gate waves; Sonnet executors (`adcm-toolkits:executor`,
-> `executor-frontend` on UI waves) implement NO-gate tasks from briefs (up to 4 in
+> `executor-frontend` on UI and frontend-code waves — when the wave loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload (~3.1k tokens)) implement NO-gate tasks from briefs (up to 4 in
 > parallel, own worktrees); one packaged `code-simplifier` pass (model: opus) closes
 > every wave and one `adcm-toolkits:courier` per batch (normally 1; each 1 of the 20, 0 Opus quota) delivers
 > its artifacts and links; an escalation ladder Sonnet → Opus → Fable kicks in on
@@ -68,7 +68,7 @@ links on a phone without scrolling.
 |---|---|
 | `executive-proposal.md` | PITCH — first part of the family: what is sought, what we gain, the plan in N steps, when/who, investment & risk, and what we ask to approve (for stakeholders, jargon-free) |
 | `master-plan.md` | WHY — core decision, target architecture, wave order, timeline with exit gates, risks, affected repos, inviolable decisions |
-| `detailed-plan.md` | WHAT — every task with ID, repo(s), owner, technical description, **Scope manifest** (files to modify/create with why, read-first exemplars, impact census of consumers, reuse/extraction plan, freshness check, symbol notes), DoD checkboxes, dependencies |
+| `detailed-plan.md` | WHAT — every task with ID, repo(s), owner, technical description, **Scope manifest** (files to modify/create with why, read-first exemplars, impact census of consumers, reuse/extraction plan (pattern families included) and the map entries it consumes, freshness check, symbol notes), DoD checkboxes, dependencies |
 | `timeframe-plan.md` | WHEN — start/target/buffer summary, per-wave schedule (sessions + calendar days, dependencies, parallelism, estimated week), critical path, calendarized milestones + DoD-human, week-by-week table, calendar assumptions & risks |
 | `task.md` | STATE — wave map, weekly burn, execution logbook |
 | `execute.md` | HOW — protocol (principles — reuse, comment policy and the per-wave code-simplifier pass included —, doc-sync at close, merge policy, checkpoint/resume, attack checklists) + one copy-paste prompt per wave (GOAL · TASKS · SCOPE manifest · LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) |

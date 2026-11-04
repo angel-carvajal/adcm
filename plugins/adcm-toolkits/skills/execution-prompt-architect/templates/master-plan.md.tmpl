@@ -30,8 +30,10 @@ future sessions from re-litigating the decision.}}
 {{Target state: layers, boundaries, who may depend on whom. Use a table or diagram.
 Include the boundary rules a wave prompt can enforce ("X never imports Y") and WHERE
 SHARED HELPERS LIVE — the shared root every extraction targets (detailed-plan §0
-"Reuse before writing") — so extraction follows the architecture instead of the first
-consumer.}}
+"Reuse before writing"), and where the generic bases of pattern families live — so
+extraction follows the architecture instead of the first consumer. The live index of
+those entries is `{{docs_dir}}/map/utilities.md` + `map/patterns.md`: this section states
+the rule, the map lists the entries.}}
 
 | Layer / module | Contains | May depend on |
 |---|---|---|
@@ -81,7 +83,8 @@ Three are STANDING (include them always, before the project-specific ones):
   its own nested git repo; an unpushed logbook does not exist.
 - **Code quality is a deliverable** (detailed-plan §0 · execute.md §1.9–§1.11): reuse
   is decided in planning — existing logic is consumed, logic two or more components
-  need is extracted once into a shared helper both consume, and nobody improvises an
+  need is extracted once into a shared helper both consume, a pattern family — a shape
+  two or more entities share — becomes one generic base (detailed-plan §0), and nobody improvises an
   abstraction while implementing; comments explain the WHY of non-obvious logic and
   never narrate decisions, changes or plan references (that record lives in these
   documents and in the `task.md` logbook); and every wave ends with one code-simplifier
