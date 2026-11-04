@@ -46,7 +46,7 @@ Solve the problem of "starting work on a project without having to explain to Cl
 - **STEP 3.5 semantic sections** (`business-flows.md`, `security.md`, `tech-debt.md`) — one `adcm-toolkits:executor` called with `model: "opus"` per section, with a brief and a bounded list of files to read.
 - **STEP 4 template filling** — one `adcm-toolkits:executor` per file family.
 - **STEP 4.5 delta refresh** — an `adcm-toolkits:executor`.
-- **STEP 4.6 brain map** — `map-refresh` is run by an `adcm-toolkits:executor`; the ✍ cells of the rows it prints as new are curated by ONE `adcm-toolkits:executor` called with `model: "opus"`.
+- **STEP 4.6 brain map** — `map-refresh` is run by an `adcm-toolkits:executor`; the ✍ cells of the rows it reports as new (`--json` `new_rows`) are curated by ONE `adcm-toolkits:executor` called with `model: "opus"`.
 - **Main session** — interviews the user (STEP 1 and STEP 3), audits every RETURN against the DoD of its brief, and assembles the index `SKILL.md`.
 
 Escape hatch, in the user's own words: `sin tanto lío` (direct mode for that one task) or `modo directo` (stays on until `modo orquestador`). Canonical rule, brief format and tiers: `../execution-prompt-architect/references/orchestrator-rule.md`.
@@ -151,9 +151,9 @@ The scanner produces a JSON with:
   Runtime pins are listed in a fixed order, with no precedence; one read from a CI file or a Dockerfile carries `kind:<file>` in `source` (`ci-image:<file>`, `docker:<file>`, `setup-node:<file>`; likewise `setup-python`, `setup-php`, `setup-deno`).
   `notes` lists what it could not read: `<file> uses include: the included files are not followed`, `locked versions are not read for yarn|bun`, `<file> not parsed (tomllib needs Python 3.11)`, `unparsed <file> (invalid JSON|YAML|TOML)`, `conflicting lockfiles: …`.
   Without `skip_dirs` it uses `DEFAULT_SKIP`, a 33-member mirror of the scanner's `SKIP_DIRS`. `update.affected_context_files`, the 5th key of `update`, comes from `dependency_update_targets`, which also recognises `.renovaterc.json5`, `.php-version`, `.dvmrc`, `runtime.txt` and `patches/<name>+<version>.patch`.
-- `map` — the reuse-map candidates (`{utilities, patterns, where_to_look, count}`) that `map-refresh` renders into the brain map; STEP 4.6. `SHARED_DIR_HINTS` is unchanged (the map uses its own wider hints) and so is `usage_map`.
+- `map` — the reuse-map candidates (`{utilities, patterns, where_to_look, count}`) that `map-refresh` renders into the brain map; STEP 4.6. the map uses its own wider `MAP_SHARED_HINTS`.
 - `usage_map` — shared surfaces → consumer census (`{shared_roots, surfaces:[{symbol, defined_in, consumers_count, consumers, census_cmd}]}`) — exports defined under shared/lib/packages/components-style folders, with who consumes them across the rest of the project. This is what makes impact analysis ("this component is rendered by 10 more pages") a lookup instead of a re-derivation.
-- `update` — only with `--update <paths>`: `{paths, affected_folders, affected_surfaces, affected_context_files, affected_map_rows}` for delta refreshes (STEP 4.5); `affected_map_rows` is `{utilities: ['<symbol>@<path>'], patterns: ['<slug>']}`, the map rows the paths touch, and `update` ends with its 5 sorted keys (`affected_context_files, affected_folders, affected_map_rows, affected_surfaces, paths`); `affected_context_files` names `dependencies.md` and the `stack.md` sections to refresh when a manifest, lockfile, runtime pin, CI file or Dockerfile changed — root paths included.
+- `update` — only with `--update <paths>`: `{paths, affected_folders, affected_surfaces, affected_map_rows, affected_context_files}` for delta refreshes (STEP 4.5); `affected_map_rows` is `{utilities: ['<symbol>@<path>'], patterns: ['<slug>']}`, the map rows the paths touch, and `update` carries its 5 keys in the order the scanner emits them (`paths, affected_folders, affected_surfaces, affected_map_rows, affected_context_files`); `affected_context_files` names `dependencies.md` and the `stack.md` sections to refresh when a manifest, lockfile, runtime pin, CI file or Dockerfile changed — root paths included.
 
 These feed the **auto** sections (`api-surface.md`, `data-models.md`, `config-env.md`, `testing.md`, `usage-map.md`) and the auto block of `dependencies.md`. The scanner does not produce the **semantic** sections — those are authored in STEP 3.5.
 
@@ -241,7 +241,7 @@ changed (e.g. the wave-close doc-sync has the logbook's files-touched list), run
 `update` block names: the affected `folders/*.md`, the `usage-map.md` rows in
 `affected_surfaces`, and the `last_scanned` stamps of those files. Everything else —
 including all `human` files — stays untouched. This is what keeps the map fresh at
-every wave close without paying a full refresh. The same executor also runs `map-refresh --project <root> --brain <dir> --update <paths>`, which reports the map rows those paths touch (STEP 4.6). When `update.affected_context_files` names `dependencies.md`, re-run `deps-check context <root> --context <skill-dir> --write` (auto block only); when it names `stack.md`, refresh only the listed sections.
+every wave close without paying a full refresh. The same executor also runs `map-refresh --project <root> --brain <dir> --update <paths>`, which reports the map rows those paths touch (at a wave close the doc-sync runs it instead, STEP 4.6 step 3). When `update.affected_context_files` names `dependencies.md`, re-run `deps-check context <root> --context <skill-dir> --write` (auto block only); when it names `stack.md`, refresh only the listed sections.
 
 **Full refresh** (no known path list):
 
@@ -257,8 +257,8 @@ every wave close without paying a full refresh. The same executor also runs `map
 
 The brain map is three files in the brain, `map/utilities.md`, `map/patterns.md` and `map/where-to-look.md`, that answer "does a helper, a base or a pattern for this already exist?" before new code is written. Python keeps the rows; humans edit only the ✍ cells. Without an `ai-brain` symlink (and no `--brain`) skip this step and say so.
 
-1. **Generate.** An `adcm-toolkits:executor` runs `map-refresh --project <root> --brain <dir> --context-skill <generated skill dir>` and returns its summary and the rows printed as new.
-2. **Curate.** ONE `adcm-toolkits:executor` called with `model: "opus"` fills the ✍ cells of those new rows from the code (`—` when unsure) with `--human '<Symbol>@<path>=<what>|<when>'`.
+1. **Generate.** An `adcm-toolkits:executor` runs `map-refresh --project <root> --brain <dir> --context-skill <generated skill dir> --json` and returns the `new_rows` (in text mode the script prints only counts).
+2. **Curate.** ONE `adcm-toolkits:executor` called with `model: "opus"` fills the utilities ✍ cells of those rows with `--human '<Symbol>@<path>=<what>|<when>'` (it writes `utilities.md` only) and edits the ✍ cells of the `patterns.md` and `where-to-look.md` rows in place (✍ cells only; `—` when unsure).
 3. **Refresh at wave close.** The wave-close doc-sync runs `map-refresh --project <root> --brain <dir> --update <files touched>` plus one `--human` per helper born in the wave (0 agents).
 4. **Freshness.** `map-refresh --brain <dir> --check` rescans every block and writes nothing: exit 0 fresh · 1 stale · 2 missing or unresolved; its last line is `MAP: …`.
 5. **Commit.** The map is committed with the brain doc-sync; no plugin bump. It reflects the working branch until that branch merges, and `--check` at the next planning Step 1 catches the drift.

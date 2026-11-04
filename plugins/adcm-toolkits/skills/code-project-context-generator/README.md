@@ -31,7 +31,7 @@ Beside the skill, the brain gets a **reuse map** (`<ai-brain>/map/utilities.md`,
 
 The generated `SKILL.md` routes reading by task type (a "Start here when…" hint per file plus an L1–L4 reading order), so sessions spend the minimum tokens the task needs.
 
-Re-running on an evolved project is a **refresh**: it regenerates the `auto` files and updates `last_scanned`, while never overwriting the `human` ones. After a closed execution wave, the **delta mode** — `scan_project.py <root> --update <changed-paths>` — refreshes only the affected `folders/*.md` and `usage-map.md` rows, cheap enough to run at every wave close; `map-refresh --project <root> --brain <dir> --update <changed-paths>` does the same for the map rows, and `map-refresh --brain <dir> --check` reports whether the map is fresh (exit 0), stale (1) or missing (2). A manifest, lockfile, runtime-pin, CI or Dockerfile path in `--update` also marks `dependencies.md` and the matching `stack.md` sections.
+Re-running on an evolved project is a **refresh**: it regenerates the `auto` files and updates `last_scanned`, while never overwriting the `human` ones. After a closed execution wave, the **delta mode** — `scan_project.py <root> --update <changed-paths>` — refreshes only the affected `folders/*.md` and `usage-map.md` rows, cheap enough to run at every wave close; `map-refresh --project <root> --brain <dir> --update <changed-paths>` rewrites the project's map block and reports the rows those paths touch, and `map-refresh --brain <dir> --check` reports whether the map is fresh (exit 0), stale (1) or missing (2). A manifest, lockfile, runtime-pin, CI or Dockerfile path in `--update` also marks `dependencies.md` and the matching `stack.md` sections.
 
 ## Structure
 
