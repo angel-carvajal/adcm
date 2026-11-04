@@ -93,9 +93,9 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
    `references/orchestrator-rule.md`.
 8. **Executor brief.** What the orchestrator hands to an executor, ≤40 lines:
    `TASK · FILES (from the Scope manifest — the shared helper and EVERY consumer to
-   rewire included when the manifest says so — plus the `Map:` entries, read only those) · SKILLS (the wave's Skills to load —
+   rewire included when the manifest says so — plus the `Map:` entries, read only those entries (plus the ONE `rg` lookup the agent's Reuse rule allows before writing an unnamed helper)) · SKILLS (the wave's Skills to load —
    the executor loads them with `Skill` before starting) · DELIVERABLE (Opus's audited deliverable
-   with the orchestrator's decisions) · DESIGN DECISIONS (incl. the family verdict —
+   with the orchestrator's decisions) · DESIGN DECISIONS (incl. the reuse verdict —
    `consume` · `extract` · `deliberate duplicate` · `none`, *family* as a qualifier — and
    the helper's home — not negotiable) · DOD-SLICE (command →
    expected; an extraction adds every rewired consumer's build/test and the duplication
@@ -121,7 +121,7 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
    `extract` · `deliberate duplicate` · `none`; *family* qualifies it, never a fifth verdict
    (`consume family: <base path> → member <file> (supplies <Model> + <endpoint>)` ·
    `extract family: <base path> (<Base><T>) <- members: <Entity: file, …> (each supplies only
-   its model/type + endpoint)`). The map is consulted in PLANNING (verdicts and `Map:` lines
+   its model/type + endpoint)` — card form; SCOPE lines use the compact form of §2). The map is consulted in PLANNING (verdicts and `Map:` lines
    cite its entries) and updated only by its script at close (§2b step 6), never by hand.
    The verdict travels in the task's Scope manifest and in the
    prompt's `# SCOPE`; an executing session APPLIES it and runs the duplication census
@@ -257,9 +257,9 @@ commit + simplify pass → run the FULL DoD-auto; on ⚠gates: `executor` + `mod
 pass BEFORE the adversarial verification by ANOTHER `adcm-toolkits:auditor` with the attack checklist from §6>
 ## Executor brief — <ID>
 <TASK · FILES (from SCOPE, the helper and its consumers included, plus the `Map:`
-entries — read only those) · SKILLS (the wave's
+entries — read only those entries (plus the ONE `rg` lookup the agent's Reuse rule allows before writing an unnamed helper)) · SKILLS (the wave's
 Skills to load) · DELIVERABLE ·
-DESIGN DECISIONS (incl. the family verdict) · DOD-SLICE · STOP IF (soft: the deliverable
+DESIGN DECISIONS (incl. the reuse verdict, *family* as a qualifier) · DOD-SLICE · STOP IF (soft: the deliverable
 would have to WRITE a duplicate (logic or shape) the brief does not name) · FORBIDDEN (the
 helper and its named consumers ARE in scope; no hand-written variant of a type a TS utility
 type derives; no edit to `{{docs_dir}}/map/`; no narrating comments) · RETURN (+ what
@@ -358,7 +358,8 @@ merges the wave's MR) — updates ALL plan docs in ONE pass, one Conventional co
    brain AND the code map fresh — freshness never depends on manual re-scans.
    Then refresh the brain's map with ONE call per repo the wave touched — `map-refresh --project <repo root>
    --brain {{docs_dir}} --update <files touched there> --human '<Symbol>@<path>=<what>|<when>'…` (bare
-   launcher; one `--human` per `born` entry of the executors' `REUSED` lines) — never by re-deriving rows
+   launcher; one `--human` per `born` entry of the executors' `REUSED` lines; `--human` fills the ✍ cells of
+   utilities rows; a pattern row's ✍ cells are edited in place, ✍ cells only) — never by re-deriving rows
    in prose: it adds or updates the auto rows of `map/utilities.md` and `map/patterns.md` for the helpers
    and pattern-family bases the wave created, keeps every human field, and its last line (`MAP: …`) goes
    into the logbook `Map:` field. No `map/` yet, or no plugin in this session → `Map: not refreshed

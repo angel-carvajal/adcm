@@ -95,7 +95,7 @@ that manifest, and report the drift in the logbook at close.
   duplication here (a pattern family is ONE generic base, each member supplying only its model/type +
   endpoint — canon in execute.md §1.9; full consumer list: detailed-plan §{{section}}; dup census: the
   Census line below).
-- Map: {{utilities.md › <name> · patterns.md › <family> | none}} — read only these entries; never edit {{docs_dir}}/map/ (map-refresh writes it at close).
+- Map: {{utilities.md › <name> · patterns.md › <family> | none}} — read only these entries (plus the ONE `rg` lookup the agent's Reuse rule allows before writing an unnamed helper); never edit {{docs_dir}}/map/ (map-refresh writes it at close).
 - Census: `{{command}}` → expected {{N}} (as of {{analysis_date}}) · tolerance
   {{exact | ±1 for small counts (<10); ±X% only for large censuses}} {{· duplication
   flavour when this task extracts: `rg -l '{{distinctive_snippet}}' | wc -l` → {{N}}
@@ -221,13 +221,13 @@ close but do not block delivery policy."}}
 - FILES: {{Modify/Create with why + Read-first exemplars — copied from # SCOPE; on an
   extraction: the helper to create or consume + every consumer to rewire (name the
   helper and the consumer count when the list is long — the full list is in the card) +
-  the Map: entries — read only those}}
+  the Map: entries — read only those entries (plus the ONE `rg` lookup the agent's Reuse rule allows before writing an unnamed helper)}}
 - SKILLS: {{this wave's "Skills to load" (task.md wave map) — the executor loads each with
   `Skill` BEFORE starting; "none" when the cell is empty}}
 - DELIVERABLE: {{filled in session: Opus's audited deliverable with your decisions}}
 - DESIGN DECISIONS: {{filled in session: what is settled and not negotiable — incl.
-  the family verdict (consume / extract to this exact path / deliberate duplicate / none; `family`
-  qualifies it) and the helper's home; the executor does not re-litigate it}}
+  the reuse verdict (consume / extract to this exact path / deliberate duplicate / none; *family*
+  as a qualifier) and the helper's home; the executor does not re-litigate it}}
 - DOD-SLICE: {{command}} → {{expected}} {{· the lines of the DoD-auto this task owns ·
   on an extraction: the build/test of every rewired consumer + the dup census → 1}}
 - STOP IF: {{an expected file is missing · the census diverges · a consumer contract
