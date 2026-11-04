@@ -43,9 +43,8 @@ deployments: plan-detallado.md) — one set per container, consistently.
   helper plus the rewiring of ALL its current consumers is ONE task, which every
   consuming task lists under `Depends on`.
 - **Pattern families**: Pattern family — the rule of TWO applied to SHAPE: two or more entities/components with the same shape (CRUD/API calls per entity, list/detail/form, table columns, validation, data fetching) share ONE generic base (an abstract class with generics, or a generic function/hook/composable) and each member supplies only its model/type and endpoint (`ProvidersService extends BaseApiService<Provider>`). TS utility types (`Partial`, `Pick`, `Omit`, `Record`, `ReturnType`, `Parameters`, `Awaited`, `NonNullable`) replace hand-written variants. Least code: the minimum lines, zero duplicates. The same-behavior guard holds per member; a base forced onto members that would not change together is over-abstraction.
-- **Utility types over hand-written variants**: derive a variant from the model type
-  (`Partial<Provider>`, `Pick<Provider, 'id' | 'name'>`, `Omit<Provider, 'id'>`) instead of
-  declaring a parallel type by hand.
+- **Utility types over hand-written variants** — `Pick<Invoice, 'id' | 'total'>` or
+  `ReturnType<typeof listProviders>` instead of a second interface or a copied type.
 - **Least code + the map**: the planner reads `{{docs_dir}}/map/utilities.md` and
   `map/patterns.md` before deciding the verdict (names, never copies); what a task creates
   reaches the map through `map-refresh` at the wave's close, never by hand.
