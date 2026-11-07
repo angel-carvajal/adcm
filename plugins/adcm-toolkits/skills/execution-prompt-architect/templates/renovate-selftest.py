@@ -1719,12 +1719,12 @@ def case_map_block(ctx, t):
     t.eq(p.returncode, 0, f"map_refresh.py exit code ({p.stdout[-120:]!r})")
     wrote = {n: read(os.path.join(brain, "map", n)) or "" for n in names}
     spec = importlib.util.spec_from_file_location("renovate_check_under_test", ctx.checker)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
     for n in names:
         opener = [x for x in wrote[n].splitlines() if x.startswith("<!-- map-refresh: scan ")]
         t.eq(len(opener), 1, f"{n}: one block opener written")
-        t.ok(all(mod.MAP_MARK.match(x) for x in opener), f"{n}: MAP_MARK matches the written opener {opener[:1]!r}")
+        t.ok(all(checker.MAP_MARK.match(x) for x in opener), f"{n}: MAP_MARK matches the written opener {opener[:1]!r}")
     d = both(ctx, t, fresh(ctx, "map-g", ex=code, extra={f"map/{n}": wrote[n] for n in names}))
     if d:
         t.eq(blk(d, "map"), {"state": "ok", "missing": [], "blocks": 3}, "the written files count one block each")

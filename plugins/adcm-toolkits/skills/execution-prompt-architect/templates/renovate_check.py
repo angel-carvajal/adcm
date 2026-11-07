@@ -356,7 +356,12 @@ def map_block(tdir, ctx):
         return {'state': 'n/a', 'missing': [], 'blocks': 0}
     texts = {n: read_text(os.path.join(tdir, MAP_DIR, n)) for n in MAP_FILES}
     missing = [n for n in MAP_FILES if texts[n] is None]
-    state = 'missing' if len(missing) == len(MAP_FILES) else 'partial' if missing else 'ok'
+    if len(missing) == len(MAP_FILES):
+        state = 'missing'
+    elif missing:
+        state = 'partial'
+    else:
+        state = 'ok'
     return {'state': state, 'missing': missing, 'blocks': sum(len(MAP_MARK.findall(x)) for x in texts.values() if x)}
 
 
@@ -764,9 +769,12 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
         rules_l += ['  … +%d more (use --json)' % (len(ru['findings']) - 6)] if len(ru['findings']) > 6 else []
     hook_l = hook_lines(b['hooks'])
     mp = b['map']
-    map_line = ('MAP n/a (no code-project-context skill: the map is born with it)' if mp['state'] == 'n/a' else
-                'MAP ok · %d project blocks' % mp['blocks'] if mp['state'] == 'ok' else
-                'MAP %s · map/ lacks %s' % (mp['state'], ', '.join(mp['missing'])))
+    if mp['state'] == 'n/a':
+        map_line = 'MAP n/a (no code-project-context skill: the map is born with it)'
+    elif mp['state'] == 'ok':
+        map_line = 'MAP ok · %d project blocks' % mp['blocks']
+    else:
+        map_line = 'MAP %s · map/ lacks %s' % (mp['state'], ', '.join(mp['missing']))
     map_l = (['  · review: map has no project block → map-refresh --project <root> --brain <dir>']
              if mp['state'] == 'ok' and not mp['blocks'] else [])  # advice only: never in `needed`
     after = [('CONTEXT n/a (business-context only)' if c['state'] == 'n/a' else 'CONTEXT ok (%s)%s · last_scanned %s' % (
