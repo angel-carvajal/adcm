@@ -357,14 +357,16 @@ def map_block(tdir, ctx):
     if ctx['state'] != 'ok':
         return {'state': 'n/a', 'missing': [], 'blocks': 0}
     texts = {n: read_text(os.path.join(tdir, MAP_DIR, n)) for n in MAP_FILES}
-    missing = [n for n in MAP_FILES if texts[n] is None or 'map-refresh: scan' not in texts[n]]
+    unmarked = [n for n in MAP_FILES if texts[n] is not None and 'map-refresh: scan' not in texts[n]]
+    missing = [n for n in MAP_FILES if texts[n] is None or n in unmarked]
     if len(missing) == len(MAP_FILES):
         state = 'missing'
     elif missing:
         state = 'partial'
     else:
         state = 'ok'
-    return {'state': state, 'missing': missing, 'blocks': sum(len(MAP_MARK.findall(x)) for x in texts.values() if x)}
+    return {'state': state, 'missing': missing, 'blocks': sum(len(MAP_MARK.findall(x)) for x in texts.values() if x),
+            'unmarked': unmarked}
 
 
 def scanned(skill, plugin):
@@ -776,9 +778,7 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
     elif mp['state'] == 'ok':
         map_line = 'MAP ok · %d project blocks' % mp['blocks']
     else:
-        tdir = os.path.join(brain, module) if module else brain
-        absent = [n + (' (no marker)' if read_text(os.path.join(tdir, MAP_DIR, n)) is not None else '')
-                  for n in mp['missing']]
+        absent = [n + (' (no marker)' if n in mp['unmarked'] else '') for n in mp['missing']]
         map_line = 'MAP %s · map/ lacks %s' % (mp['state'], ', '.join(absent))
     map_l = (['  · review: map has no project block → map-refresh --project <root> --brain <dir>']
              if mp['state'] == 'ok' and not mp['blocks'] else [])  # advice only: never in `needed`
@@ -852,7 +852,8 @@ def run(args):
     needed = [b for b in BLOCKS if (b == 'modules' and any(m['needed'] for m in mods)) or (
         b not in ('modules', 'context') and blocks[b]['state'] in NEED)]
     inv = rev['inv'] if args.invariants else None
-    data = dict(base, protocol=rev['protocol'], blocks=blocks, needed=needed, invariants=inv, stats=rev['stats'])
+    json_map = {k: v for k, v in blocks['map'].items() if k != 'unmarked'}
+    data = dict(base, protocol=rev['protocol'], blocks=dict(blocks, map=json_map), needed=needed, invariants=inv, stats=rev['stats'])
     lines = render(brain, module, args, rev['protocol'], blocks, mods, inv, rev['stats'], needed)
     return emit(args, data, lines, 1 if needed else 0)
 
