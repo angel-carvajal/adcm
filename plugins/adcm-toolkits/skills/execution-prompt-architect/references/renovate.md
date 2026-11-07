@@ -21,10 +21,13 @@ On `MAP missing` or `MAP partial` (or `MAP ok` with `review: map has no project 
 RULES and before CONTEXT, the orchestrator runs `map-refresh --project <root> --brain <docs_dir>` (a module brain:
 `--brain <docs_dir>/modules/<m>`); `<root>` is the context skill's `**Usual root path:**`. Root unresolved →
 `map-refresh --brain <docs_dir> --init`: the three shells, so `MAP ok` plus the review line until a project run
-(their check gives exit 0, `MAP: fresh` and `note: no project block`). Never an executor, never a commit: the
-close's doc-sync commit carries `map/`. Exit 0 written | unchanged | fresh · 1 stale · 2 missing | unresolved · 64
-usage. The words differ: the check's `partial` = 1-2 map files absent; the refresh check's `missing(<file>)` = a
-file without its project block.
+(their check gives exit 0, `MAP: fresh` and `note: no project block`).
+A dir whose EXECUTE is already ok and whose MAP is `missing` | `partial` gets no executor: the orchestrator adds its
+README `map/` row at the close as a logged ≤20-line fix, verbatim from `references/project-structure.md` rule 7 (still
+0 agents), and the audit gate checks it like any other dir. Never an executor, never a commit: the close's doc-sync
+commit carries `map/`. Exit 0 written | unchanged | fresh · 1 stale · 2 missing | unresolved · 64
+usage. The words differ: the check's `partial` = 1-2 map files absent or without the `map-refresh: scan` marker; the
+refresh check's `missing(<file>)` = a map file absent or without that marker (shells without a project block are `fresh`).
 
 ## 2. One executor per needed block
 For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES: `needed`), ONE `Agent(subagent_type:
@@ -53,7 +56,7 @@ For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES:
 - MAP (`needed` on `missing` | `partial`; JSON `blocks.map` = {state, missing, blocks}) never gets an executor: step 1b.
   A brain whose code has no `code-project-context-*` skill gets `MAP n/a`: the map arrives only by a context-generator
   run (STEP 4.6), never by renovation.
-- CONTEXT last, only on `CONTEXT ok (<skill>)`: its executor runs STEP 4.5 `--update`, adds the map routing row and rule 9
+- CONTEXT last, only on `CONTEXT ok (<skill>)`: its executor runs STEP 4.5 `--update`, adds the map routing rows and the rule
   «Maintain the map» to the skill's `SKILL.md` when it lacks `map/utilities.md`, patch-bumps the context plugin (else
   `plugin update` does nothing), commits + pushes its repo and RETURNs `PLUGIN: <plugin>@<marketplace> <old> → <new>`; the main session then runs `claude plugin
   marketplace update <marketplace>` and `claude plugin update <plugin>@<marketplace>` (no CLI → hand both to the
@@ -78,7 +81,7 @@ Findings go back to the SAME executor (`SendMessage`, cost 0).
   `REGEN: yes`; the LAST courier RETURN's links block goes last in the final message, once. Rows never sealed (decks, demos) are republished and sealed once.
 
 ## 5. Idempotency, budget, drift
-Repeating the phrase on a renovated brain prints `RENOVATE: up-to-date`, 0 agents. Typical budget 3-5 of this session's 20
+Repeating the phrase on a renovated brain prints `RENOVATE: up-to-date`, 0 agents. Typical budget 4-7 of this session's 20
 (executors 2-5, auditor 1 with 1 Opus quota — `model: sonnet` once the Opus quota is spent —, courier 1). Census drift: renovate adds `artifacts.json`
 rows, so the next wave's SCOPE census may STOP: re-run it, fix its `expected` line (≤20-line shortcut, logged), never re-plan.
 

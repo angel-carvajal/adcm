@@ -55,9 +55,10 @@ Blocks (ok | missing | partial | outdated | n/a)
              CLAUDE.md and AGENTS.md in the container, <container>/ai and DOCS_DIR; DOCS_DIR/README.md.
              Notes already corrected (`Superseded (protocol`, `<!-- renovate:`) are ignored. Root run only.
   MAP        the reuse map map/utilities.md, patterns.md and where-to-look.md of the checked dir. n/a (never
-             needed) when execute.md loads no code-project-context skill: the map is born with it; missing (no
-             file) | partial (1-2 files absent) make it needed; ok counts the project blocks (lines opening
-             with the `map-refresh: scan` marker comment) and, with none, adds the advice line
+             needed) when execute.md loads no code-project-context skill: the map is born with it; missing (none
+             of the three) | partial (some, or a present map file WITHOUT the `map-refresh: scan` marker) ->
+             needed (the text line tags such a present file `(no marker)`); ok counts the project blocks (lines
+             opening with the marker comment) and, with none, adds the advice line
              `· review: map has no project block` (JSON `blocks.map` = {state, missing, blocks}). No stamp
              comparison: staleness is what the map-refresh check mode reports
   CONTEXT    code-project-context skill named by execute.md (informational, never needed)
@@ -351,11 +352,12 @@ def read_context(prose):
 
 
 def map_block(tdir, ctx):
-    """MAP block of one directory: which of the three map files are absent and how many project blocks they hold."""
+    """MAP block of one directory: which of the three map files are absent or lack the marker, and how many project
+    blocks they hold."""
     if ctx['state'] != 'ok':
         return {'state': 'n/a', 'missing': [], 'blocks': 0}
     texts = {n: read_text(os.path.join(tdir, MAP_DIR, n)) for n in MAP_FILES}
-    missing = [n for n in MAP_FILES if texts[n] is None]
+    missing = [n for n in MAP_FILES if texts[n] is None or 'map-refresh: scan' not in texts[n]]
     if len(missing) == len(MAP_FILES):
         state = 'missing'
     elif missing:
@@ -410,7 +412,7 @@ def read_execute(text, glyphs):
          or any('adcm-toolkits:*' in ln and 'model' in ln and re.search(r'per-call|por llamada', ln) for ln in prose),
          'protocol_line': found == TARGET, 'reviewer_line': rev is not None,
          'merge_rule': 'Claude never merges' in sec3, 'links_once': 'exactly once per delivery close' in sec2b,
-         'map_step': bool(MAP_STEP.search(sec2b)),
+         'map_step': bool(s2b) and bool(MAP_STEP.search(sec2b)),
          'auto_merge': bool(RETIRED_RX.search(sec3)) or retired_s7,
          'reviewer_pending': rev is not None and (not rev_val or bool(PLACEHOLDER.search(rev_val))),
          'skills_lines': {'have': have, 'pending_waves': pending}}
@@ -774,7 +776,10 @@ def render(brain, module, args, p, b, mods, inv, stats, needed):
     elif mp['state'] == 'ok':
         map_line = 'MAP ok · %d project blocks' % mp['blocks']
     else:
-        map_line = 'MAP %s · map/ lacks %s' % (mp['state'], ', '.join(mp['missing']))
+        tdir = os.path.join(brain, module) if module else brain
+        absent = [n + (' (no marker)' if read_text(os.path.join(tdir, MAP_DIR, n)) is not None else '')
+                  for n in mp['missing']]
+        map_line = 'MAP %s · map/ lacks %s' % (mp['state'], ', '.join(absent))
     map_l = (['  · review: map has no project block → map-refresh --project <root> --brain <dir>']
              if mp['state'] == 'ok' and not mp['blocks'] else [])  # advice only: never in `needed`
     after = [('CONTEXT n/a (business-context only)' if c['state'] == 'n/a' else 'CONTEXT ok (%s)%s · last_scanned %s' % (

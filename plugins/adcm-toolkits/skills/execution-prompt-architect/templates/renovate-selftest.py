@@ -39,6 +39,7 @@ VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fix
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
+MAP_FILES = ("utilities.md", "patterns.md", "where-to-look.md")
 BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "map", "context", "modules")
 KEYS = ("version", "target", "brain", "module", "protocol", "blocks", "needed", "invariants", "text")
 DONE = "✅🔀"
@@ -301,10 +302,10 @@ EXEC_DEFAULTS = dict(protocol=VERSION, types=TYPES, digest=True, last_log="s4", 
 
 
 def exec_doc(waves, **o):
-    """execute.md carrying the REAL marker lines of the 0.16.0 template, each one switchable. reviewer: True (a real
+    """execute.md carrying the REAL marker lines of the 0.16.0 template (map_step: a stand-in line), each one switchable. reviewer: True (a real
     handle) | False (no Reviewer line) | a raw value string (e.g. REVIEWER_PENDING); merge_rule / links_once: the 0.16.0
     sentences of §3 / §2b (off: the pre-0.16 §3 row / no sentence); automerge: the retired policy text inside §3;
-    map_step: the §2b step 6 line that calls map-refresh;
+    map_step: a short §2b step 6 stand-in that names map-refresh (not the template's text);
     s7text: {wave id: line} added inside that wave's §7 prompt block."""
     p = {**EXEC_DEFAULTS, **o}
     ty, es = set(p["types"]), p["es"]
@@ -630,7 +631,8 @@ def exec_line(d):
 
 
 def case_merge_markers(ctx, t):
-    """0.16.0: the Reviewer header line, the §3 `Claude never merges` rule, the §2b `exactly once per delivery close` rule."""
+    """The Reviewer header line, the §3 `Claude never merges` rule, the §2b `exactly once per delivery close` rule
+    (0.16.0) and the §2b `map-refresh` call (map-step)."""
     names = {"reviewer_line": "reviewer-line", "merge_rule": "merge-rule", "links_once": "links-once",
              "map_step": "map-step"}  # json key -> FLAGS text
     option = {"reviewer_line": "reviewer", "merge_rule": "merge_rule", "links_once": "links_once",
@@ -1630,13 +1632,12 @@ def map_files(prefix="", block=True, drop=()):
     wrapping one project block opened by the marker map_refresh.py writes (block=False: the shells, no project
     block); `drop` leaves those files out. SKIPs the case when the templates are absent."""
     src = os.path.join(os.path.dirname(os.path.dirname(HERE)), "code-project-context-generator", "templates", "map")
-    names = ("utilities.md", "patterns.md", "where-to-look.md")
-    if not all(os.path.isfile(os.path.join(src, n + ".tmpl")) for n in names):
+    if not all(os.path.isfile(os.path.join(src, n + ".tmpl")) for n in MAP_FILES):
         raise Skip("code-project-context-generator map templates not found")
     one = ("<!-- map-refresh: scan 2026-01-05 · project acme-web · format 1 — rows regenerate; ✍ columns are human "
            "and preserved -->\n<!-- end map-refresh -->\n\n")
     return {f"{prefix}map/{n}": read(os.path.join(src, n + ".tmpl")).replace("{{PROJECT_NAME}}", "Acme")
-            .replace("{{BLOCKS}}\n\n", one if block else "") for n in names if n not in drop}
+            .replace("{{BLOCKS}}\n\n", one if block else "") for n in MAP_FILES if n not in drop}
 
 
 def case_map_block(ctx, t):
@@ -1644,7 +1645,6 @@ def case_map_block(ctx, t):
     tool = os.path.join(os.path.dirname(os.path.dirname(HERE)), "code-project-context-generator", "scripts", "map_refresh.py")
     if not os.path.isfile(tool):
         raise Skip("code-project-context-generator/scripts/map_refresh.py not found")
-    names = ["utilities.md", "patterns.md", "where-to-look.md"]
     code = {"ctx": "acme-plataforma:code-project-context-acme-web"}
     full = map_files()
     map_line = lambda d: next((x for x in (d.get("text") or []) if x.startswith("MAP ")), "")
@@ -1661,7 +1661,7 @@ def case_map_block(ctx, t):
     d = both(ctx, t, fresh(ctx, "map-b", ex=code), rc=1)
     if d:
         t.eq(d.get("needed"), ["map"], "needed")
-        t.eq(blk(d, "map"), {"state": "missing", "missing": names, "blocks": 0}, "blocks.map")
+        t.eq(blk(d, "map"), {"state": "missing", "missing": list(MAP_FILES), "blocks": 0}, "blocks.map")
         t.eq(map_line(d), "MAP missing · map/ lacks utilities.md, patterns.md, where-to-look.md", "plain MAP line")
     # (c) one file absent
     t.tag = "(c partial) "
@@ -1670,6 +1670,17 @@ def case_map_block(ctx, t):
         t.eq(d.get("needed"), ["map"], "needed")
         t.eq(blk(d, "map"), {"state": "partial", "missing": ["patterns.md"], "blocks": 2}, "blocks.map")
         t.eq(map_line(d), "MAP partial · map/ lacks patterns.md", "plain MAP line")
+    # (c2) a present file without the marker counts as lacking; three of them make the map missing
+    t.tag = "(c2 no marker) "
+    hand = "# Patterns\n\n| Pattern | Where |\n|---|---|\n| invoice rounding | src/invoice.ts |\n"
+    d = both(ctx, t, fresh(ctx, "map-c2", ex=code, extra=dict(full, **{"map/patterns.md": hand})), rc=1)
+    if d:
+        t.eq(d.get("needed"), ["map"], "needed")
+        t.eq(blk(d, "map"), {"state": "partial", "missing": ["patterns.md"], "blocks": 2}, "blocks.map")
+        t.eq(map_line(d), "MAP partial · map/ lacks patterns.md (no marker)", "plain MAP line")
+    d = both(ctx, t, fresh(ctx, "map-c3", ex=code, extra={f"map/{n}": hand for n in MAP_FILES}), rc=1)
+    if d:
+        t.eq(blk(d, "map"), {"state": "missing", "missing": list(MAP_FILES), "blocks": 0}, "three markerless files")
     # (d) the three files, one project block each
     t.tag = "(d full) "
     d = both(ctx, t, fresh(ctx, "map-d", ex=code, extra=full))
@@ -1717,15 +1728,19 @@ def case_map_block(ctx, t):
     p = subprocess.run([sys.executable, tool, "--project", ctx.path("acme/web"), "--brain", brain], capture_output=True,
                        text=True, encoding="utf-8", errors="replace", env=ctx.env, cwd=ctx.root, timeout=60)
     t.eq(p.returncode, 0, f"map_refresh.py exit code ({p.stdout[-120:]!r})")
-    wrote = {n: read(os.path.join(brain, "map", n)) or "" for n in names}
+    wrote = {n: read(os.path.join(brain, "map", n)) or "" for n in MAP_FILES}
     spec = importlib.util.spec_from_file_location("renovate_check_under_test", ctx.checker)
     checker = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(checker)
-    for n in names:
+    no_pyc, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        spec.loader.exec_module(checker)
+    finally:
+        sys.dont_write_bytecode = no_pyc
+    for n in MAP_FILES:
         opener = [x for x in wrote[n].splitlines() if x.startswith("<!-- map-refresh: scan ")]
         t.eq(len(opener), 1, f"{n}: one block opener written")
         t.ok(all(checker.MAP_MARK.match(x) for x in opener), f"{n}: MAP_MARK matches the written opener {opener[:1]!r}")
-    d = both(ctx, t, fresh(ctx, "map-g", ex=code, extra={f"map/{n}": wrote[n] for n in names}))
+    d = both(ctx, t, fresh(ctx, "map-g", ex=code, extra={f"map/{n}": wrote[n] for n in MAP_FILES}))
     if d:
         t.eq(blk(d, "map"), {"state": "ok", "missing": [], "blocks": 3}, "the written files count one block each")
 
