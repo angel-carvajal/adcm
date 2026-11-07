@@ -1762,6 +1762,60 @@ def case_hand_notes_file_gains_sections(ctx, t):
     t.eq(last(r), "MAP: unchanged", "the second refresh leaves it alone")
 
 
+def case_row_without_leading_pipe(ctx, t):
+    writer_tree(ctx)
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    path = ctx.path(BRAIN + "/map/utilities.md")
+    fill(path, "`formatMoney`", ["Formats cents as money", "Any amount shown to a user"])
+    fill(path, "`roundCents`", ["Rounds to whole cents", "Before storing a total"])
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    row = row_line(text, "`formatMoney`")
+    t.ok(row is not None and row.startswith("| "), "the filled row starts with its pipe")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text.replace(row, row[2:], 1))
+    early = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((early.rc, last(early)), (0, "MAP: fresh"), "the check reads the row without its pipe as unchanged")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(r.rc, 0, "refresh over a row without its leading pipe: exit code")
+    t.ok(re.search(r"utilities\.md\s+\d+ rows · \+0 new · 0 retired · 0 dropped", r.out),
+         "the utilities summary reads no new, retired or dropped row")
+    u = map_text(ctx, "utilities.md")
+    t.eq(row_cells(u, "`formatMoney`")[-2:], ["Formats cents as money", "Any amount shown to a user"],
+         "the stripped row keeps its ✍ cells")
+    t.eq(row_cells(u, "`roundCents`")[-2:], ["Rounds to whole cents", "Before storing a total"],
+         "the row after it keeps its ✍ cells")
+    t.ok(row_line(u, "`formatMoney`").startswith("| "), "the row is written back with its leading pipe")
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.eq(last(r), "MAP: unchanged", "the second refresh leaves it alone")
+    c = refresh(ctx, "--brain", BRAIN, "--check")
+    t.eq((c.rc, last(c)), (0, "MAP: fresh"), "the brain checks fresh")
+    os.remove(ctx.path("projects/acme/" + MONEY))
+    os.remove(ctx.path("projects/acme/" + ROUND))
+    refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    gone = row_line(section(text, "## Retired (review)"), "`formatMoney`")
+    t.ok(gone is not None, "both vanished rows are in Retired")
+    tail = [x for x in section(text, "## Retired (review)").split("\n") if x.lstrip().startswith("|")][-1]
+    if gone:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text.replace(gone, gone[2:], 1).replace(tail, tail + "\nsee a | b", 1))
+    ctx.write("projects/acme/" + MONEY, generic_fn("formatMoney"))
+    ctx.write("projects/acme/" + ROUND, generic_fn("roundCents"))
+    r = refresh(ctx, "--project", "projects/acme", "--brain", BRAIN)
+    t.ok(re.search(r"utilities\.md\s+\d+ rows · \+2 new · 0 retired · 0 dropped", r.out),
+         "the returning symbols count as the only new rows")
+    u = map_text(ctx, "utilities.md")
+    t.eq(row_cells(u, "`formatMoney`")[-2:], ["Formats cents as money", "Any amount shown to a user"],
+         "a Retired row without its pipe is adopted back with its ✍ cells")
+    t.eq(row_cells(u, "`roundCents`")[-2:], ["Rounds to whole cents", "Before storing a total"],
+         "the Retired row after it is adopted too")
+    left = section(u, "## Retired (review)")
+    t.eq(("formatMoney" in left, "roundCents" in left), (False, False), "Retired is left without the orphans")
+    t.ok("\nsee a | b" in left and "| see a | b" not in left, "a prose line with a pipe under Retired stays prose")
+
+
 CASES = [
     ("scan_usage_map_golden", case_usage_map_golden),
     ("scan_map_block_keys", case_map_block_keys),
@@ -1791,6 +1845,7 @@ CASES = [
     ("render_creates_three_files", case_render_creates_three_files),
     ("check_init_shells_fresh", case_check_init_shells_fresh),
     ("render_preserves_human_columns", case_render_preserves_human_columns),
+    ("row_without_leading_pipe", case_row_without_leading_pipe),
     ("retired_rows_keep_human_text", case_retired_rows_keep_human_text),
     ("moved_symbol_carries_human_text", case_moved_symbol_carries_human_text),
     ("pipe_escaping_in_signature", case_pipe_escaping_in_signature),

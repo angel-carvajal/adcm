@@ -140,13 +140,14 @@ def table(cols, rows):
 def parse_table(lines):
     """The first pipe table in `lines` as (header, rows as {column: cell}); ([], []) when there is none.
 
+    The table runs to the first blank or pipe-less line, so a row typed without its leading pipe still belongs to it.
     The separator and any all-empty row are skipped, and a row whose cell count misses the header's is
     split again from its own line."""
     start = next((i for i, x in enumerate(lines) if x.lstrip().startswith('|')), None)
     if start is None:
         return [], []
     end = start
-    while end < len(lines) and lines[end].lstrip().startswith('|'):
+    while end < len(lines) and lines[end].strip() and '|' in lines[end]:
         end += 1
     kept = [(x, cells(paired(x))) for x in lines[start:end]]
     kept = [(x, c) for x, c in kept if not all(re.fullmatch(r'(:?-+:?)?', v) for v in c)]
@@ -328,15 +329,19 @@ def retired_table(text):
         return None
     nxt = re.compile(r'^## ', re.M).search(text, head.end())
     stop = nxt.start() if nxt else len(text)
-    spans = list(re.finditer(r'^[ \t]*\|.*$', text[head.end():stop], re.M))
-    if not spans:
+    body = text[head.end():stop]
+    first = re.search(r'^[ \t]*\|.*$', body, re.M)
+    if not first:
         return stop, stop, []
-    first, last = spans[0], spans[0]
-    for x in spans[1:]:
-        if text[head.end() + last.end():head.end() + x.start()] != '\n':
+    width = len(cells(paired(first.group(0))))
+    last = first.end()
+    for row in body[first.end():].split('\n')[1:]:
+        if not row.strip() or '|' not in row:
             break
-        last = x
-    start, end = head.end() + first.start(), head.end() + last.end()
+        if not row.lstrip().startswith('|') and len(cells(paired(row))) != width:
+            break
+        last += 1 + len(row)
+    start, end = head.end() + first.start(), head.end() + last
     return start, end, parse_table(text[start:end].split('\n'))[1]
 
 

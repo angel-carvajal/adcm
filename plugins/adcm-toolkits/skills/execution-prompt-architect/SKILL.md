@@ -206,7 +206,7 @@ brain planned under an older protocol. It never re-plans and never edits `execut
 `renovate-check --brain <docs_dir> --all-modules --invariants`
 (`--copy-scripts` copies the missing scripts) lists which blocks are missing — SCRIPTS ·
 ARTIFACTS · EXECUTE · TASK · RULES · MAP · CONTEXT (MAP is `n/a`, never `needed`, without a `code-project-context-*` skill) — and the main session launches ONE `adcm-toolkits:executor`
-per block with `templates/renovate-brief.md`, then an auditor gate and the courier close.
+per needed block (MAP: step 1b, no executor) with `templates/renovate-brief.md`, then an auditor gate and the courier close.
 `RENOVATE: up-to-date` means 0 agents. RULES annotates obsolete memory notes (a dated `Superseded` note is appended, nothing deleted) and corrects container `CLAUDE.md` lines in place. Full flow, orders and gates: `references/renovate.md`.
 
 ## Execution flow
