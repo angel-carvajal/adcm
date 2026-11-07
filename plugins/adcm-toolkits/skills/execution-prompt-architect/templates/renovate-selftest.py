@@ -15,13 +15,16 @@ last line `RENOVATE: up-to-date | needed(a,b) | unparsed (...)` consistent with 
 and with json.needed, json.text == plain stdout lines, and the brain tree untouched unless the
 case passes --copy-scripts. The informational HOOKS block (merge-guard.py / artifact-guard.py under
 $CLAUDE_CONFIG_DIR/hooks, else ~/.claude/hooks) never enters needed; every case runs with both hooks
-installed and current unless it says otherwise (case_hooks_review). Fixtures are generic (Acme, modules/billing, example.com); their
+installed and current unless it says otherwise (case_hooks_review). The MAP block is n/a unless execute.md
+loads a code-project-context skill; such fixtures get map_files(), rendered from the real map templates
+(case_map_block). Fixtures are generic (Acme, modules/billing, example.com); their
 artifacts.json declares `active_account` unless a case drops it on purpose (the ARTIFACTS block
 adds a `review: no active_account declared` line and `no_active_account: true` when it is missing).
 The checker under test defaults to the renovate_check.py next to this file.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -36,7 +39,7 @@ VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fix
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
-BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "context", "modules")
+BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "map", "context", "modules")
 KEYS = ("version", "target", "brain", "module", "protocol", "blocks", "needed", "invariants", "text")
 DONE = "✅🔀"
 DOCS = {"en": ("master-plan.md", "detailed-plan.md"),
@@ -294,13 +297,14 @@ def opening(p, where="s2"):
 EXEC_DEFAULTS = dict(protocol=VERSION, types=TYPES, digest=True, last_log="s4", nxt="Next", blk="blocked",
                      rule=True, skills=(), ctx="business-init-acme", prose=(), es=False, trap=False, sim=False,
                      wrap=False, hdrs={}, outside=(), appendix=(),
-                     reviewer=True, merge_rule=True, links_once=True, automerge=False, s7text={})
+                     reviewer=True, merge_rule=True, links_once=True, automerge=False, s7text={}, map_step=True)
 
 
 def exec_doc(waves, **o):
     """execute.md carrying the REAL marker lines of the 0.16.0 template, each one switchable. reviewer: True (a real
     handle) | False (no Reviewer line) | a raw value string (e.g. REVIEWER_PENDING); merge_rule / links_once: the 0.16.0
     sentences of §3 / §2b (off: the pre-0.16 §3 row / no sentence); automerge: the retired policy text inside §3;
+    map_step: the §2b step 6 line that calls map-refresh;
     s7text: {wave id: line} added inside that wave's §7 prompt block."""
     p = {**EXEC_DEFAULTS, **o}
     ty, es = set(p["types"]), p["es"]
@@ -348,7 +352,10 @@ def exec_doc(waves, **o):
           f"1. **`task.md`** — logbook entry (date of execution · branch/MR · tasks closed · {blk_} ·",
           f"   files touched · notes · wall clock · agents used n/20 · escalations · {nxt} exact next",
           "   command/prompt, or \"wave closed\") AND the wave-map status flip.",
-          "2. **`execute.md` §7** — this wave's prompt header flip.", ""]
+          "2. **`execute.md` §7** — this wave's prompt header flip."]
+    if p["map_step"]:
+        L += ["6. **map** — a wave that touched code runs `map-refresh --project <root> --brain <dir>`."]
+    L += [""]
     if p["links_once"]:
         L += [LINKS_ONCE, ""]
     L += ["## 3. Delivery / merge policy", ""]
@@ -422,7 +429,7 @@ def fresh(ctx, name, waves=W3, ex=None, tk=None, rows=None, under="", **kw):
 
 
 LEGACY_FLAGS = dict(protocol=None, types=(), digest=False, last_log=None, nxt=None, blk=None, rule=False,
-                    reviewer=False, merge_rule=False, links_once=False)
+                    reviewer=False, merge_rule=False, links_once=False, map_step=False)
 
 
 def legacy_08(ctx, name, under="", scripts="none"):
@@ -459,7 +466,8 @@ def count_h2(text):
 
 
 MARKERS_ON = {"digest_line": True, "last_log_s4": True, "next_label": True, "blocked_label": True,
-              "model_rule": True, "protocol_line": True, "reviewer_line": True, "merge_rule": True, "links_once": True}
+              "model_rule": True, "protocol_line": True, "reviewer_line": True, "merge_rule": True, "links_once": True,
+              "map_step": True}
 
 
 def markers_check(t, d, **want):
@@ -576,7 +584,8 @@ def case_legacy_011(ctx, t):
         t.eq(dig(d, "protocol", "inferred"), "0.13", "protocol.inferred")
         t.eq(blk(d, "execute", "state"), "partial", "execute.state")
         markers_check(t, d, types={k: False for k in TYPES}, next_label=False, blocked_label=False,
-                      model_rule=False, protocol_line=False, reviewer_line=False, merge_rule=False, links_once=False)
+                      model_rule=False, protocol_line=False, reviewer_line=False, merge_rule=False, links_once=False,
+                      map_step=False)
         t.eq(d.get("needed"), ["execute"], "needed")
 
 
@@ -622,8 +631,10 @@ def exec_line(d):
 
 def case_merge_markers(ctx, t):
     """0.16.0: the Reviewer header line, the §3 `Claude never merges` rule, the §2b `exactly once per delivery close` rule."""
-    names = {"reviewer_line": "reviewer-line", "merge_rule": "merge-rule", "links_once": "links-once"}  # json key -> FLAGS text
-    option = {"reviewer_line": "reviewer", "merge_rule": "merge_rule", "links_once": "links_once"}  # json key -> exec_doc switch
+    names = {"reviewer_line": "reviewer-line", "merge_rule": "merge-rule", "links_once": "links-once",
+             "map_step": "map-step"}  # json key -> FLAGS text
+    option = {"reviewer_line": "reviewer", "merge_rule": "merge_rule", "links_once": "links_once",
+              "map_step": "map_step"}  # json key -> exec_doc switch
 
     def go(tag, ex, rc=1):
         """One current brain with exactly one thing different in execute.md (rc 1: needed == [execute], partial)."""
@@ -798,7 +809,7 @@ def case_context_names(ctx, t):
              ("spanish line", "acme-plataforma:code-project-context-acme-web", ES_EX, ES_TK, "acme-plataforma")]
     for tag, name, ex, tk, plugin in cases:
         t.tag = f"({tag}) "
-        d = both(ctx, t, fresh(ctx, "c-" + tag.replace(" ", "-"), ex=dict(ex, ctx=name), tk=tk))
+        d = both(ctx, t, fresh(ctx, "c-" + tag.replace(" ", "-"), ex=dict(ex, ctx=name), tk=tk, extra=map_files()))
         if d:
             t.eq([blk(d, "context", "state"), blk(d, "context", "skill"), blk(d, "context", "plugin")],
                  ["ok", "code-project-context-acme-web", plugin], "context state/skill/plugin")
@@ -953,7 +964,7 @@ def case_s7_header_prefixes(ctx, t):
         t.ok(anyline(d.get("text"), "skills 2/3"), "plain output shows 'skills 2/3'")
     t.tag = "(wrapped load line) "
     name = "acme-plataforma:code-project-context-acme-web"
-    d = both(ctx, t, fresh(ctx, "wrapped", ex=dict(ES_EX, ctx=name, wrap=True), tk=ES_TK))
+    d = both(ctx, t, fresh(ctx, "wrapped", ex=dict(ES_EX, ctx=name, wrap=True), tk=ES_TK, extra=map_files()))
     if d:
         t.eq([blk(d, "context", "state"), blk(d, "context", "skill"), blk(d, "context", "plugin")],
              ["ok", "code-project-context-acme-web", "acme-plataforma"],
@@ -1614,6 +1625,111 @@ def case_hooks_review(ctx, t):
         ctx.env = old_env
 
 
+def map_files(prefix="", block=True, drop=()):
+    """{<prefix>map/<file>: text} rendered from the real map templates of code-project-context-generator, each file
+    wrapping one project block opened by the marker map_refresh.py writes (block=False: the shells, no project
+    block); `drop` leaves those files out. SKIPs the case when the templates are absent."""
+    src = os.path.join(os.path.dirname(os.path.dirname(HERE)), "code-project-context-generator", "templates", "map")
+    names = ("utilities.md", "patterns.md", "where-to-look.md")
+    if not all(os.path.isfile(os.path.join(src, n + ".tmpl")) for n in names):
+        raise Skip("code-project-context-generator map templates not found")
+    one = ("<!-- map-refresh: scan 2026-01-05 · project acme-web · format 1 — rows regenerate; ✍ columns are human "
+           "and preserved -->\n<!-- end map-refresh -->\n\n")
+    return {f"{prefix}map/{n}": read(os.path.join(src, n + ".tmpl")).replace("{{PROJECT_NAME}}", "Acme")
+            .replace("{{BLOCKS}}\n\n", one if block else "") for n in names if n not in drop}
+
+
+def case_map_block(ctx, t):
+    """MAP: the three map files of a brain whose execute.md loads a code-project-context skill (n/a otherwise)."""
+    tool = os.path.join(os.path.dirname(os.path.dirname(HERE)), "code-project-context-generator", "scripts", "map_refresh.py")
+    if not os.path.isfile(tool):
+        raise Skip("code-project-context-generator/scripts/map_refresh.py not found")
+    names = ["utilities.md", "patterns.md", "where-to-look.md"]
+    code = {"ctx": "acme-plataforma:code-project-context-acme-web"}
+    full = map_files()
+    map_line = lambda d: next((x for x in (d.get("text") or []) if x.startswith("MAP ")), "")
+    advice = lambda d: [x for x in (d.get("text") or []) if "map has no project block" in x]
+    # (a) a business-only brain never needs a map
+    t.tag = "(a business only) "
+    d = both(ctx, t, fresh(ctx, "map-a"))
+    if d:
+        t.eq(blk(d, "map"), {"state": "n/a", "missing": [], "blocks": 0}, "blocks.map")
+        t.eq(d.get("needed"), [], "needed unchanged")
+        t.eq(map_line(d), "MAP n/a (no code-project-context skill: the map is born with it)", "plain MAP line")
+    # (b) a code context without map/
+    t.tag = "(b no map/) "
+    d = both(ctx, t, fresh(ctx, "map-b", ex=code), rc=1)
+    if d:
+        t.eq(d.get("needed"), ["map"], "needed")
+        t.eq(blk(d, "map"), {"state": "missing", "missing": names, "blocks": 0}, "blocks.map")
+        t.eq(map_line(d), "MAP missing · map/ lacks utilities.md, patterns.md, where-to-look.md", "plain MAP line")
+    # (c) one file absent
+    t.tag = "(c partial) "
+    d = both(ctx, t, fresh(ctx, "map-c", ex=code, extra=map_files(drop=("patterns.md",))), rc=1)
+    if d:
+        t.eq(d.get("needed"), ["map"], "needed")
+        t.eq(blk(d, "map"), {"state": "partial", "missing": ["patterns.md"], "blocks": 2}, "blocks.map")
+        t.eq(map_line(d), "MAP partial · map/ lacks patterns.md", "plain MAP line")
+    # (d) the three files, one project block each
+    t.tag = "(d full) "
+    d = both(ctx, t, fresh(ctx, "map-d", ex=code, extra=full))
+    if d:
+        t.eq(blk(d, "map"), {"state": "ok", "missing": [], "blocks": 3}, "blocks.map")
+        t.eq(map_line(d), "MAP ok · 3 project blocks", "plain MAP line")
+        t.eq(advice(d), [], "no review line when the map holds a project block")
+        markers_check(t, d)
+    # (e) the shells alone: ok, with advice that never enters needed
+    t.tag = "(e shells) "
+    d = both(ctx, t, fresh(ctx, "map-e", ex=code, extra=map_files(block=False)))
+    if d:
+        t.eq(blk(d, "map"), {"state": "ok", "missing": [], "blocks": 0}, "blocks.map")
+        t.eq(advice(d), ["  · review: map has no project block → map-refresh --project <root> --brain <dir>"],
+             "one review line naming the refresh")
+        t.eq(d.get("needed"), [], "needed")
+    # (f) a module brain keeps its own map/
+    t.tag = "(f module) "
+    one = [("W1", "☐")]
+    mod = module_files("modules/billing")
+    mod.update({"modules/billing/execute.md": exec_doc(one, skills={"W1"}, **code),
+                "modules/billing/task.md": task_doc(one),
+                "modules/billing/artifacts.json": art_json(ok_rows(ids=["W1"]))})
+    b = fresh(ctx, "map-f", ex=code, extra={**full, **mod})
+    d = both(ctx, t, b, "--all-modules", rc=1)
+    if d:
+        t.eq(d.get("needed"), ["modules"], "root needed (the root map is complete)")
+        t.eq(blk(d, "modules"), [{"module": "modules/billing", "needed": ["map"]}], "modules")
+    d = both(ctx, t, b, "--module", "modules/billing", rc=1)
+    if d:
+        t.eq(d.get("needed"), ["map"], "needed (module run)")
+        t.eq(blk(d, "map", "state"), "missing", "module map state")
+    b = fresh(ctx, "map-f2", ex=code, extra={**full, **mod, **map_files("modules/billing/")})
+    d = both(ctx, t, b, "--module", "modules/billing")
+    if d:
+        t.eq(blk(d, "map"), {"state": "ok", "missing": [], "blocks": 3}, "module blocks.map with its own files")
+    d = both(ctx, t, b, "--all-modules")
+    if d:
+        t.eq(blk(d, "modules"), [{"module": "modules/billing", "needed": []}], "modules up to date")
+    # (g) the marker map_refresh.py actually writes is the one the checker counts
+    t.tag = "(g marker parity) "
+    ctx.write("acme/web/src/invoice.ts", "export function roundInvoice(total: number): number {\n  return total\n}\n")
+    brain = os.path.join(ctx.root, "acme", "ai-brain")
+    os.makedirs(brain)
+    p = subprocess.run([sys.executable, tool, "--project", ctx.path("acme/web"), "--brain", brain], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", env=ctx.env, cwd=ctx.root, timeout=60)
+    t.eq(p.returncode, 0, f"map_refresh.py exit code ({p.stdout[-120:]!r})")
+    wrote = {n: read(os.path.join(brain, "map", n)) or "" for n in names}
+    spec = importlib.util.spec_from_file_location("renovate_check_under_test", ctx.checker)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    for n in names:
+        opener = [x for x in wrote[n].splitlines() if x.startswith("<!-- map-refresh: scan ")]
+        t.eq(len(opener), 1, f"{n}: one block opener written")
+        t.ok(all(mod.MAP_MARK.match(x) for x in opener), f"{n}: MAP_MARK matches the written opener {opener[:1]!r}")
+    d = both(ctx, t, fresh(ctx, "map-g", ex=code, extra={f"map/{n}": wrote[n] for n in names}))
+    if d:
+        t.eq(blk(d, "map"), {"state": "ok", "missing": [], "blocks": 3}, "the written files count one block each")
+
+
 CASES = [
     ("fresh_0141_up_to_date", case_fresh_0141_up_to_date),
     ("legacy_08", case_legacy_08),
@@ -1639,6 +1755,7 @@ CASES = [
     ("rules_round2", case_rules_round2),
     ("scripts_cache_dep", case_scripts_cache_dep),
     ("hooks_review", case_hooks_review),
+    ("map_block", case_map_block),
 ]
 
 

@@ -6,7 +6,7 @@ brain up to the checker's target (`renovate-check --version`) and never re-plans
 ## 0. Requirement and snapshot
 Deterministic first, model second. `{{skill_dir}}` = this skill's base dir; `<docs_dir>` = the brain. A plugin shipping
 `renovate_check.py` must be loaded (`/reload-plugins` or a new session); its `bin/` launchers (`status-digest`,
-`renovate-check`, `plans-regen`, `prompts-regen`) run bare; without the plugin: `python3 {{skill_dir}}/templates/<script>.py`.
+`renovate-check`, `plans-regen`, `prompts-regen`, `map-refresh`) run bare; without the plugin: `python3 {{skill_dir}}/templates/<script>.py`.
 - Never read `task.md` or `execute.md`. State: `status-digest --brain <docs_dir>`
 - Snapshot (pasted into every brief): `renovate-check --brain <docs_dir> --all-modules --invariants`
   Exit 0 `up-to-date` (stop: 0 agents) · 1 `needed(<blocks>)` · 2 no brain or unreadable · 64 usage.
@@ -16,12 +16,25 @@ Deterministic first, model second. `{{skill_dir}}` = this skill's base dir; `<do
 `<docs_dir>/scripts/` and nothing else. A differing copy is informational (`SCRIPTS ok · custom: <file>`) and never
 blocks `up-to-date`: keep it when customised, else `--force-outdated`. Only `cache-dep: <file>` (a script reading `plugins/cache/`) needs an executor.
 
+## 1b. Map (deterministic, 0 agents)
+On `MAP missing` or `MAP partial` (or `MAP ok` with `review: map has no project block`), in the block order after
+RULES and before CONTEXT, the orchestrator runs `map-refresh --project <root> --brain <docs_dir>` (a module brain:
+`--brain <docs_dir>/modules/<m>`); `<root>` is the context skill's `**Usual root path:**`. Root unresolved →
+`map-refresh --brain <docs_dir> --init`: the three shells, so `MAP ok` plus the review line until a project run
+(their check gives exit 0, `MAP: fresh` and `note: no project block`). Never an executor, never a commit: the
+close's doc-sync commit carries `map/`. Exit 0 written | unchanged | fresh · 1 stale · 2 missing | unresolved · 64
+usage. The words differ: the check's `partial` = 1-2 map files absent; the refresh check's `missing(<file>)` = a
+file without its project block.
+
 ## 2. One executor per needed block
 For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES: `needed`), ONE `Agent(subagent_type:
 "adcm-toolkits:executor")` (sonnet) with `{{skill_dir}}/templates/renovate-brief.md`, the check output and the snapshot.
-- Order, sequential: SCRIPTS (cache-dep) → ARTIFACTS → EXECUTE → TASK → RULES. Modules after the root.
+- Order, sequential: SCRIPTS (cache-dep) → ARTIFACTS → EXECUTE → TASK → RULES → MAP (step 1b, no executor) → CONTEXT.
+  Modules after the root.
 - EXECUTE keeps the brain's gate-report path (`qa/<wave>/gate-*.md` when `qa/` has per-wave folders) when aligning §1/§7.
   Since 0.16.0 `lacks` can name `reviewer-line`, `merge-rule`, `links-once` or the retired merge policy (`auto-` + `merge`, in §3 only).
+  Since 0.19.0 `lacks` can name `map-step` (no `map-refresh` call in §2b): the executor writes the template's §1 principle 9
+  map sentences, the §2b step 1 **map** field, the step 6 `map-refresh` call and the step 7 wording.
   The executor writes the template's text: the `> **Reviewer:** <handle> (<forge>) · **Merge policy:** wait` line under the Protocol line,
   §1 principle 12, §3 (2-row table + the `**Claude never merges.**` paragraph), the §2b paragraph `exactly once per delivery close` (steps
   5/7 consistent: no guard-built block, no links every turn) and, in §7, only the ☐ 🔄 ⛔ ⏸ prompts (precondition previous MR merged,
@@ -37,7 +50,11 @@ For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES:
   `$CLAUDE_CONFIG_DIR` + the container path, container `CLAUDE.md`/`AGENTS.md`, brain `README.md`; `--memory-dir PATH`
   overrides, `--no-rules` skips). `fix` → ONE executor with the RULES block; `review` findings go to the owner in the
   final message, untouched. The memory lives outside the repo: never committed.
-- CONTEXT last, only on `CONTEXT ok (<skill>)`: its executor runs STEP 4.5 `--update`, patch-bumps the context plugin (else
+- MAP (`needed` on `missing` | `partial`; JSON `blocks.map` = {state, missing, blocks}) never gets an executor: step 1b.
+  A brain whose code has no `code-project-context-*` skill gets `MAP n/a`: the map arrives only by a context-generator
+  run (STEP 4.6), never by renovation.
+- CONTEXT last, only on `CONTEXT ok (<skill>)`: its executor runs STEP 4.5 `--update`, adds the map routing row and rule 9
+  «Maintain the map» to the skill's `SKILL.md` when it lacks `map/utilities.md`, patch-bumps the context plugin (else
   `plugin update` does nothing), commits + pushes its repo and RETURNs `PLUGIN: <plugin>@<marketplace> <old> → <new>`; the main session then runs `claude plugin
   marketplace update <marketplace>` and `claude plugin update <plugin>@<marketplace>` (no CLI → hand both to the
   owner) and reminds `/reload-plugins` or a new session. `n/a` is skipped.
@@ -49,6 +66,8 @@ ONE `Agent(subagent_type: "adcm-toolkits:auditor")` (read-only), brief ≤40 lin
   h2 sections, logbook entries, wave rows) before and after: identical (`lines=` may grow);
 - generators: `plans-regen --check` / `prompts-regen --check` only for rows whose `regen` uses them
   (`regen none` is not checked; exit 3 = hand-maintained layout, leave it);
+- `map-refresh --brain <docs_dir> --check` → exit 0 for every dir with a map (root and each module's `--brain`); in the
+  diff, `map/` holds only new files or regenerated blocks, plus the brain README's `map/` row;
 - `renovate-check --brain <docs_dir> --all-modules` → `RENOVATE: up-to-date`; a public brain also gets the privacy grep.
 Findings go back to the SAME executor (`SendMessage`, cost 0).
 
@@ -60,7 +79,7 @@ Findings go back to the SAME executor (`SendMessage`, cost 0).
 
 ## 5. Idempotency, budget, drift
 Repeating the phrase on a renovated brain prints `RENOVATE: up-to-date`, 0 agents. Typical budget 3-5 of this session's 20
-(executors 2-4, auditor 1 with 1 Opus quota — `model: sonnet` once the Opus quota is spent —, courier 1). Census drift: renovate adds `artifacts.json`
+(executors 2-5, auditor 1 with 1 Opus quota — `model: sonnet` once the Opus quota is spent —, courier 1). Census drift: renovate adds `artifacts.json`
 rows, so the next wave's SCOPE census may STOP: re-run it, fix its `expected` line (≤20-line shortcut, logged), never re-plan.
 
 ## Sessions without the agent types

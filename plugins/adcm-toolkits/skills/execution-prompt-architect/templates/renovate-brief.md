@@ -1,5 +1,5 @@
 # RENOVATE BRIEF (fill every {{...}}; this file is the Agent prompt; ONE brief per needed block)
-# Agent(subagent_type: "adcm-toolkits:executor") (no such type in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief). Order: SCRIPTS (cache-dep) → ARTIFACTS → EXECUTE → TASK → RULES, root brain first, modules after; CONTEXT last. 1 of the 20, 0 Opus quota.
+# Agent(subagent_type: "adcm-toolkits:executor") (no such type in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief). Order: SCRIPTS (cache-dep) → ARTIFACTS → EXECUTE → TASK → RULES → MAP → CONTEXT, root brain first, modules after; CONTEXT last. MAP has no executor and no brief: the orchestrator runs `map-refresh` (renovate.md step 1b, 0 agents). 1 of the 20, 0 Opus quota.
 
 BLOCK: {{SCRIPTS | ARTIFACTS | EXECUTE | TASK | RULES | CONTEXT}}   Module: {{modules/<m> | none}}
 
@@ -13,27 +13,27 @@ FILES (only those of the block):
   TASK      {{docs_dir}}/task.md (the module's own when set).
   ARTIFACTS {{docs_dir}}/artifacts.json, only through `courier_preflight.py --set-regen`.
   RULES     the files in `--json` `blocks.rules.findings` (memory files = `<memory dir>/<file>`, or relative to `<config>/projects/` when several dirs; the text shows at most 6).
-  CONTEXT   only the `auto` files of the project's context skill (cpcg STEP 4.5 `--update`) and that plugin's `plugin.json` (patch bump).
+  CONTEXT   only the `auto` files of the project's context skill (cpcg STEP 4.5 `--update`), its `SKILL.md` when that file lacks `map/utilities.md`, and that plugin's `plugin.json` (patch bump).
 SKILLS: `adcm-toolkits:execution-prompt-architect` (CONTEXT also `code-project-context-generator`).
 
-DELIVERABLE: the current text of {{skill_dir}}/templates/execute.md.tmpl, in the file's language; markers stay verbatim even in a Spanish brain (`LAST LOG`, `> **Protocol:**`, `> **Reviewer:**`, `Claude never merges`, `exactly once per delivery close`, `adcm-toolkits:*`, `- SKILLS:`).
+DELIVERABLE: the current text of {{skill_dir}}/templates/execute.md.tmpl, in the file's language; markers stay verbatim even in a Spanish brain (`LAST LOG`, `> **Protocol:**`, `> **Reviewer:**`, `Claude never merges`, `exactly once per delivery close`, `adcm-toolkits:*`, `- SKILLS:`, `map-refresh`).
   SCRIPTS: edit each `plugins/cache/…` template path to the local `scripts/*.tmpl` copy; prove `plans-regen.py --check` /
   `prompts-regen.py --check` (only the ones the script uses) exit 0, byte-identical output.
-  EXECUTE: §1.7 roles with the `adcm-toolkits:*` types and the per-call `model` rule · §2 the `status_digest.py --brain` line · §2b `**Next:**` / `**blocked**` · §4 resume via the digest · §7 one `- SKILLS:` line per pending wave · the line `> **Protocol:** adcm-toolkits <target>` (write it, or update it in place) · right under it `> **Reviewer:** <handle> (<forge>) · **Merge policy:** wait` (the owner's answer; unknown → the value `_pending — owner sets it_`, listed under "Para ti" in your RETURN) · §1 principle 12 (`Claude never merges`) · §2b the paragraph `The links block appears exactly once per delivery close …`, with steps 5/7 aligned (nothing implies a guard-built block or links on every turn) · §3 = the template's text verbatim (2-row table + the `**Claude never merges.**` paragraph; retired merge-policy text goes) · §7 on ☐ 🔄 ⛔ ⏸ prompts: precondition `previous wave's MR merged`, delivery = open the MR + assign the Reviewer + never merge, close = links once + a `Para ti` line `MR !N → review and merge (<reviewer>)`. Keep the brain's gate-report path when aligning §1/§7 (`REPORT PATH` as in `qa/<wave>/gate-*.md` if `qa/` has per-wave folders, else `qa/gate-<w>.md`); never change an existing convention.
+  EXECUTE: §1 principle 9 pattern-family + map sentences · §2b step 1 **map** field + step 6 `map-refresh` call · step 7 wording · §1.7 roles with the `adcm-toolkits:*` types and the per-call `model` rule · §2 the `status_digest.py --brain` line · §2b `**Next:**` / `**blocked**` · §4 resume via the digest · §7 one `- SKILLS:` line per pending wave · the line `> **Protocol:** adcm-toolkits <target>` (write it, or update it in place) · right under it `> **Reviewer:** <handle> (<forge>) · **Merge policy:** wait` (the owner's answer; unknown → the value `_pending — owner sets it_`, listed under "Para ti" in your RETURN) · §1 principle 12 (`Claude never merges`) · §2b the paragraph `The links block appears exactly once per delivery close …`, with steps 5/7 aligned (nothing implies a guard-built block or links on every turn) · §3 = the template's text verbatim (2-row table + the `**Claude never merges.**` paragraph; retired merge-policy text goes) · §7 on ☐ 🔄 ⛔ ⏸ prompts: precondition `previous wave's MR merged`, delivery = open the MR + assign the Reviewer + never merge, close = links once + a `Para ti` line `MR !N → review and merge (<reviewer>)`. Keep the brain's gate-report path when aligning §1/§7 (`REPORT PATH` as in `qa/<wave>/gate-*.md` if `qa/` has per-wave folders, else `qa/gate-<w>.md`); never change an existing convention.
   TASK: the canonical `## DoD-human pending` table, only when the check says `missing`; open rows of a legacy section migrate into it, the legacy section stays.
   ARTIFACTS: one `--set-regen` per row, with the command the check suggested; `blocked:` → STOP; no publish.
   RULES: `fix` findings only. Memory files: APPEND at the end `**Superseded (protocol <target>, <YYYY-MM-DD>):**
   <correction> (line N: "<snippet>")`, never edit or delete an existing line; a MEMORY.md finding gets only ` · ⚠ superseded
   (protocol <target>)` appended to that hook line (no note). CLAUDE.md/AGENTS.md/README.md: edit the stale line in place.
-  CONTEXT: the delta refresh of the `auto` files + a patch bump of the context plugin (without it `plugin update` does nothing), nothing else; then commit + push that repo and RETURN
+  CONTEXT: the delta refresh of the `auto` files + a patch bump of the context plugin (without it `plugin update` does nothing), plus, ONLY when the skill's `SKILL.md` lacks `map/utilities.md`, ONE surgical edit of it: the routing row «new code / shared logic → map FIRST» (the two `MAP_ROUTING_ROWS` rows, right after the `EXTRA_ROUTING_ROWS` placeholder) and rule 9 «Maintain the map» (its last line; rule 8 is «Dependencies»), copied VERBATIM from `templates/SKILL.md.tmpl` of the `code-project-context-generator` skill with `AI_BRAIN_PATH` resolved to the brain, in the same single commit and patch bump; nothing else; then commit + push that repo and RETURN
   `PLUGIN: <plugin>@<marketplace> <old> → <new>` (read-only lookup in the profile's `installed_plugins.json` / `known_marketplaces.json`).
 
 DOD-SLICE: re-run `python3 {{skill_dir}}/templates/renovate_check.py --brain {{docs_dir}} [--module <m>] --invariants`
-  → the block is `ok` (RULES: `RULES ok`, `review` findings may remain); INVARIANTS identical (`lines=` may grow).
+  → the block is `ok` (RULES: `RULES ok`, `review` findings may remain); INVARIANTS identical (`lines=` may grow); CONTEXT also `rg -c 'map/utilities.md' <skill>/SKILL.md` ≥ 1.
 
 STOP IF: an invariant would change; the block requires re-planning; the template text or skill is not found (`blocked:`).
 
-FORBIDDEN: re-planning; changing wave scope or state; touching closed waves or logbook history; publishing; the
+FORBIDDEN: re-planning; editing `map/` files (only `map-refresh` writes them); changing wave scope or state; touching closed waves or logbook history; publishing; the
   Artifact tool; git (CONTEXT: only that one commit + push); other blocks' files; files not in the findings; any config-dir file outside the listed memory dir, in particular `~/.claude*/CLAUDE.md` and `~/.claude*/ORCHESTRATOR.md`.
 
 RETURN: block · a diff summary per file (lines added/changed) · the real output of the re-run check and of
