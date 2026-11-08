@@ -1,5 +1,50 @@
 # Changelog — adcm-toolkits
 
+## 0.19.0 — 2026-11-08
+
+- **Brain map.** The code-project-context generator now writes `map/` in the brain (`utilities.md`,
+  `patterns.md`, `where-to-look.md`) from the scanner's candidates: shared helpers with their signature and an
+  exemplar consumer, development patterns with their anti-pattern, and which doc answers what. Human columns
+  are preserved on every refresh. The `map-refresh` launcher and its selftest keep it current by script.
+- **Pattern families.** Planning now extracts a family when the same shape repeats: one generic base,
+  per-entity subclasses that supply only their type and endpoint, and utility types instead of hand-written
+  variants. The least code wins; the plan names the over-abstraction risk next to the saving.
+- **Executors apply reuse.** `executor` and `executor-frontend` (also for frontend code) share a `## Reuse`
+  block plus a TypeScript block: apply the plan's reuse verdict, look the map up before writing a helper, and
+  report the `REUSED` and `RULE-OF-TWO` lines in the RETURN.
+- **The generated skill keeps the map fresh.** The context skill gets a routing row (new code or shared logic
+  goes to the map first), a rule «Maintain the map» and the script call in its section 2b.
+- **`renovate-check`: `map` block.** New flag `map-step` and a deterministic step 1b; `SCRIPTS` stays at 7. A
+  brain whose code has no `code-project-context-*` skill gets the map only through a context-generator run
+  (STEP 4.6), never through renovation (`MAP n/a`).
+- **dependency-renovate.** New skill that renews the dependencies of one project on demand. A deterministic
+  plan comes first; one Sonnet executor ships one verified MR with every patch and minor bump; one Opus
+  executor per major ships its own stacked Draft MR with migration notes; an Opus auditor gates; Claude never
+  merges. Each run records a changelog entry and an MR description rendered by script.
+- **deps-check.** Launcher with five subcommands (`preflight`, `plan`, `changelog`, `context`, `status`),
+  exits 0/1/2/64 and one write flag, `--write`. Advisories come from the bulk endpoint, independent of the
+  package-manager version.
+- **deps-smoke.** Launcher that shoots one PNG per route and diffs a before and an after set, in pure Node.
+- **Context generator: dependencies.md.** A mixed file rendered by script (declared and locked versions,
+  runtime and CI pins) whose human Policy section is preserved on every refresh.
+- **Scanner.** New `dependency_manifest` block, the real package manager instead of the npm label in pnpm
+  repos, and `update.affected_context_files`.
+- **merge-guard.** Also denies the auto-merge option of the GitLab merge-request create command. The owner
+  reinstalls the hook to pick it up.
+- **Tailnet preview link.** The delivery close can add a third preview link: an HTTPS tailnet URL served by
+  `tailscale serve`, tailnet-only and never public, that opens the local preview from a phone on any network.
+- **`tailnet-preview` launcher.** `doctor`, `up`, `status`, `url`, `down`, `list`; `--apply` is the only
+  write flag. It keeps the dev server alive after the session (detached, `caffeinate`), checks port
+  collisions and falls back to LAN-only without Tailscale.
+- **Courier step 8b.** New field `Tailnet:`; the line is verified by curl. The guard is unchanged (29
+  selftest cases).
+- **Owner setup.** Tailscale Standalone, a neutral machine name, MagicDNS and HTTPS certificates, then
+  `tailnet-preview doctor`.
+- **Notes.** A brain whose code has no `code-project-context-*` skill gets the map only through a
+  context-generator run (STEP 4.6), not by renovation (`MAP n/a`). The map reflects the working branch until
+  it is merged. Brains on an earlier protocol line report `protocol-line` → `needed(execute)` and the
+  renovation adds the map. The tailnet text lives in the plugin: no new renovate marker, no brain renewal.
+
 ## 0.18.1 — 2026-10-15
 
 - **Mobile fix for `plans.html` / `prompts.html`.** The sticky topbar wrapped its wave chips into many rows

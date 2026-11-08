@@ -2,14 +2,14 @@
 
 Bare-name launchers for the plugin's Python and Node scripts. While the plugin is enabled, Claude Code puts
 its `bin/` on the Bash tool's PATH (after the user PATH); they carry the executable bit, no manifest
-key. Each resolves the plugin root from its own path (symlinks followed) and runs its script with `python3 -B <script> "$@"` (`node <script> "$@"` for `explainer-record`).
+key. Each resolves the plugin root from its own path (symlinks followed) and runs its script with `python3 -B <script> "$@"` (`node <script> "$@"` for the Node launchers).
 
 `courier-preflight` runs `skills/artifact-courier/scripts/courier_preflight.py`; `status-digest`,
 `renovate-check`, `plans-regen` and `prompts-regen` run the `status_digest.py`, `renovate_check.py`,
 `plans-regen.py` and `prompts-regen.py` of `skills/execution-prompt-architect/templates/`; `map-refresh` runs
 `skills/code-project-context-generator/scripts/map_refresh.py`.
 
-`explainer-record` is the one Node launcher: it runs `skills/explainer-video/scripts/record.mjs` with `node` instead of `python3`.
+`explainer-record` is a Node launcher: it runs `skills/explainer-video/scripts/record.mjs` with `node` instead of `python3`.
 Recording needs Node 20+, so it puts the newest nvm 2x install (version order) first on PATH and falls back to the `node` already there;
 its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, voice).
 
@@ -17,6 +17,8 @@ its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, 
 `init`, `check`, `build`, `mark`, `adopt`, `log` and `pack` run `design-board.py` with `python3 -B`; any other subcommand prints the usage on stderr and exits 64.
 
 `tailnet-preview` runs `skills/artifact-courier/scripts/tailnet_preview.py` with `python3 -B`: `doctor`, `up`, `status`, `url`, `down`, `list` (`up`/`down` change nothing without `--apply`; exits 0/1/2/64; `--json`). It keeps a project's dev server alive after the session (detached, `caffeinate`) and maps it with `tailscale serve` to `https://<machine>.<tailnet>.ts.net:<port>/` for the owner's phone; without Tailscale it falls back to LAN-only. Setup and lifecycle: `skills/artifact-courier/references/tailnet-preview.md`.
+
+`deps-check` runs `skills/dependency-renovate/scripts/deps_check.py` with `python3 -B`: `preflight`, `plan`, `changelog`, `context`, `status` (read-only; `--write` is the only write flag and without it a command prints `would write <path>`; exits 0/1/2/64). It plans one dependency run from the project's manifests and the registries. `deps-smoke` is a Node shim like `explainer-record`: it runs `skills/dependency-renovate/scripts/deps_smoke.mjs` with `node` (`doctor`, `shoot`, `diff`): `shoot` takes one PNG per route and `diff` compares a before and an after set pixel by pixel; exits 0/1/2/64.
 
 Auto mode: the classifier may deny the registry seal (`courier-preflight … --mark-published`) as
 "Create Public Surface" although it only edits the project's local `artifacts.json`. The documented
