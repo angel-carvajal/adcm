@@ -1723,7 +1723,7 @@ def case_project_too_far_refused(ctx, t):
     writer = load_scanner(ctx.script)
     container = writer.base_of("/Volumes/ssd/acme/ai/ai-brain")
     t.eq(container, "/Volumes/ssd/acme", "the container of a brain on another volume")
-    t.ok(writer.too_far(container, "/Users/someone/dev/acme-api"),
+    t.ok(writer.too_far(container, "/srv/someone/dev/acme-api"),
          "a project that meets the container only at / is too far, whatever the count of ..")
     t.ok(not writer.too_far(container, "/Volumes/ssd/sibling/acme"), "a project one level out is near")
     writer_tree(ctx)
