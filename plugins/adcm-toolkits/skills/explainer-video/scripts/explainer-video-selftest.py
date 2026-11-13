@@ -8,7 +8,7 @@ Builds one throwaway `tempfile` project per case (videos/config.json, videos/gui
 record.mjs under Node >= 20 as a subprocess (PYTHONDONTWRITEBYTECODE=1) and prints
 `PASS|FAIL|SKIP <case> [- why]`. Exit code 1 when any case FAILs.
 
-Node is located the way bin/explainer-record does it: the newest nvm v2x, else the node on PATH. Every
+Node is located the way scripts/launchers/explainer-record does it: the newest nvm v2x, else the node on PATH. Every
 case that runs record.mjs SKIPs without a Node >= 20. Cases that record need playwright-core, a browser, ffmpeg and
 ffprobe; the harness asks `record.mjs --doctor` instead of guessing and SKIPs with the doctor's own
 words when one is missing. The voiced case needs a piper engine and model under $REC_TTS_HOME and never
@@ -151,7 +151,7 @@ def nvm_version(bin_dir):
 
 
 def find_node():
-    """(node, 'nvm'|'PATH', why-not): the newest nvm v2x (version order) first, else PATH's node, as bin/explainer-record does."""
+    """(node, 'nvm'|'PATH', why-not): the newest nvm v2x (version order) first, else PATH's node, as scripts/launchers/explainer-record does."""
     nvm = sorted(glob.glob(os.path.join(os.path.expanduser("~"), ".nvm", "versions", "node", "v2[0-9]*", "bin")), key=nvm_version)
     candidates = [(os.path.join(nvm[-1], "node"), "nvm")] if nvm else []
     on_path = shutil.which("node")
@@ -1041,10 +1041,10 @@ def case_denylist_hits(c, t):
 
 def case_launcher_exec_and_help(c, t):
     c.need_node()
-    launcher = os.path.join(F.plugin_root, "bin", "explainer-record") if F.plugin_root else ""
+    launcher = os.path.join(F.plugin_root, "scripts", "launchers", "explainer-record") if F.plugin_root else ""
     if not os.path.isfile(launcher):
-        raise Skip("no bin/explainer-record next to the script")
-    t.ok(os.access(launcher, os.X_OK), "bin/explainer-record is executable")
+        raise Skip("no scripts/launchers/explainer-record next to the script")
+    t.ok(os.access(launcher, os.X_OK), "scripts/launchers/explainer-record is executable")
     head = read(launcher).splitlines()[:2]
     t.eq(head, ["#!/bin/sh", "set -e"], "POSIX sh with set -e")
     env = F.env()
@@ -1405,7 +1405,7 @@ def run_case(fn, keep):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Behavioural tests for record.mjs and bin/explainer-record")
+    ap = argparse.ArgumentParser(description="Behavioural tests for record.mjs and scripts/launchers/explainer-record")
     ap.add_argument("--script", default=os.path.join(HERE, "record.mjs"), help="the record.mjs to test")
     ap.add_argument("--only", help="run a single case by name")
     ap.add_argument("--keep", action="store_true", help="leave the temp trees on disk")

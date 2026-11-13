@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""deps-smoke-selftest - behavioural tests for deps_smoke.mjs and bin/deps-smoke (stdlib only).
+"""deps-smoke-selftest - behavioural tests for deps_smoke.mjs and scripts/launchers/deps-smoke (stdlib only).
 
 Usage:
   python3 deps-smoke-selftest.py [--only NAME] [--keep]
 
 Every case works in a throwaway `tempfile` tree: PNG sets written here with zlib + struct, stub servers started by
-`bin/deps-smoke --serve` on 127.0.0.1 (the only host ever contacted), and `bin/deps-smoke` itself run as a subprocess
+`scripts/launchers/deps-smoke --serve` on 127.0.0.1 (the only host ever contacted), and `scripts/launchers/deps-smoke` itself run as a subprocess
 (PYTHONDONTWRITEBYTECODE=1). It prints `PASS|FAIL|SKIP <case> [- why]`, then the tally
 `N PASS · M FAIL · S SKIP (of N)` as the last line. Exit code 1 when any case FAILs.
 
@@ -32,7 +32,7 @@ import zlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
 PLUGIN = os.path.dirname(os.path.dirname(SKILL))
-BIN = os.path.join(PLUGIN, "bin", "deps-smoke")
+BIN = os.path.join(PLUGIN, "scripts", "launchers", "deps-smoke")
 SIG = b"\x89PNG\r\n\x1a\n"
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 PY = shlex.quote(sys.executable) + " -B"
@@ -350,7 +350,7 @@ class Ctx:
 
     def need_browser(self):
         if not os.path.isfile(BIN):
-            raise Skip("bin/deps-smoke not present")
+            raise Skip("scripts/launchers/deps-smoke not present")
         if not self.doctor_ready():
             raise Skip("deps-smoke doctor is not ready")
 
@@ -1073,12 +1073,12 @@ def run_case(fn, keep):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Behavioural tests for deps_smoke.mjs and bin/deps-smoke")
+    ap = argparse.ArgumentParser(description="Behavioural tests for deps_smoke.mjs and scripts/launchers/deps-smoke")
     ap.add_argument("--only", help="run a single case by name")
     ap.add_argument("--keep", action="store_true", help="leave the temp trees on disk")
     args = ap.parse_args()
     if not (os.path.isfile(BIN) and os.path.isfile(os.path.join(HERE, "deps_smoke.mjs"))):
-        print(f"bin/deps-smoke or deps_smoke.mjs not found under {PLUGIN}")
+        print(f"scripts/launchers/deps-smoke or deps_smoke.mjs not found under {PLUGIN}")
         return 2
     cases = [case for case in CASES if not args.only or case[0] == args.only]
     if not cases:

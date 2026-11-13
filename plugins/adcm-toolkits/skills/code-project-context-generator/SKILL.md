@@ -31,7 +31,7 @@ Solve the problem of "starting work on a project without having to explain to Cl
 
 - Python 3 (stdlib only, no external packages) for the scanner.
 - Script bundled in this skill: `scripts/scan_project.py` (relative to the skill root).
-- The brain map renderer `scripts/map_refresh.py`, run through the plugin launcher `bin/map-refresh` (Python 3, stdlib only).
+- The brain map renderer `scripts/map_refresh.py`, run through the plugin launcher `map-refresh` (Python 3, stdlib only). Launchers live in `scripts/launchers/` of the plugin and are on the Bash PATH through its SessionStart hook; if a bare name is not found, run `${CLAUDE_PLUGIN_ROOT}/scripts/launchers/<name>`.
 - When an absolute path is needed, the skill lives at
   `${CLAUDE_PLUGIN_ROOT}/skills/code-project-context-generator/`, so the scanner is at
   `${CLAUDE_PLUGIN_ROOT}/skills/code-project-context-generator/scripts/scan_project.py`.

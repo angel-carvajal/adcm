@@ -1,8 +1,9 @@
-# bin/
+# scripts/launchers/
 
-Bare-name launchers for the plugin's Python and Node scripts. While the plugin is enabled, Claude Code puts
-its `bin/` on the Bash tool's PATH (after the user PATH); they carry the executable bit, no manifest
-key. Each resolves the plugin root from its own path (symlinks followed) and runs its script with `python3 -B <script> "$@"` (`node <script> "$@"` for the Node launchers).
+Bare-name launchers for the plugin's Python and Node scripts. The plugin's SessionStart hook
+(`hooks/hooks.json` → `scripts/launchers-path.sh`) prepends this folder to the Bash tool's PATH through `CLAUDE_ENV_FILE`;
+they carry the executable bit, no manifest key. Where that hook does not run (claude.ai, Cowork), call
+`${CLAUDE_PLUGIN_ROOT}/scripts/launchers/<name>`. The folder is not a top-level `bin` folder because claude.ai and Cowork refuse plugins that have one. Each resolves the plugin root from its own path (symlinks followed) and runs its script with `python3 -B <script> "$@"` (`node <script> "$@"` for the Node launchers).
 
 `courier-preflight` runs `skills/artifact-courier/scripts/courier_preflight.py`; `status-digest`,
 `renovate-check`, `plans-regen` and `prompts-regen` run the `status_digest.py`, `renovate_check.py`,

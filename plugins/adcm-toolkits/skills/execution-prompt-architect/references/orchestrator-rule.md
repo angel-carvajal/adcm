@@ -37,7 +37,7 @@ decides/integrates. It does NOT execute the task itself:
 
 When the user opens or resumes a project ('where did we leave off', 'dónde nos quedamos',
 'project status'), the main session runs `status-digest --brain <docs_dir> [--module
-modules/<mod>]` (the plugin's `bin/` launcher, bare: nothing before it) — without the plugin
+modules/<mod>]` (the plugin's `scripts/launchers/` launcher, bare: nothing before it) — without the plugin
 `python3 <path> --brain <docs_dir>` with `<path>` = `execution-prompt-architect/templates/status_digest.py`
 or the brain copy `<docs_dir>/scripts/status_digest.py` — and reads only its ≤40 lines. Exit 0 ok · 1
 partial (digest printed, `DIGEST: partial(<parts>)`): the digest is enough, spawn the fallback

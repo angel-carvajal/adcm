@@ -22,7 +22,7 @@ the conversation has not read, so the whole live page (40 KB to 1 MB) lands in t
 ## If you are the main session
 1. `courier-preflight <docs_dir> --account auto --summary` (`--module modules/billing` for one module): states, regen,
    regen-due, needs-regen, batches (`auto` is a guess; the courier measures the account). Always the bare command (plugin
-   `bin/` on PATH; fallback in the procedure header), never behind `cd … &&` or an env assignment. Even with nothing to
+   `scripts/launchers/` on PATH; fallback in the procedure header), never behind `cd … &&` or an env assignment. Launchers live in `scripts/launchers/` of the plugin and are on the Bash PATH through its SessionStart hook; if a bare name is not found, run `${CLAUDE_PLUGIN_ROOT}/scripts/launchers/<name>`. Even with nothing to
    publish, no preview and no media, spawn one courier: only it can probe the session's account (it skips steps 2-7, not 2b).
 2. Start the preview server if the close has one; note its localhost URL (or `none`). When the repo has a `tailnet-preview`
    profile (`tailnet-preview list`), start it with `tailnet-preview up <slug> --apply` instead (detached, outlives the session)

@@ -7,7 +7,7 @@ while [ -h "$self" ]; do
   self=$(readlink "$self")
   case $self in /*) ;; *) self=$dir/$self ;; esac
 done
-root=$(cd "$(dirname "$self")/.." && pwd -P)
+root=$(cd "$(dirname "$self")/../.." && pwd -P)
 scripts=$root/skills/design-direction-architect/scripts
 usage='usage: design-board doctor [<dir>] | capture [--board <board.json> | --urls <file.txt>] [--variants] [options] | init | check | build | mark | adopt | log | pack'
 sub=${1:-}

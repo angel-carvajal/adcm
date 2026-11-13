@@ -30,7 +30,7 @@ judgement. The skill never touches the tooling of the machine (brew, nvm install
 ## If you are the main session
 
 `{{skill_dir}}` = this skill's folder · `<repo>` = the project root · `<S>` = the scratch run dir · `<context>` = the project's
-`code-project-context-*` skill. `deps-check` and `deps-smoke` are the plugin `bin/` launchers: run them bare (nothing before them). Without
+`code-project-context-*` skill. `deps-check` and `deps-smoke` are plugin launchers: run them bare (nothing before them). Launchers live in `scripts/launchers/` of the plugin and are on the Bash PATH through its SessionStart hook; if a bare name is not found, run `${CLAUDE_PLUGIN_ROOT}/scripts/launchers/<name>`. Without
 the plugin: `python3 {{skill_dir}}/scripts/deps_check.py` and `node {{skill_dir}}/scripts/deps_smoke.mjs`. Detail of every phase:
 `references/flow.md`.
 
@@ -97,5 +97,5 @@ cannot resume a finished executor, a NEW executor takes the fix (3 + k + 1). No 
 built-ins, precedence) · `templates/{patch-minor-brief,major-brief,auditor-brief,context-brief}.md` (the four agent briefs) ·
 `templates/{changelog-entry,mr-description}.md.tmpl` (rendered by `deps-check`) ·
 `scripts/{deps_check.py,deps-check-selftest.py,deps_smoke.mjs,deps-smoke-selftest.py}` · `fixtures/npm-basic/` (generic Acme project of the
-selftests) · launchers `bin/deps-check`, `bin/deps-smoke`. Sibling dependency: the `code-project-context-generator` skill
+selftests) · launchers `scripts/launchers/deps-check`, `scripts/launchers/deps-smoke`. Sibling dependency: the `code-project-context-generator` skill
 (`scripts/dependency_manifest.py`, `templates/dependencies.md.tmpl`).

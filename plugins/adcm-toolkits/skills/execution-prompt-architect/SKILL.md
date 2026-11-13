@@ -4,17 +4,16 @@ description: >
   Turns a task description plus deep code analysis into an execution-plan family
   (executive proposal, master plan, detailed plan, timeframe plan, task tracker) and an
   execution protocol with copy-paste prompts per wave (GOAL · TASKS · SCOPE manifest ·
-  LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) whose loop exits by verifiable DoD, never
-  by fatigue, with a comment policy and a code-simplifier pass per wave. Each wave prompt
-  is self-contained: its SCOPE embeds the investigation, so executing sessions never
-  re-analyze. Best with the project's `code-project-context-*` skill. Triggers when the
-  user asks to 'create an execution plan', 'generate optimal prompts', 'plan my
-  migration', 'wave execution plan', 'batch migration plan', 'execution prompts', 'plan de
-  ejecución', 'prompts por olas', 'plan por lotes', 'genera los prompts', or any request
-  for a code-analysis-driven plan with ready-to-run prompts per wave; also at session
-  start on 'where did we leave off', 'dónde nos quedamos', 'en qué quedamos', 'status del
-  proyecto', 'project status', 'retomar el proyecto', 'resume the project'; and on
-  'renovate the brain', 'upgrade the brain', 'renueva el brain', 'actualiza el protocolo'.
+  LOOP · WORKFLOW fan-out · GUARDRAILS & CLOSE) whose loop exits by verifiable DoD,
+  never by fatigue. Best with the project's `code-project-context-*` skill. Triggers
+  when the user asks to 'create an execution plan', 'generate optimal prompts', 'plan my
+  migration', 'wave execution plan', 'batch migration plan', 'execution prompts', 'plan
+  de ejecución', 'prompts por olas', 'plan por lotes', 'genera los prompts', or any
+  request for a code-analysis-driven plan with ready-to-run prompts per wave; also at
+  session start on 'where did we leave off', 'dónde nos quedamos', 'en qué quedamos',
+  'status del proyecto', 'project status', 'retomar el proyecto', 'resume the project';
+  and on 'renovate the brain', 'upgrade the brain', 'renueva el brain', 'actualiza el
+  protocolo'.
 compatibility: >
   Works with any Claude model. In Claude Code the code analysis fans out to
   sub-agents using the model/effort the user picks; in environments without
@@ -187,8 +186,8 @@ sequentially.
 When the user opens or resumes a project that already has a brain ('where did we leave off',
 'dónde nos quedamos', 'project status'), the main session NEVER reads `task.md`, `execute.md`
 or the plans to learn the state. It runs `status-digest --brain <docs_dir> [--module
-modules/<mod>]` — the plugin's `bin/` launcher, always bare (no `cd … &&`, no env assignment before
-it; same for `renovate-check`, `plans-regen`, `prompts-regen`). Without the plugin: `python3
+modules/<mod>]` — the plugin's launcher (`scripts/launchers/`), always bare (no `cd … &&`, no env assignment before
+it; same for `renovate-check`, `plans-regen`, `prompts-regen`). Launchers live in `scripts/launchers/` of the plugin and are on the Bash PATH through its SessionStart hook; if a bare name is not found, run `${CLAUDE_PLUGIN_ROOT}/scripts/launchers/<name>`. Without the plugin: `python3
 {{skill_dir}}/templates/status_digest.py` (`{{skill_dir}}` = this skill's base directory; the other
 three are `renovate_check.py`, `plans-regen.py`, `prompts-regen.py` there) or the brain copy
 `python3 <docs_dir>/scripts/status_digest.py`. It reads only the digest's ≤40 lines: waves, git, last logbook

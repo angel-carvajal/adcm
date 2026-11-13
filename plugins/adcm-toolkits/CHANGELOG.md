@@ -1,5 +1,30 @@
 # Changelog — adcm-toolkits
 
+## 0.20.0 — 2026-11-12
+
+- **Launchers moved to `scripts/launchers/`.** claude.ai and Cowork refuse any plugin with a top-level `bin` folder, so
+  the eleven launchers (`git mv`, history kept) and their README now live in `scripts/launchers/`. They resolve the
+  plugin root one level deeper (`../..`); the scripts they run and their exit codes are unchanged.
+- **SessionStart hook.** New `hooks/hooks.json` runs `scripts/launchers-path.sh`, which prepends the launchers
+  folder to the Bash PATH by writing an `export PATH=…` line to `CLAUDE_ENV_FILE` once (it skips when the line is
+  already there). It prints nothing to stdout and exits 0 in every case, so bare launcher names keep working in Claude Code.
+- **`${CLAUDE_PLUGIN_ROOT}` fallback.** Where the hook does not run, call
+  `${CLAUDE_PLUGIN_ROOT}/scripts/launchers/<name>`. Each skill that names a launcher says so once; briefs and
+  templates keep the bare names.
+- **One-sentence plugin description.** The plugin description is now one sentence (170 characters), identical in
+  `plugin.json` and `marketplace.json`.
+- **Shorter skill descriptions.** `execution-prompt-architect` and `design-direction-architect` descriptions are
+  under 1,024 characters with every trigger kept.
+- **Agents README moved.** `agents/README.md` is now `docs/agents.md`: every `.md` inside `agents/` loads as an
+  agent, and the validator warned that the file had no frontmatter.
+- **Selftests resolve the new depth.** The selftests that run a launcher (tailnet-preview, deps-smoke, design-board,
+  explainer-video) point at `scripts/launchers/`.
+- **Version constants.** `plugin.json`, the `execute.md.tmpl` Protocol line and the version strings of
+  `courier_preflight.py`, `renovate_check.py`, `status_digest.py` and the renovate selftest read 0.20.0.
+
+Notes: no behavior of any script changes. Owners who copied the hooks keep them; the new hook ships with the
+plugin and needs no registration. In an old session, run `/reload-plugins` or restart once so the hook runs.
+
 ## 0.19.0 — 2026-11-08
 
 - **Brain map.** The code-project-context generator now writes `map/` in the brain (`utilities.md`,

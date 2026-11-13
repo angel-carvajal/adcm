@@ -7,5 +7,5 @@ while [ -h "$self" ]; do
   self=$(readlink "$self")
   case $self in /*) ;; *) self=$dir/$self ;; esac
 done
-root=$(cd "$(dirname "$self")/.." && pwd -P)
-exec python3 -B "$root/skills/execution-prompt-architect/templates/plans-regen.py" "$@"
+root=$(cd "$(dirname "$self")/../.." && pwd -P)
+exec python3 -B "$root/skills/execution-prompt-architect/templates/renovate_check.py" "$@"

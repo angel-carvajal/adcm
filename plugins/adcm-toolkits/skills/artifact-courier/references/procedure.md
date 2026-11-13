@@ -7,7 +7,7 @@ the folder that holds `artifacts.json`; run every command from it. `PF` below is
 `--only` flags and `--account <A>`: `<A>` is the brief's `ACCOUNT` (`auto` by default) until step 2b
 resolves the session's account, then that resolved name for every later command (each row works on
 its `url_<A>`, the canonical `url` when `<A>` is `active_account`; a row without one reads `other-account`, step 6).
-Always the bare command (on PATH while the plugin is enabled); write nothing before it, no `cd … &&`
+Always the bare command (on PATH through the plugin's SessionStart hook; launchers are in `scripts/launchers/`); write nothing before it, no `cd … &&`
 and no env assignment: the owner's allow rule matches only the bare name, and it takes `<docs_dir>`
 as an argument so it needs neither. Without the plugin the fallback is
 `python3 {{skill_dir}}/scripts/courier_preflight.py <docs_dir>` in its place.

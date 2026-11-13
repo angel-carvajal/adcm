@@ -17,7 +17,7 @@ This skill ships in the **`adcm-toolkits`** plugin of the public **`adcm`** mark
 
 - **Auto-invocation:** ask to "create project context", "scan repo", "map architecture", "give me context for another project", etc.
 - **Explicit:** `/adcm-toolkits:code-project-context-generator`
-- It runs `scripts/scan_project.py` over a target repository and scaffolds a new context skill from `templates/`. The generated skill keeps a light index in its `SKILL.md` and reads per-section detail on demand. For a project with an execution brain it also writes the brain map with `bin/map-refresh`.
+- It runs `scripts/scan_project.py` over a target repository and scaffolds a new context skill from `templates/`. The generated skill keeps a light index in its `SKILL.md` and reads per-section detail on demand. For a project with an execution brain it also writes the brain map with `scripts/launchers/map-refresh`.
 
 ## What the generated context contains
 

@@ -26,7 +26,7 @@ This skill packages the cheap way:
 ## Usage
 
 The main session loads the skill, runs the one-line summary, fills the brief and launches the
-courier. `courier-preflight` is the plugin's `bin/` launcher (on the Bash PATH while the plugin is enabled; run it bare, with no `cd … &&` or env assignment before it, so one `Bash(courier-preflight *)` allow rule matches):
+courier. `courier-preflight` is a plugin launcher (`scripts/launchers/`, on the Bash PATH through the plugin's SessionStart hook; run it bare, with no `cd … &&` or env assignment before it, so one `Bash(courier-preflight *)` allow rule matches):
 
 ```bash
 courier-preflight <docs_dir> --summary

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tailnet-preview-selftest - behavioural tests for tailnet_preview.py and bin/tailnet-preview (stdlib only).
+"""tailnet-preview-selftest - behavioural tests for tailnet_preview.py and scripts/launchers/tailnet-preview (stdlib only).
 
 Usage:
   python3 tailnet-preview-selftest.py [--script PATH] [--only NAME] [--keep]
@@ -39,8 +39,8 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
 PLUGIN = os.path.dirname(os.path.dirname(SKILL))
-BIN = os.path.join(PLUGIN, "bin", "tailnet-preview")
-TWIN = os.path.join(PLUGIN, "bin", "renovate-check")
+BIN = os.path.join(PLUGIN, "scripts", "launchers", "tailnet-preview")
+TWIN = os.path.join(PLUGIN, "scripts", "launchers", "renovate-check")
 DOC = os.path.join(SKILL, "references", "tailnet-preview.md")
 HOST = "acme-mac.tail0000.ts.net"
 VERDICT = "TAILNET-PREVIEW:"
@@ -927,16 +927,16 @@ def case_no_private_strings(c, t):
             for rx, what in ((USERS, "home path"), (CONFIG_DIR, "config-dir name"), (CT_WORD, "the CT-log word")):
                 if rx.search(line):
                     t.ok(False, f"{what} in {name}:{n}")
-            if DOTDOT in line:
+            if DOTDOT in line and not (path == BIN and line.strip() == 'root=$(cd "$(dirname "$self")/' + DOTDOT + DOTDOT[:2] + '" && pwd -P)'):
                 t.ok(False, f"parent-dir path in {name}:{n}")
 
 
 def case_launcher_wrapper(c, t):
-    if not t.ok(os.path.isfile(BIN) and os.path.isfile(TWIN), "bin/tailnet-preview or bin/renovate-check missing"):
+    if not t.ok(os.path.isfile(BIN) and os.path.isfile(TWIN), "scripts/launchers/tailnet-preview or scripts/launchers/renovate-check missing"):
         return
     p = subprocess.run([BIN, "--help"], capture_output=True, text=True, env=c.env, timeout=60)
-    t.eq(p.returncode, 0, "bin/tailnet-preview --help exit")
-    t.ok(os.access(BIN, os.X_OK), "bin/tailnet-preview is not executable")
+    t.eq(p.returncode, 0, "scripts/launchers/tailnet-preview --help exit")
+    t.ok(os.access(BIN, os.X_OK), "scripts/launchers/tailnet-preview is not executable")
     with open(TWIN, "rb") as fh:
         twin = fh.read().decode("utf-8").split("\n")
     with open(BIN, "rb") as fh:
@@ -1083,7 +1083,7 @@ def run_case(fn, script, keep):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Behavioural tests for tailnet_preview.py and bin/tailnet-preview")
+    ap = argparse.ArgumentParser(description="Behavioural tests for tailnet_preview.py and scripts/launchers/tailnet-preview")
     ap.add_argument("--script", default=os.path.join(HERE, "tailnet_preview.py"), help="the tailnet_preview.py to test")
     ap.add_argument("--only", help="run a single case by name")
     ap.add_argument("--keep", action="store_true", help="leave the temp roots on disk")

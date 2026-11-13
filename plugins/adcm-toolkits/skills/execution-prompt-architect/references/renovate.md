@@ -5,7 +5,7 @@ brain up to the checker's target (`renovate-check --version`) and never re-plans
 
 ## 0. Requirement and snapshot
 Deterministic first, model second. `{{skill_dir}}` = this skill's base dir; `<docs_dir>` = the brain. A plugin shipping
-`renovate_check.py` must be loaded (`/reload-plugins` or a new session); its `bin/` launchers (`status-digest`,
+`renovate_check.py` must be loaded (`/reload-plugins` or a new session); its `scripts/launchers/` launchers (`status-digest`,
 `renovate-check`, `plans-regen`, `prompts-regen`, `map-refresh`) run bare; without the plugin: `python3 {{skill_dir}}/templates/<script>.py`.
 - Never read `task.md` or `execute.md`. State: `status-digest --brain <docs_dir>`
 - Snapshot (pasted into every brief): `renovate-check --brain <docs_dir> --all-modules --invariants`

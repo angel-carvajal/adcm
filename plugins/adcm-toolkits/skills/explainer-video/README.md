@@ -84,4 +84,4 @@ deterministic runs (tests): `--mute` records with silence of the estimated lengt
 | `templates/voice-install.md` | the voice venv, the piper model and its sha256 check |
 | `fixtures/demo/` | a generic demo app for smoke recordings |
 
-The launcher lives at the plugin level: `bin/explainer-record`.
+The launcher lives at the plugin level: `scripts/launchers/explainer-record`.

@@ -1,5 +1,7 @@
 # adcm-toolkits role agents
 
+_Moved from `agents/README.md` in 0.20.0: every `.md` inside `agents/` loads as an agent._
+
 Six sub-agent types that fix the default model and the tool set of a delegation, so the brief no longer has to. Address them as `adcm-toolkits:<name>`, for example `Agent(subagent_type: "adcm-toolkits:auditor")`. The prompt you pass is the brief (TASK · FILES · SKILLS · DELIVERABLE · DOD-SLICE · STOP IF · FORBIDDEN · RETURN).
 
 | name | model | tools | preload | use when |

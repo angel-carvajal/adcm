@@ -54,7 +54,7 @@ Then restart the session or run `/reload-plugins`.
 
 ## Launchers
 
-`bin/deps-check` and `bin/deps-smoke` are on the Bash PATH while the plugin is enabled. Each command prints at most 40 lines and ends with a
+`scripts/launchers/deps-check` and `scripts/launchers/deps-smoke` are on the Bash PATH through the plugin's SessionStart hook. Each command prints at most 40 lines and ends with a
 verdict line; 64 is a usage error in every subcommand.
 
 | `deps-check` | Exit 0 | Exit 1 | Exit 2 |

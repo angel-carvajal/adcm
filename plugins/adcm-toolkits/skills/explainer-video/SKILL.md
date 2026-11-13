@@ -23,9 +23,8 @@ storyboard and auditing the result. The recording itself is a script. It opens t
 performs the steps, speaks each one with a synthetic voice, and leaves the same mp4 every
 time the storyboard is unchanged. Re-takes cost minutes of machine time, not turns.
 
-`explainer-record` is the plugin's `bin/` launcher (on the Bash PATH while the plugin is
-enabled; it picks a Node >= 20 installed with nvm). Run it bare. Voice overrides go in front as
-environment assignments (`REC_TTS=piper explainer-record 01`); nothing else precedes it.
+`explainer-record` is a plugin launcher (it picks a Node >= 20 installed with nvm). Run it bare. Voice overrides go in front as
+environment assignments (`REC_TTS=piper explainer-record 01`); nothing else precedes it. Launchers live in `scripts/launchers/` of the plugin and are on the Bash PATH through its SessionStart hook; if a bare name is not found, run `${CLAUDE_PLUGIN_ROOT}/scripts/launchers/<name>`.
 Without the plugin on PATH: `node "${CLAUDE_PLUGIN_ROOT:-.}/skills/explainer-video/scripts/record.mjs" <args>`
 (from the plugin root when the variable is unset), with Node >= 20 first on PATH.
 
@@ -159,4 +158,4 @@ base URL; do not widen either.
 | `templates/videos-index.md.tmpl` | the human index of the videos for the project docs | delivery |
 | `templates/voice-install.md` | the voice venv recipe, the piper model and the sha256 check | `--doctor` says the voice is missing |
 | `fixtures/demo/` | a generic demo app for smoke recordings | selftest |
-| `bin/explainer-record` | the launcher (plugin level) | every command above |
+| `scripts/launchers/explainer-record` | the launcher (plugin level) | every command above |

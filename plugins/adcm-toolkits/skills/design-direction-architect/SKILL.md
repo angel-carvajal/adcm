@@ -1,21 +1,18 @@
 ---
 name: design-direction-architect
 description: >
-  Researches and locks a web design direction BEFORE any code is written.
-  Interviews the owner, then mines real sources (the Framer template
-  marketplace, Awwwards, 21st.dev, the owner's inspiration folder and Pexels
-  for assets) plus a market scan of competitors, triages 15+ candidates,
-  walks 8, and presents 5 finalists backed by two or more sources, never the
-  first hit. Everything lands on one fixed board with 5 tabs (Options,
-  References, Market, Method, Tokens) and a token export; the scripts do the
-  mechanical work (captures, thumbnails, HTML, tokens, decision log, pack),
-  agents only write data. Writes a reusable pack to `.design/` and hands it to
-  the building skills; it does not build the site. Triggers on 'design a
-  website', 'landing page', 'design references', 'design direction',
-  'moodboard', 'inspiration', 'make it look expensive', 'my site looks
-  generic', 'AI slop design', 'design board', 'diseñar un sitio', 'buscar
-  referencias', 'inspiración', 'dirección de diseño', 'que no se vea
-  genérico', 'tablero de diseño'.
+  Researches and locks a web design direction BEFORE any code is written. Interviews the
+  owner, then mines real sources (the Framer template marketplace, Awwwards, 21st.dev,
+  the owner's inspiration folder and Pexels for assets) plus a market scan of
+  competitors, triages 15+ candidates, walks 8, and presents 5 finalists backed by two
+  or more sources, never the first hit. Everything lands on one fixed board with 5 tabs
+  (Options, References, Market, Method, Tokens) and a token export; the scripts do the
+  mechanical work, agents only write data. Writes a reusable pack to `.design/` and
+  hands it to the building skills; it does not build the site. Triggers on 'design a
+  website', 'landing page', 'design references', 'design direction', 'moodboard',
+  'inspiration', 'make it look expensive', 'my site looks generic', 'AI slop design',
+  'design board', 'diseñar un sitio', 'buscar referencias', 'inspiración', 'dirección de
+  diseño', 'que no se vea genérico', 'tablero de diseño'.
 compatibility: >
   Python 3 (board builder) · Node >= 20 + playwright-core >= 1.61 + Chrome
   (captures; `design-board doctor`) · WebSearch for market and Awwwards ·
@@ -29,12 +26,12 @@ AI-generated sites look generic because the agent starts **without references**.
 This skill is the missing phase zero: it interviews, researches real sources,
 curates without settling for the first hit, and produces a reference pack that
 the building skills consume. The owner judges everything on one board; the
-`design-board` launcher (the plugin's `bin/`) builds it.
+`design-board` launcher (in the plugin's `scripts/launchers/`) builds it.
 
 **It never writes the site.** Its output is a direction, not a page.
 
-`design-board <doctor|init|capture|check|build|mark|adopt|log|pack>`. Run it bare;
-without the plugin on PATH: `python3 "${CLAUDE_PLUGIN_ROOT}/skills/design-direction-architect/scripts/design-board.py" <cmd> .design`
+`design-board <doctor|init|capture|check|build|mark|adopt|log|pack>`. Run it bare: launchers live in `scripts/launchers/` of the plugin and are on the Bash PATH through its SessionStart hook; if the bare name is not found, run `${CLAUDE_PLUGIN_ROOT}/scripts/launchers/design-board`;
+without the plugin: `python3 "${CLAUDE_PLUGIN_ROOT}/skills/design-direction-architect/scripts/design-board.py" <cmd> .design`
 (captures: `node …/scripts/capture.mjs`, Node >= 20 first on PATH). Exit: `0` ok · `1` check
 failed (`FAIL <path>: <why>` lines) · `2` missing or unparseable input · `64` usage.
 
@@ -209,6 +206,6 @@ main session reruns the script. Return the file list and the handoff sentence.
 | `references/source-pexels.md` | Pexels photo and video API, the 403 gotcha, license | step 6b |
 | `references/handoff-guide.md`, `licensing-and-ethics.md` | which building skill gets the pack; reference is not copy | step 7 |
 | `fixtures/demo/` | a generic demo board for the selftest | selftest |
-| `bin/design-board` | the launcher (plugin level) | every `design-board` call |
+| `scripts/launchers/design-board` | the launcher (plugin level) | every `design-board` call |
 
 Absolute path when needed: `${CLAUDE_PLUGIN_ROOT}/skills/design-direction-architect/`

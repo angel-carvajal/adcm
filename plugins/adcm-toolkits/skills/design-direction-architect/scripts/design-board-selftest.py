@@ -8,7 +8,7 @@ Every case works on a throwaway `tempfile` copy of fixtures/demo (Acme, Provider
 images written here with zlib + struct, runs design-board.py as a subprocess (PYTHONDONTWRITEBYTECODE=1) and
 prints `PASS|FAIL|SKIP <case> [- why]`, then the tally. Exit code 1 when any case FAILs.
 
-The capture cases (doctor-shape, capture-smoke, variants-shots) go through bin/design-board; they SKIP when the
+The capture cases (doctor-shape, capture-smoke, variants-shots) go through scripts/launchers/design-board; they SKIP when the
 launcher or capture.mjs is absent, and the two that open a browser SKIP unless `design-board doctor` says ready.
 thumbs-tool SKIPs without sips or magick. --keep leaves the temp trees on disk.
 """
@@ -31,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
 PLUGIN = os.path.dirname(os.path.dirname(SKILL))
 DEMO = os.path.join(SKILL, "fixtures", "demo")
-BIN = os.path.join(PLUGIN, "bin", "design-board")
+BIN = os.path.join(PLUGIN, "scripts", "launchers", "design-board")
 CAPTURE = os.path.join(HERE, "capture.mjs")
 BUILD_OUTPUTS = {"board.html", "shots", "tokens.css", "tokens.json", "artifacts.json", "decisions.md", "references.md"}
 TABS = ("options", "refs", "market", "method", "tokens")
@@ -193,7 +193,7 @@ _doctor = {}
 
 def doctor(c):
     if not (os.path.isfile(BIN) and os.path.isfile(CAPTURE)):
-        raise Skip("bin/design-board or capture.mjs not present")
+        raise Skip("scripts/launchers/design-board or capture.mjs not present")
     if "res" not in _doctor:
         _doctor["res"] = c.run("doctor", "--out", c.root, cmd=[BIN], timeout=120)
     return _doctor["res"]
@@ -764,7 +764,7 @@ def run_case(fn, script, keep):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Behavioural tests for design-board.py and bin/design-board")
+    ap = argparse.ArgumentParser(description="Behavioural tests for design-board.py and scripts/launchers/design-board")
     ap.add_argument("--script", default=os.path.join(HERE, "design-board.py"), help="the design-board.py to test")
     ap.add_argument("--only", help="run a single case by name")
     ap.add_argument("--keep", action="store_true", help="leave the temp trees on disk")

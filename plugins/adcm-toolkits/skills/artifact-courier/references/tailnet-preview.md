@@ -1,6 +1,6 @@
 # tailnet-preview: a preview link that works off the LAN
 
-`tailnet-preview` (`scripts/tailnet_preview.py`, stdlib Python 3.9+, launcher `bin/tailnet-preview`) keeps a project's
+`tailnet-preview` (`scripts/tailnet_preview.py`, stdlib Python 3.9+, launcher `scripts/launchers/tailnet-preview`) keeps a project's
 local dev server running after the session (detached, the Mac kept awake by `caffeinate`) and maps it with
 `tailscale serve` to a tailnet-only HTTPS URL, `https://<machine>.<tailnet>.ts.net:<port>/`, so the owner can open the
 preview from the phone on any network. Only devices signed in to the owner's own tailnet reach it: it never runs
@@ -40,7 +40,7 @@ Claude cannot do these steps. Sources: Tailscale's [macOS variants](https://tail
 10. Other VPN clients on the Mac (corporate or commercial) can claim 100.64.0.0/10 too. Keep them disconnected while
     the phone uses a preview; if a link fails while one is up, disconnect it and retry, look for a competing route
     with `netstat -rn | grep 100.64`, and retry curl with `--noproxy '*'`.
-11. Optional: the auto-mode exception and the footer badge in `bin/README.md`.
+11. Optional: the auto-mode exception and the footer badge in `scripts/launchers/README.md`.
 
 ## 2. Commands and profile
 

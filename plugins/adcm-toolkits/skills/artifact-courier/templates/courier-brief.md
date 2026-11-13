@@ -1,7 +1,7 @@
 # COURIER BRIEF (fill every {{...}}; this file is the Agent prompt)
 # Agent(subagent_type: "adcm-toolkits:courier") (no plugin in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief). One brief per batch, sequential.
 # REGEN: yes only in the FIRST courier, COMMIT: yes only in the LAST (both on a single batch). Preview/Tailnet/Media: last brief only.
-# Preflight is the bare `courier-preflight` (plugin bin/ on PATH; nothing before it). No plugin: `python3 {{skill_dir}}/scripts/courier_preflight.py` in its place.
+# Preflight is the bare `courier-preflight` (plugin scripts/launchers/ on PATH; nothing before it). No plugin: `python3 {{skill_dir}}/scripts/courier_preflight.py` in its place.
 
 TASK: Delivery close for {{docs_dir}}. Follow {{skill_dir}}/references/procedure.md, steps 1-10.
   Registry: {{docs_dir}}/artifacts.json

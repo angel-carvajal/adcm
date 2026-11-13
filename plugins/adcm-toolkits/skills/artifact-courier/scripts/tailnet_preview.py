@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """tailnet_preview - keep a project's dev server alive after the session and map it to a tailnet-only HTTPS URL.
 
-Stdlib only, Python 3.9+. `bin/tailnet-preview` runs it; `--help` prints the grammar.
+Stdlib only, Python 3.9+. `scripts/launchers/tailnet-preview` runs it; `--help` prints the grammar.
 
   doctor   python, lsof, caffeinate, LAN IP, state dir and Tailscale (version, login, MagicDNS, HTTPS
            certificates, serve status); `ready` means `up` can map a tailnet URL.
