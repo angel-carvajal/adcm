@@ -11,7 +11,7 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
 unknown → the whole value is `_pending — owner sets it_` (no forge) and the final message's "Para ti" lists it.
 -->
 # {{project_name}} — Execution protocol ({{initiative_title}})
-> **Protocol:** adcm-toolkits 0.20.0
+> **Protocol:** adcm-toolkits 0.21.0
 > **Reviewer:** {{reviewer_handle}} ({{forge}}) · **Merge policy:** wait
 
 > **What this is.** The operating manual of the build. It defines HOW the catalog in
@@ -278,7 +278,7 @@ shared helper and its named consumers ARE in scope when the manifest lists them.
 secrets in code/commits. When the simplify pass has run and the DoD-auto is green
 AFTER it: <open the MR and assign it to the Reviewer — never merge it (§3)>, then run the FULL doc-sync at close (§2b — "append the
 logbook" means ALL of it) and COMMIT AND PUSH it; only then delegate the delivery
-close to one `adcm-toolkits:courier` per batch (normally 1; `sonnet` fixed, §2b step 7) and finish with the
+close to one `adcm-toolkits:courier` per batch (normally 1; `sonnet` fixed, §2b step 7) then notify the owner (§2b step 5: `PushNotification`, `Claude finished in <folder>`, or `Claude needs you in <folder>` when the stop needs the owner or a gate failed; with `status: "proactive"`; load it with `ToolSearch` `select:PushNotification`; absent → skip; "not sent" is fine, never retry; never from a sub-agent) and finish with the
 pending DoD-human lines (the MR to merge among them) and, AS THE LAST LINES, the links block of the LAST courier RETURN (once per close, §2b).
 ```
 
@@ -345,7 +345,9 @@ merges the wave's MR) — updates ALL plan docs in ONE pass, one Conventional co
    **Media before the final message**: the courier returns the screenshots of the VISUAL
    CHECK (a GIF when the feature spans several screens) as `MEDIA: unsent: <paths>` and
    you send them with SendUserFile (sub-agents do not have that tool); the
-   narrative comes first, then the files, then a SHORT final message — the pending
+   narrative comes first, then the files, then one `PushNotification` (`Claude finished in <folder>`, or
+   `Claude needs you in <folder>` when the stop needs the owner or a gate failed; with `status: "proactive"`; deferred: `ToolSearch` `select:PushNotification`;
+   absent → skip; "not sent" is fine, never retry; never from a sub-agent), then a SHORT final message — the pending
    DoD-human lines and then the block — so on a phone {{owner}} sees the media and
    links without scrolling back up; nothing follows the block.
    The `artifact-guard` Stop hook blocks the close when a courier RETURN reached the turn and

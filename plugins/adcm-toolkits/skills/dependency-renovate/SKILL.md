@@ -52,8 +52,8 @@ the fix.
    plugin, docs-repo push. It returns `PLUGIN: <p>@<mk> a → b`; then run `claude plugin marketplace update <mk>` and
    `claude plugin update <p>@<mk>`.
 6. **Gate** (1 Opus auditor, `templates/auditor-brief.md`): `ship` or `fix-first`. Findings go back by `SendMessage`; a fix on wave N
-   is merged up the stack; one re-audit at most.
-7. **Handover**: `glab mr update <iid> --ready` per MR in merge order, the PNGs of changed routes with `SendUserFile`, the `Para ti`
+   is merged up the stack; one re-audit at most; still `fix-first` after it → `PushNotification` `Claude needs you in <folder>` (with `status: "proactive"`; deferred: `ToolSearch` `select:PushNotification`; absent → skip; never retry).
+7. **Handover**: `glab mr update <iid> --ready` per MR in merge order, the PNGs of changed routes with `SendUserFile`, then, only on verdict `ship`, one `PushNotification` (`Claude finished in <folder>`, `status: "proactive"`), then the final message with the `Para ti`
    lines. MRs are named by iid; there is no links block.
 
 Modes: **dry run** (`dry run`, `sin push`): phases 0-6 with no push and no MR, branches stay local · **open run** (MRs labelled

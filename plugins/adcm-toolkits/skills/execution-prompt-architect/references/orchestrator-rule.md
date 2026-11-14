@@ -33,6 +33,16 @@ decides/integrates. It does NOT execute the task itself:
 - **Claude never merges.** A wave ends with its MR open, pipeline green, simplify pass done and assigned to the Reviewer (`> **Reviewer:**` in execute.md); the merge is a DoD-human item and wave N+1 starts only after MR N is merged (merge policy: wait). This applies to the waves' code MRs — the docs repo (ai-brain, any of its three positions) and the marketplaces commit and push to main directly.
 - The links block appears exactly once per delivery close — in the orchestrator's final message, after the last courier RETURN. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker; with several couriers (batches, `SendMessage` replies) only the last RETURN's block is pasted. No agent other than the courier returns URLs.
 
+## Notify the owner
+Only the main session notifies (no brief asks a sub-agent to). When a turn ends on (1) a delivery close, (2) a stop that needs the
+owner — a decision, a permission, a DoD-human step — or (3) a failed gate — auditor `fix-first`, DoD-auto red — call the
+native `PushNotification` tool ONCE, right BEFORE the final message (after any media): nothing follows the links block.
+- Fixed text, one line: `Claude finished in <folder>` for (1), `Claude needs you in <folder>` for (2) and (3); `<folder>` is the
+  project directory's name. No wave detail, no markdown. Pass `status: "proactive"`.
+- It is deferred: load it with `ToolSearch` query `select:PushNotification`. No such tool → skip silently.
+- A "not sent" result means the owner is at the terminal: fine, never retry, never mention it.
+- One per stop. If the plugin's Stop hook asks for it in a turn you already notified, end the turn with no text.
+
 ## Session start: the status digest
 
 When the user opens or resumes a project ('where did we leave off', 'dónde nos quedamos',

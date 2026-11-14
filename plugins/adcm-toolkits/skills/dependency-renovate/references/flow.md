@@ -194,14 +194,14 @@ conflicting or pipeline-less (`nopipeline(!n)`) MR · no secrets in diffs, MR bo
   fresh `--verify` values (without them the row reads `not recorded`) and `git add` the file; the entry is re-derived from the lockfile.
   Finish with `git commit --no-edit`.
 - At most 1 re-audit, by `SendMessage` to the same auditor; it covers the whole stack. Whatever is still `fix-first` goes to the owner as
-  `Para ti`.
+  `Para ti`, and one `PushNotification` `Claude needs you in <folder>` (with `status: "proactive"`; deferred: `ToolSearch` `select:PushNotification`; absent → skip; "not sent" is fine, never retry).
 
 ## 7 · Handover
 
 - Live run with verdict `ship`: `glab mr update <iid> --ready` per MR in merge order, after `deps-check status <repo>` shows no failed,
   conflicting or pipeline-less MR (`STATUS: ok(!a,!b)`). `STATUS: unparsed` (exit 2) means glab is missing, unauthenticated or cannot
   resolve the host (an SSH-alias remote may need `GITLAB_HOST` or `-R`): a `Para ti` line.
-- The PNGs of changed routes (`diff-<slug>.png` and the after shots) go out with `SendUserFile`: sub-agents cannot.
+- The PNGs of changed routes (`diff-<slug>.png` and the after shots) go out with `SendUserFile`: sub-agents cannot. After them, only on verdict `ship` (a `fix-first` stop already notified in §6), one `PushNotification` (`Claude finished in <folder>`; same status, load and skip rules as §6), then the final message.
 - The final message names MRs by iid (no links block: no artifacts) and carries the `Para ti` lines:
   - merge order `MR !a → !b → !c`: each merge retargets the next MR and clears its head pipeline, so the Reviewer re-runs it;
   - the never-auto decisions and the runtime decision (EOL date, candidate LTS lines);

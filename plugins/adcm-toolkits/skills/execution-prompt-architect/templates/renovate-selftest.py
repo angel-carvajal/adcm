@@ -34,7 +34,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RELEASE = "0.20.0"  # what plugin.json, the template Protocol line and __version__ must all say
+RELEASE = "0.21.0"  # what plugin.json, the template Protocol line and __version__ must all say
 VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
@@ -62,6 +62,7 @@ MERGE_RULE = ("Every wave ends in an MR/PR for the Reviewer named in the header;
 MERGE_OLD = "| NO-gate | commit without push for review |"  # the pre-0.16 §3 row
 AUTO_MERGE = "NO-gate waves: auto-merge the MR when the pipeline is green."  # the retired policy text
 AUTO_MERGE_S7 = "Wave policy: auto-merge the MR if pipeline green."  # the retired text as a §7 prompt carries it
+NOTIFY_LINE = "Phone ping: PushNotification once per long turn, only when the hook asks."
 LINKS_ONCE = "The courier's links block is pasted exactly once per delivery close, as the last lines of the final message."
 GUARD_TPL = "# fake template artifact-guard.py (selftest v1)\n"
 MERGE_GUARD = "# merge-guard hook (selftest)\n"
@@ -298,7 +299,7 @@ def opening(p, where="s2"):
 EXEC_DEFAULTS = dict(protocol=VERSION, types=TYPES, digest=True, last_log="s4", nxt="Next", blk="blocked",
                      rule=True, skills=(), ctx="business-init-acme", prose=(), es=False, trap=False, sim=False,
                      wrap=False, hdrs={}, outside=(), appendix=(),
-                     reviewer=True, merge_rule=True, links_once=True, automerge=False, s7text={}, map_step=True)
+                     reviewer=True, merge_rule=True, links_once=True, automerge=False, s7text={}, map_step=True, notify=True)
 
 
 def exec_doc(waves, **o):
@@ -357,6 +358,8 @@ def exec_doc(waves, **o):
     if p["map_step"]:
         L += ["6. **map** — a wave that touched code runs `map-refresh --project <root> --brain <dir>`."]
     L += [""]
+    if p["notify"]:
+        L += [NOTIFY_LINE, ""]
     if p["links_once"]:
         L += [LINKS_ONCE, ""]
     L += ["## 3. Delivery / merge policy", ""]
@@ -430,7 +433,7 @@ def fresh(ctx, name, waves=W3, ex=None, tk=None, rows=None, under="", **kw):
 
 
 LEGACY_FLAGS = dict(protocol=None, types=(), digest=False, last_log=None, nxt=None, blk=None, rule=False,
-                    reviewer=False, merge_rule=False, links_once=False, map_step=False)
+                    reviewer=False, merge_rule=False, links_once=False, map_step=False, notify=False)
 
 
 def legacy_08(ctx, name, under="", scripts="none"):
@@ -468,7 +471,7 @@ def count_h2(text):
 
 MARKERS_ON = {"digest_line": True, "last_log_s4": True, "next_label": True, "blocked_label": True,
               "model_rule": True, "protocol_line": True, "reviewer_line": True, "merge_rule": True, "links_once": True,
-              "map_step": True}
+              "map_step": True, "notify_rule": True}
 
 
 def markers_check(t, d, **want):
@@ -586,7 +589,7 @@ def case_legacy_011(ctx, t):
         t.eq(blk(d, "execute", "state"), "partial", "execute.state")
         markers_check(t, d, types={k: False for k in TYPES}, next_label=False, blocked_label=False,
                       model_rule=False, protocol_line=False, reviewer_line=False, merge_rule=False, links_once=False,
-                      map_step=False)
+                      map_step=False, notify_rule=False)
         t.eq(d.get("needed"), ["execute"], "needed")
 
 
@@ -634,9 +637,9 @@ def case_merge_markers(ctx, t):
     """The Reviewer header line, the §3 `Claude never merges` rule, the §2b `exactly once per delivery close` rule
     (0.16.0) and the §2b `map-refresh` call (map-step)."""
     names = {"reviewer_line": "reviewer-line", "merge_rule": "merge-rule", "links_once": "links-once",
-             "map_step": "map-step"}  # json key -> FLAGS text
+             "map_step": "map-step", "notify_rule": "notify-rule"}  # json key -> FLAGS text
     option = {"reviewer_line": "reviewer", "merge_rule": "merge_rule", "links_once": "links_once",
-              "map_step": "map_step"}  # json key -> exec_doc switch
+              "map_step": "map_step", "notify_rule": "notify"}  # json key -> exec_doc switch
 
     def go(tag, ex, rc=1):
         """One current brain with exactly one thing different in execute.md (rc 1: needed == [execute], partial)."""

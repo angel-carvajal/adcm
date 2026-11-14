@@ -2,7 +2,7 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json, scripts/ and map/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.20.0) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.21.0) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
 --copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
 from this report, never by this script.
@@ -42,7 +42,8 @@ Blocks (ok | missing | partial | outdated | n/a)
              `> **Protocol:**` line, SKILLS line per pending wave of section 7; since 0.16.0 also the
              `> **Reviewer:**` header line (reviewer-line), `Claude never merges` inside section 3
              (merge-rule), `exactly once per delivery close` in section 2b (links-once); since 0.19.0 also a
-             `map-refresh` call in section 2b (map-step); the retired
+             `map-refresh` call in section 2b (map-step); since 0.21.0 also the `PushNotification`
+             literal in section 2b (notify-rule); the retired
              automatic-merge policy text inside section 3 or the section 7 prompt of a pending wave (not a ✅ one) is
              named in `lacks` (`auto-` followed by `merge`). A Reviewer
              value that is still the placeholder adds `· review: reviewer pending → owner sets @handle`
@@ -82,7 +83,7 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.20.0"
+__version__ = "0.21.0"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
@@ -95,7 +96,7 @@ NEED = ("missing", "partial", "unparsed", "needed", "cache-dep")
 FLAGS = (("digest_line", "digest-line"), ("last_log_s4", "last-log-s4"), ("next_label", "next-label"),
          ("blocked_label", "blocked-label"), ("model_rule", "model-rule"), ("protocol_line", "protocol-line"),
          ("reviewer_line", "reviewer-line"), ("merge_rule", "merge-rule"), ("links_once", "links-once"),
-         ("map_step", "map-step"))
+         ("map_step", "map-step"), ("notify_rule", "notify-rule"))
 RETIRED = "auto" + "-merge"  # the pre-0.16 policy text, built from parts so grepping for it finds only stale docs
 RETIRED_RX = re.compile(RETIRED.replace("-", "-?"), re.I)
 DOCS_ES = ("propuesta-ejecutiva.md", "plan-maestro.md", "plan-detallado.md")
@@ -415,6 +416,7 @@ def read_execute(text, glyphs):
          'protocol_line': found == TARGET, 'reviewer_line': rev is not None,
          'merge_rule': 'Claude never merges' in sec3, 'links_once': 'exactly once per delivery close' in sec2b,
          'map_step': bool(s2b) and bool(MAP_STEP.search(sec2b)),
+         'notify_rule': 'PushNotification' in sec2b,
          'auto_merge': bool(RETIRED_RX.search(sec3)) or retired_s7,
          'reviewer_pending': rev is not None and (not rev_val or bool(PLACEHOLDER.search(rev_val))),
          'skills_lines': {'have': have, 'pending_waves': pending}}

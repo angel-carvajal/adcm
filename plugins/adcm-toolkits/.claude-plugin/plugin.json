@@ -1,7 +1,7 @@
 {
   "name": "adcm-toolkits",
   "description": "Public ADCM toolkits for Claude Code: planning and execution prompts, code and business context generators, council, design direction, dependency renovation and delivery.",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "author": {
     "name": "Angel Carvajal"
   }

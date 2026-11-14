@@ -37,7 +37,7 @@ the conversation has not read, so the whole live page (40 KB to 1 MB) lands in t
 4. `Agent(subagent_type: "adcm-toolkits:courier", prompt: <brief>)`, in every tier (fixes `sonnet`; no plugin
    in this session → `Agent(subagent_type: "general-purpose", model: "sonnet")` with the same brief).
 5. The courier cannot send files (sub-agents have no `SendUserFile`): take its `MEDIA: unsent: <paths>` and `SendUserFile` them
-   BEFORE the final message. The links block appears exactly once per delivery close — in the orchestrator's final message,
+   BEFORE the final message; then, still BEFORE it, one `PushNotification` (`execution-prompt-architect/references/orchestrator-rule.md`, "Notify the owner"). The links block appears exactly once per delivery close — in the orchestrator's final message,
    after the last courier RETURN: paste all after `=== LINKS ===` of the LAST RETURN only, verbatim, as the LAST lines (the close
    ends with it); with several couriers (batches, `SendMessage` replies) earlier RETURNs' blocks are not pasted. Progress turns,
    'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker. Above the block: narrative, hashes, human DoD,

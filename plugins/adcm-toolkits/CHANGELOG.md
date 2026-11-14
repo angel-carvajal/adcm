@@ -1,5 +1,31 @@
 # Changelog — adcm-toolkits
 
+## 0.21.0 — 2026-11-13
+
+- **Phone notification after long turns.** New Stop hook `scripts/notify-stop.py`, registered in the plugin's
+  `hooks/hooks.json`. When a turn ran longer than `ADCM_NOTIFY_MIN_SECONDS` (default 300) and no notification was
+  sent in it, the hook asks the main session to call the native `PushNotification` tool once, with `status:
+  "proactive"` and a fixed minimal text (`Claude finished in <folder>` / `Claude needs you in <folder>`; the latter
+  when the final message ends with a question).
+- **Links stay last.** When the final message ends with the links block, the hook only emits a desktop notification
+  (terminal sequence) instead of asking for a tool call, so the links remain the last lines.
+- **Silent cases and switch-off.** `ADCM_NOTIFY=off` disables it. It also stays silent while background tasks or
+  scheduled wake-ups are pending, on a re-entrant stop, in headless (`-p` / SDK) runs, and on Bedrock, Vertex and Foundry. No state file, no external service, no secrets.
+- **"Notify the owner" rule.** `orchestrator-rule.md`, the artifact-courier skill, `execute.md.tmpl` (GUARDRAILS &
+  CLOSE and section 2b step 5), `wave-prompt.tmpl`, dependency-renovate (gate and handover) and `renovate-brief.md`
+  now tell the main session to notify once, right before the final message, on a delivery close, a stop that needs
+  the owner, or a failed gate; never from a sub-agent.
+- **Renovate marker.** `renovate_check.py` gains the `notify-rule` marker: brains generated before 0.21.0 report
+  `partial` until renovated.
+- **Selftests.** New `scripts/notify-stop-selftest.py` (27 checks); the renovate selftest covers the new marker.
+- **Version constants.** `plugin.json`, the `execute.md.tmpl` Protocol line and the version strings of
+  `courier_preflight.py`, `renovate_check.py`, `status_digest.py` and the renovate selftest read 0.21.0.
+
+Notes: existing brains run "Renueva el brain al protocolo vigente" (renovate) once to pick up the new rule. The hook
+ships with the plugin and needs no registration; in an old session, run `/reload-plugins` or restart once. Phone
+delivery needs Remote Control connected and the `/config` toggle "Push when Claude decides"; the tool skips itself
+when you are at the terminal.
+
 ## 0.20.0 — 2026-11-12
 
 - **Launchers moved to `scripts/launchers/`.** claude.ai and Cowork refuse any plugin with a top-level `bin` folder, so

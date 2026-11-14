@@ -321,7 +321,7 @@ block; never publish yourself.
 CLOSE MESSAGE, in this order: (1) the narrative, with repo paths and commit hashes,
 one line each — reference, not delivery; (2) the media, sent by you from the courier's `MEDIA: unsent` list (a short
 final message follows it, so {{owner}} sees files + links on a phone without
-scrolling back up); (3) the FINAL message: the pending DoD-human lines (`Para ti`) marking those
+scrolling back up); (3) right before the final message, call `PushNotification` once (with `status: "proactive"`; deferred: `ToolSearch` `select:PushNotification`; absent → skip; "not sent" is fine, never retry): `Claude finished in <folder>`, or `Claude needs you in <folder>` when the stop needs the owner or a gate failed, never from a sub-agent; (4) the FINAL message: the pending DoD-human lines (`Para ti`) marking those
 tasks blocked until the Reviewer merges and {{owner}} confirms —
 - MR !N → review and merge ({{reviewer_handle}})
 - {{ID}}: {{other human_only_actions, or omit the line when none}}

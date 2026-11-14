@@ -1,1 +1,1 @@
-{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"\"${CLAUDE_PLUGIN_ROOT}/scripts/launchers-path.sh\"","timeout":5}]}]}}
+{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"\"${CLAUDE_PLUGIN_ROOT}/scripts/launchers-path.sh\"","timeout":5}]}],"Stop":[{"hooks":[{"type":"command","command":"command -v python3 >/dev/null 2>&1 && python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/notify-stop.py\" || true","timeout":5}]}]}}
