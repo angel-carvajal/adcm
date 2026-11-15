@@ -450,6 +450,126 @@ def case_mobile_topbar_css(ctx, t):
     t.ok(re.search(r"<!-- prompts-html shell v\d+ -->\s*<style>", tmpl) is not None, "shell marker sits right before <style>")
 
 
+# ------------------------------------------------------------------ plan-audit gate and phase cards
+TASK_MD = ("# Acme — Task tracker\n\n## Wave map\n\n| Status | Wave | Tasks |\n|---|---|---|\n"
+           "| ☐ | **W1** | T-W1-1 |\n| ☐ | **W2** | T-W2-1 |\n")
+
+
+def protocol_md(version, *blocks):
+    md = execute_md(*blocks)
+    return md.replace("# Acme — Execution protocol\n", "# Acme — Execution protocol\n\n> **Protocol:** adcm-toolkits "
+                      + version + "\n", 1) if version else md
+
+
+def seal_audit(ctx, brain):
+    ctx.write("brain/qa/plan-audit.md", "PLAN-AUDIT: PASS · contradictions 0 · open 0\n")
+    p = subprocess.run([sys.executable, os.path.join(os.path.dirname(ctx.script), "plan_audit.py"), "--brain", brain,
+                        "--seal"], capture_output=True, text=True, env=ctx.env)
+    assert p.returncode == 0, p.stdout + p.stderr
+
+
+def case_gate_blocks(ctx, t):
+    md = protocol_md("0.22.0", wave("W1", "Intake", "☐", "do it"))
+    b = ctx.brain("brain", md, TASK_MD)
+    r = ctx.run("W1", "prompts.html", b, "--init")
+    t.ok(r.rc != 0, "no audit report must block (rc != 0)")
+    t.has(r.text, "plan-audit gate", "message names the gate")
+    t.ok(not os.path.exists(ctx.path("prompts.html")), "nothing written when the gate blocks")
+    ctx.write("brain/qa/plan-audit.md", "PLAN-AUDIT: FAIL · contradictions 1 · open 0\n")
+    r = ctx.run("W1", "prompts.html", b, "--init")
+    t.ok(r.rc != 0 and not os.path.exists(ctx.path("prompts.html")), "FAIL report blocks too")
+
+
+def case_gate_passes_sealed(ctx, t):
+    b = ctx.brain("brain", protocol_md("0.22.0", wave("W1", "Intake", "☐", "do it")), TASK_MD)
+    seal_audit(ctx, b)
+    r = ctx.run("W1", "prompts.html", b, "--init")
+    t.eq(r.rc, 0, "sealed audit renders: " + r.text[:120])
+    t.lacks(r.text, "plan-audit", "no gate noise when fresh")
+    t.ok(os.path.exists(ctx.path("prompts.html")), "page written")
+
+
+def case_gate_warns_stale(ctx, t):
+    b = ctx.brain("brain", protocol_md("0.22.0", wave("W1", "Intake", "☐", "do it")), TASK_MD)
+    seal_audit(ctx, b)
+    ctx.write("brain/execute.md", protocol_md("0.22.0", wave("W1", "Intake", "☐", "do it differently")))
+    r = ctx.run("W1", "prompts.html", b, "--init")
+    t.eq(r.rc, 0, "stale only continues")
+    t.has(r.text, "plan-audit warning", "warning line")
+    t.has(r.text, "W1", "names the stale wave")
+    t.ok(os.path.exists(ctx.path("prompts.html")), "page still written")
+
+
+def case_gate_legacy_untouched(ctx, t):
+    for n, ver in enumerate((None, "0.21.0", "0.9.5")):
+        b = ctx.brain(f"brain{n}", protocol_md(ver, wave("W1", "Intake", "☐", "do it")), TASK_MD)
+        r = ctx.run("W1", f"p{n}.html", b, "--init")
+        t.eq(r.rc, 0, f"protocol {ver}: no audit needed")
+        t.lacks(r.text, "plan-audit", f"protocol {ver}: silent")
+        t.ok(os.path.exists(ctx.path(f"p{n}.html")), f"protocol {ver}: written")
+
+
+def case_gate_missing_sibling_blocks(ctx, t):
+    bindir = ctx.path("bin")
+    os.makedirs(bindir)
+    for f in ("prompts-regen.py", "prompts-html.tmpl"):
+        shutil.copy(os.path.join(os.path.dirname(ctx.script), f), bindir)
+    lone = os.path.join(bindir, "prompts-regen.py")
+    b = ctx.brain("brain", protocol_md("0.22.0", wave("W1", "Intake", "☐", "do it")), TASK_MD)
+    r = ctx.run("W1", "prompts.html", b, "--init", script=lone)
+    t.ok(r.rc != 0, "missing plan_audit.py blocks")
+    t.has(r.text, "plan-audit gate: plan_audit.py is missing next to prompts-regen.py — renovate the brain", "message")
+    t.ok(not os.path.exists(ctx.path("prompts.html")), "nothing written")
+    b2 = ctx.brain("brain2", protocol_md("0.21.0", wave("W1", "Intake", "☐", "do it")), TASK_MD)
+    r = ctx.run("W1", "p2.html", b2, "--init", script=lone)
+    t.eq(r.rc, 0, "legacy protocol does not need the sibling")
+
+
+def case_phase_glyph_after_title(ctx, t):
+    md = execute_md("### W2 · a — Implement + DoD ✅ DONE\n\n```text\nx\n```",
+                    "### W2 · b — Gate ☐\n\n```text\ny\n```")
+    r, out = build(ctx, "W2", md)
+    t.eq(r.rc, 0, r.text[:100])
+    t.has(card(out, "w2-a"), "<h2>Implement + DoD</h2>", "glyph is not part of the title")
+    t.eq(badge(card(out, "w2-a")), "✅ DONE", "status read from the glyph without a dash")
+    t.eq(pres(card(out, "w2-a")), [], "✅ phase collapses")
+    t.eq(badge(card(out, "w2-b")), "☐", "pending phase")
+
+
+def case_phase_cards(ctx, t):
+    md = execute_md(
+        "### W1 · a — Implement — ✅ DONE\n\n```text\nStart a clean session — W1 · PHASE a\n```",
+        "### W1 · b — Gate — ☐ pending\n\n```text\nStart a clean session — W1 · PHASE b <x>\n```",
+        "### Wave W2 — Legacy — ☐ pending\n\n```text\nlegacy body\n```")
+    r, out = build(ctx, "W1,W2", md)
+    t.eq(r.rc, 0, "build: " + r.text[:120])
+    t.eq(card_ids(out), ["w1-a", "w1-b", "w2"], "one card per phase, legacy keeps its id")
+    t.eq([n[0] for n in nav(out)], ["w1-a", "w2"], "one nav entry per wave")
+    a, b = card(out, "w1-a"), card(out, "w1-b")
+    t.has(a, 'class="tid">W1 · a<', "phase tid")
+    t.has(a, "Implement", "phase title")
+    t.eq(pres(a), [], "closed phase collapses to a summary")
+    t.eq([i for i, _ in pres(b)], ["pre-w1-b"], "open phase keeps its pre")
+    t.eq(copy_targets(b), ["pre-w1-b"], "copy button targets the phase pre")
+    t.has(b, "&lt;x&gt;", "prompt escaped")
+    t.eq(card(out, "w2"), legacy_card("W2", "Legacy", "☐", "legacy body"), "legacy card byte-identical")
+    r2 = ctx.run("W1,W2", "prompts.html", ctx.path("brain"), "--check")
+    t.eq(r2.rc, 0, "phase page is idempotent: " + r2.text[:100])
+    full, outf = build(ctx, "W1,W2", md, "brain2", "full.html", "--closed", "full")
+    t.eq([i for i, _ in pres(card(outf, "w1-a"))], ["pre-w1-a"], "--closed full keeps the closed phase prompt")
+
+
+def case_phase_nav_aggregate(ctx, t):
+    done = lambda ph: f"### W1 · {ph} — T — ✅ DONE\n\n```text\nx\n```"
+    r, out = build(ctx, "W1", execute_md(done("a"), done("b")))
+    t.eq(nav(out), [("w1-a", "W1 ✅")], "all phases done → ✅")
+    mixed = execute_md(done("a"), "### W1 · b — T — 🔄 IN PROGRESS\n\n```text\ny\n```")
+    r, out = build(ctx, "W1", mixed, "brain2", "p2.html")
+    t.eq(nav(out), [("w1-a", "W1 ★")], "any phase in progress → ★")
+    r = ctx.run("W1,W9", "p2.html", ctx.path("brain2"))
+    t.ok(r.rc != 0 and "W9" in r.text, "unknown wave still reported")
+
+
 CASES = [
     ("ids_lowercase_suffix", case_ids_lowercase_suffix),
     ("multi_delivery", case_multi_delivery),
@@ -463,6 +583,14 @@ CASES = [
     ("title_fallback_lowercase_suffix", case_title_fallback_lowercase_suffix),
     ("shell-rebuild-on-version", case_shell_rebuild_on_version),
     ("mobile-topbar-css", case_mobile_topbar_css),
+    ("gate-blocks", case_gate_blocks),
+    ("gate-passes-sealed", case_gate_passes_sealed),
+    ("gate-warns-stale", case_gate_warns_stale),
+    ("gate-legacy-untouched", case_gate_legacy_untouched),
+    ("gate-missing-sibling-blocks", case_gate_missing_sibling_blocks),
+    ("phase-glyph-after-title", case_phase_glyph_after_title),
+    ("phase-cards", case_phase_cards),
+    ("phase-nav-aggregate", case_phase_nav_aggregate),
 ]
 
 

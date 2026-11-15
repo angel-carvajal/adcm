@@ -11,6 +11,10 @@ at now-300, then assistant text / tool_use entries), runs the guard as a subproc
 HOME=T and stdin {cwd, transcript_path, stop_hook_active:<spec "active", default false>}, and
 prints `PASS <case>` or `FAIL <case>: <why>`. Exit code 1 when any case fails.
 
+v7 (flush retry): spec `late_final=<seconds>` writes the transcript WITHOUT the final assistant message and
+appends it that many seconds after the guard starts (a message not yet flushed); `elapsed=(lo, hi)` asserts the
+guard's wall time. `--mutation` removes the retry in a temp copy and demands the late-write case then FAIL.
+
 v6 (links block once per delivery close): the guard demands the links block only when a courier
 RETURN (a `=== LINKS ===` line followed by Markdown link lines) reached the main transcript in
 the current turn (or the main session itself published), and it judges the LAST assistant message.
@@ -31,7 +35,9 @@ import os
 import shutil
 import subprocess
 import sys
+import re
 import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -260,7 +266,11 @@ def build(now, case):
             if origin:
                 att["origin"] = origin
             entries.append({"type": "attachment", "timestamp": iso(now - 40), "attachment": att})
-        entries.append(say(now - 20, case.get("text", "done")))
+        final = say(now - 20, case.get("text", "done"))
+        if case.get("late_final") is not None:
+            case["_late_line"] = json.dumps(final) + "\n"  # appended later by run_spec
+        else:
+            entries.append(final)
         write(transcript, "\n".join(json.dumps(e) for e in entries) + "\n")
     return tmp, proj, transcript, brain
 
@@ -509,6 +519,19 @@ def make_cases(now):
          lambda rc, out: expect_notice(rc, out, ["delega"], BANNED),
          [(dict(active=True, mtimes=task_touched, courier=("pending", []), text="Courier launched."),
            expect_silent)]),
+        # ---- v7: a final message not yet flushed to the transcript must not read as "links missing" ----
+        ("late_final_flushed_silent",
+         dict(mtimes=task_touched, courier=ret_root, text=closing_text, late_final=0.8, elapsed=(0.5, 1.9)),
+         expect_silent, None),
+        ("late_final_never_blocks",
+         dict(mtimes=task_touched, courier=ret_root, text=closing_text, late_final=30, elapsed=(1.8, 8)),
+         lambda rc, out: expect_block(rc, out, "Falta el BLOQUE"), None),
+        ("format_error_no_retry",
+         dict(mtimes=task_touched, text=closing_text + "\n\nAll set, nothing else.", courier=ret_root, elapsed=(0, 1.5)),
+         lambda rc, out: expect_block(rc, out, "NO cumple"), None),
+        ("late_final_active_notice",
+         dict(mtimes=task_touched, courier=ret_root, text=closing_text, late_final=30, active=True, elapsed=(1.8, 8)),
+         lambda rc, out: expect_notice(rc, out, ["Falta el BLOQUE"], BANNED), None),
         # ---- fix wave (audit): five more states ----
         # S1: stale HTML while a courier is still pending: the FIRST stop stays silent (no "delega" over a
         # courier already on its way); its RETURN wakes a new stop that re-checks.
@@ -563,13 +586,49 @@ def run_spec(guard, now, spec, check):
     tmp = None
     try:
         tmp, proj, transcript, brain = build(now, spec)
-        rc, out, _err = run_guard(guard, tmp, proj, transcript, active=spec.get("active", False))
+        timer = None
+        if spec.get("late_final") is not None:
+            def append():
+                with open(transcript, "a", encoding="utf-8") as fh:
+                    fh.write(spec["_late_line"])
+            timer = threading.Timer(spec["late_final"], append)
+            timer.start()
+        t0 = time.time()
+        try:
+            rc, out, _err = run_guard(guard, tmp, proj, transcript, active=spec.get("active", False))
+        finally:
+            if timer:
+                timer.cancel()
+        elapsed = time.time() - t0
+        lo, hi = spec.get("elapsed", (0, 60))
+        if not lo <= elapsed <= hi:
+            return f"guard took {elapsed:.2f}s, expected between {lo}s and {hi}s"
         return check(rc, out)
     except Exception as exc:  # a broken harness is a failure, not a crash
         return f"harness error: {exc!r}"
     finally:
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+def mutation(guard, now):
+    """Mutant: the retry window is 0 s. The late-write case must then FAIL (the mutant is killed)."""
+    src = open(guard, encoding="utf-8").read()
+    mutant, n = re.subn(r"^FLUSH_RETRY_SECS = [0-9.]+", "FLUSH_RETRY_SECS = 0.0", src, flags=re.M)
+    if n != 1:
+        print("MUTATION retry_removed: constant FLUSH_RETRY_SECS not found")
+        return 2
+    d = tempfile.mkdtemp(prefix="guard-mutant-")
+    try:
+        path = os.path.join(d, "artifact-guard.py")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(mutant)
+        case = next(c for c in make_cases(now) if c[0] == "late_final_flushed_silent")
+        problem = run_spec(path, now, case[1], case[2])
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    print("KILLED retry_removed" if problem else "SURVIVED retry_removed")
+    return 0 if problem else 1
 
 
 def main():
@@ -583,6 +642,8 @@ def main():
         return 2
 
     now = time.time()
+    if "--mutation" in argv:
+        return mutation(guard, now)
     failed = 0
     for name, spec, check, extra in make_cases(now):
         # `extra`: further (spec, checker) scenarios of the same case; the case passes when all do.

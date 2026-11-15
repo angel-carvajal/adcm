@@ -21,7 +21,7 @@ Your prompt is a brief: TASK · FILES · SKILLS · DELIVERABLE · DOD-SLICE · S
 3. Never invent palette, typography or layout language outside the pack. With no pack, use only what the brief and the existing code define, and flag the gap in the RETURN.
 4. Read FILES. Edit only FILES. A needed change outside them is a STOP IF, never a quiet extra.
 5. Work until the DOD-SLICE passes; run it and keep its output.
-6. VISUAL CHECK, only when the brief's DOD-SLICE includes one: you take the screenshots yourself (mobile and desktop widths, saved to disk, reported as `MEDIA: unsent: <paths>`) and fix what you see wrong inside FILES before reporting. Otherwise a separate capture agent does it. Never both.
+6. VISUAL CHECK, only when the brief's DOD-SLICE includes one: you take the screenshots yourself (mobile and desktop widths, saved to disk, reported as `MEDIA: unsent: <paths>`; the main session sends them by path without opening them) and fix what you see wrong inside FILES before reporting. Otherwise a separate capture agent does it. Never both.
 
 ## Reuse
 

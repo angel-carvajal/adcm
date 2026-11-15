@@ -2,7 +2,7 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json, scripts/ and map/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.21.0) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.22.0) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
 --copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
 from this report, never by this script.
@@ -27,7 +27,7 @@ Usage
                     stats, text
 
 Blocks (ok | missing | partial | outdated | n/a)
-  SCRIPTS    the seven files of scripts/; a file that differs from its template is a project copy
+  SCRIPTS    the twelve files of scripts/; a file that differs from its template is a project copy
              (`custom`, informational: only a missing file makes the block needed). `cache-dep` (fix):
              a *.py or *.sh directly under scripts/ or .build/ whose text contains the plugin-cache
              path reads a templates copy that a cache purge deletes; JSON `blocks.scripts.cache_dep`
@@ -43,7 +43,10 @@ Blocks (ok | missing | partial | outdated | n/a)
              `> **Reviewer:**` header line (reviewer-line), `Claude never merges` inside section 3
              (merge-rule), `exactly once per delivery close` in section 2b (links-once); since 0.19.0 also a
              `map-refresh` call in section 2b (map-step); since 0.21.0 also the `PushNotification`
-             literal in section 2b (notify-rule); the retired
+             literal in section 2b (notify-rule); since 0.22.0 the phase protocol literals anywhere in execute.md:
+             `One clean session per phase` (phase-sessions), `HANDOFF: <path>` (handoff-token),
+             `docsync-apply --check` (docsync-check), `plan-audit --check` (plan-audit-check),
+             `**Main thread:**` (main-thread); the retired
              automatic-merge policy text inside section 3 or the section 7 prompt of a pending wave (not a ✅ one) is
              named in `lacks` (`auto-` followed by `merge`). A Reviewer
              value that is still the placeholder adds `· review: reviewer pending → owner sets @handle`
@@ -83,11 +86,12 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.21.0"
+__version__ = "0.22.0"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
-           "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py")
+           "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py", "plan_audit.py", "docsync_apply.py",
+           "handoff.md.tmpl", "docsync-brief.md", "plan-audit-brief.md")
 CACHE_MARK = "plugins" + "/cache/"  # built from parts: this file must not trip its own cache-dep check
 CACHE_FIX = "point the script to the local scripts/*.tmpl copies"
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
@@ -96,7 +100,12 @@ NEED = ("missing", "partial", "unparsed", "needed", "cache-dep")
 FLAGS = (("digest_line", "digest-line"), ("last_log_s4", "last-log-s4"), ("next_label", "next-label"),
          ("blocked_label", "blocked-label"), ("model_rule", "model-rule"), ("protocol_line", "protocol-line"),
          ("reviewer_line", "reviewer-line"), ("merge_rule", "merge-rule"), ("links_once", "links-once"),
-         ("map_step", "map-step"), ("notify_rule", "notify-rule"))
+         ("map_step", "map-step"), ("notify_rule", "notify-rule"),
+         ("phase_sessions", "phase-sessions"), ("handoff_token", "handoff-token"), ("docsync_check", "docsync-check"),
+         ("plan_audit_check", "plan-audit-check"), ("main_thread", "main-thread"))
+PHASE_LITERALS = (("phase_sessions", "One clean session per phase"), ("handoff_token", "HANDOFF: <path>"),
+                  ("docsync_check", "docsync-apply --check"), ("plan_audit_check", "plan-audit --check"),
+                  ("main_thread", "**Main thread:**"))
 RETIRED = "auto" + "-merge"  # the pre-0.16 policy text, built from parts so grepping for it finds only stale docs
 RETIRED_RX = re.compile(RETIRED.replace("-", "-?"), re.I)
 DOCS_ES = ("propuesta-ejecutiva.md", "plan-maestro.md", "plan-detallado.md")
@@ -406,6 +415,7 @@ def read_execute(text, glyphs):
     rev_val = rev.group(1).split('·')[0].strip() if rev else ''  # the value before `· **Merge policy:** ...`
     flat = lambda lines: ' '.join(' '.join(lines).split())  # a sentence may wrap across lines
     sec3, sec2b = flat(prose[s3[0]:s3[1]]) if s3 else '', flat(labels)
+    whole = flat(prose)
     m = {'types': {t: seen(r'adcm-toolkits:%s\b' % t, prose) for t in TYPES},
          'digest_line': bool(s2) and seen(r'scripts/status_digest\.py\s+--brain', prose[s2[0]:s2[1]]),
          'last_log_s4': bool(s4) and seen(r'\bLAST LOG\b', prose[s4[0]:s4[1]]),
@@ -417,6 +427,7 @@ def read_execute(text, glyphs):
          'merge_rule': 'Claude never merges' in sec3, 'links_once': 'exactly once per delivery close' in sec2b,
          'map_step': bool(s2b) and bool(MAP_STEP.search(sec2b)),
          'notify_rule': 'PushNotification' in sec2b,
+         **{key: lit in whole for key, lit in PHASE_LITERALS},
          'auto_merge': bool(RETIRED_RX.search(sec3)) or retired_s7,
          'reviewer_pending': rev is not None and (not rev_val or bool(PLACEHOLDER.search(rev_val))),
          'skills_lines': {'have': have, 'pending_waves': pending}}

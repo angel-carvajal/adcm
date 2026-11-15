@@ -13,6 +13,12 @@ Six sub-agent types that fix the default model and the tool set of a delegation,
 | `researcher` | sonnet | all except Edit, Write, NotebookEdit | none | sourced investigation or browsing; pass `model: opus` per call for a deeper pass |
 | `digester` | sonnet | Read, Grep, Glob, Bash | none | status digest when the status script cannot parse the brain |
 
+## Hooks and media
+
+The plugin's `main-thread-guard` hook applies to the main session only; sub-agents (every agent in the table above) are exempt, except that none may write into the guard's state folder.
+
+Sub-agents that capture screenshots return `MEDIA: sent ...` or `MEDIA: unsent: <paths>`; the main session sends unsent paths with SendUserFile by path without opening them, because judging images is a sub-agent job and the guard denies image reads on the main thread.
+
 ## Two protocol rules
 
 Claude never merges an MR/PR and never pushes code to the default branch (the Reviewer merges; docs repos and marketplaces push to main directly), and only the courier returns links, exactly once per delivery close, in its RETURN.

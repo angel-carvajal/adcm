@@ -1,339 +1,357 @@
 <!--
-Template: one instantiated wave prompt (goes inside execute.md §7, in a ```text block).
+Template: the five phase prompts of ONE wave (they go inside execute.md §7). One clean session per phase:
+a implement + DoD · b gate · c gate fixes · d doc-sync + courier close · e production close. Each prompt goes
+under its own heading `### {{Wx}} · <phase> — <title>` followed by ONE ```text block; the PHASE markers below
+(`<!-- PHASE x … -->`) are for the generator and never reach execute.md.
+Which phases a wave gets: ⚠gate or advisory → a b c d e; NO-gate plain → a d e. EVERY wave has e: the production
+close when it deploys, else the mini merge close; d always ends with `Next phase: e`, e with `none`. A gate PASS skips c;
+c always goes back to b (advisory gate: c → d, no re-gate). Every prompt is SELF-CONTAINED: it opens with the §7 first line and the 3-line MAIN-THREAD
+GUARD note, carries only what its phase needs and ends with the PHASE CLOSE lines; a phase never continues
+into the next one in the same session.
 Rules when instantiating:
-- Every {{placeholder}} filled with REAL data from the analysis: exact task IDs, exact
-  commands that exist in that repo, exact paths. Never invent.
-- The six core sections are mandatory, in this order; `# VISUAL CHECK` is a mandatory
-  7th section between LOOP and WORKFLOW on UI waves — omit it otherwise. SCOPE embeds
-  the Step 3 investigation (the executing session must never re-derive file lists).
-  WORKFLOW is ALWAYS present — even if the executing session has no ultracode enabled,
-  the prompt itself instructs the delegation — and it opens with the fixed AGENT
-  BUDGET & ROLES block, followed by one `## Executor brief` per task pre-filled from
-  SCOPE (FILES, DOD-SLICE, FORBIDDEN) with placeholders for what the orchestrator
-  completes in session (DELIVERABLE, DESIGN DECISIONS, STOP IF), and closed by the
-  single `## Simplifier brief` block (pre-filled, ≤20 lines). Never emit a
-  WORKFLOW where the main session implements first, where an executor
-  self-approves, where the diff is audited by the executor's own tier, or whose
-  agents add up to more than 20 (investigators + executors + reviewers + the simplify
-  pass + verifier + the delivery courier(s) + the visual-check capture agent).
-  Executors are `adcm-toolkits:executor` (`sonnet`) on NO-gate waves and `executor` + `model: opus`
-  on ⚠gate waves; auditors are `adcm-toolkits:auditor` with `opus` until the quota of 10 (2 reserved:
-  the gate verifier and the simplify pass), then `model: sonnet`; `model` explicit on every call or an
-  `adcm-toolkits:*` type — a per-call `model` overrides the type's default, types fix the TOOL SET and
-  the tier rules still set the model; the delivery `adcm-toolkits:courier` is `sonnet` ALWAYS
-  (normally 1; each extra batch = 1 more of the 20, 0 quota), whatever the main session's tier.
-  A wave names `adcm-toolkits:executor-frontend` as its executor type on UI and frontend-code waves — when it loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload (~3.1k tokens);
-  every other NO-gate wave names `adcm-toolkits:executor`.
-- The Reuse and Map lines in SCOPE are COPIED from the task's card in detailed-plan.md,
-  never derived here; the executor brief repeats the comment ban in ONE line (the full
-  policy lives in detailed-plan §0); WORKFLOW carries the simplify step, and that pass
-  counts against the 20 and against the Opus quota.
-- SCOPE budget UNCHANGED: ~15 lines per task (hard cap 25 for legitimately multi-file
-  tasks), ≤60 per wave — the 1–2 line reuse verdict and the Map line live INSIDE the ~15. Overflow
-  (long symbol notes, the full consumer list of an extracted helper) stays in the
-  task's Scope manifest card in detailed-plan.md; the prompt keeps files + reuse
-  verdict + Map + census. Compress with brace-globs (`bold/{A,B,C}.tsx`) before dropping
-  content.
-- Write for Fable at high effort: dense, precise, zero ambiguity, no filler. Must
-  still be executable by any model.
-- Generate in the user's language; keep ALL section names in English (incl. VISUAL CHECK).
+- Every {{placeholder}} filled with REAL data from the analysis: exact task IDs, exact commands that exist in
+  that repo, exact paths. Never invent.
+- Phase a keeps the core sections in this order: GOAL · TASKS · SCOPE · LOOP · (VISUAL CHECK on UI waves only,
+  between LOOP and WORKFLOW) · WORKFLOW · GUARDRAILS & PHASE CLOSE. SCOPE embeds the Step 3 investigation (the
+  executing session never re-derives file lists). WORKFLOW is ALWAYS present and opens with AGENT BUDGET &
+  ROLES, then one `## Executor brief` per task pre-filled from SCOPE (FILES, DOD-SLICE, FORBIDDEN) with
+  placeholders for what the orchestrator completes in session (DELIVERABLE, DESIGN DECISIONS, STOP IF), closed
+  by the single `## Simplifier brief` (pre-filled, ≤20 lines). Never emit a WORKFLOW where the main session
+  implements first, where an executor self-approves, where the diff is audited by the executor's own tier,
+  or whose agents add up to more than 20 in ONE phase session.
+- Tiers: executors are `adcm-toolkits:executor` (`sonnet`) on NO-gate waves and `executor` + `model: opus` on
+  ⚠gate waves; `adcm-toolkits:executor-frontend` replaces `executor` on UI and frontend-code waves (the wave
+  loads design skills OR the task's FILES are frontend app code: components, pages, hooks/composables, client
+  services/stores; cost: the `frontend-design` preload, ~3.1k tokens). Auditors are `adcm-toolkits:auditor`
+  with `opus` until the quota of 10 per session (reserved: the simplify pass in a, the verifier in b), then
+  `model: sonnet`. The doc-sync executor and the delivery `adcm-toolkits:courier` are `sonnet` ALWAYS.
+  `model` explicit on every call or an `adcm-toolkits:*` type — a per-call `model` overrides the type's
+  default; types fix the TOOL SET, the tier rules still set the model.
+- The Reuse and Map lines in SCOPE are COPIED from the task's card in detailed-plan.md, never derived here; the
+  executor brief repeats the comment ban in ONE line (full policy: detailed-plan §0).
+- SCOPE budget UNCHANGED: ~15 lines per task (hard cap 25 for legitimately multi-file tasks), ≤60 per wave —
+  the reuse verdict and the Map line live INSIDE the ~15. Overflow stays in the task's Scope manifest card;
+  compress with brace-globs (`bold/{A,B,C}.tsx`) before dropping content.
+- Gate reports: `{{docs_dir}}/qa/gate-{{wx}}.md` with the wave id in lowercase (existing convention), later rounds
+  `qa/gate-{{wx}}-r<n>.md`, post-prod `qa/gate-{{wx}}-postprod.md` (`{{wx}}` = the wave id in lowercase).
+- plan-audit seals every heading block naming the wave, these §7 phase prompts included: it runs AFTER the §7 prompts
+  are written and BEFORE they are rendered or handed to the owner (skill Step 6b); phase a step 0 only checks the seal.
+- Same-phase rule (all phases): a phase that cannot finish hands off to ITSELF — `Result: partial | fail` and `Next
+  phase:` = that same phase, never `none` (`none` means the wave is finished and the digest refuses its prompt).
+- Budget per prompt: a ≤170 lines, b–e ≤90 lines each, before the SCOPE and checklist content is inlined.
+- `{{MAINTHREAD}}` `{{MAP}}` `{{SKILLSYNC}}` `{{SMOKE}}` `{{POSTPROD}}` are doc-sync markers (docsync-brief.md): copy them
+  literally, never fill them here.
+- Write for Fable at high effort: dense, precise, zero ambiguity, no filler. Must still run on any model.
+- Generate in the user's language; keep ALL section names in English (incl. VISUAL CHECK, PHASE CLOSE).
 -->
-Start a clean session in EXECUTION mode (auto-accept edits — e.g. `claude
---permission-mode acceptEdits`). Do NOT enter plan mode: the plan IS this prompt
-(# SCOPE below); re-planning would duplicate the investigation this prompt already
-carries. The only re-planning trigger is a diverging census (see # SCOPE).
-Load the skill `{{project_context_skill}}`, read
-`{{docs_dir}}/execute.md` (this protocol). PRECONDITION (omit on the first wave): the
-previous wave's MR is merged — check the forge first: `glab mr view {{prev_branch}} --output json`
-→ state `merged`, or `gh pr view {{prev_branch}} --json state,mergedAt` → `MERGED`; fallback `git fetch && git
-merge-base --is-ancestor {{prev_branch}} origin/{{base_branch}}` (false "not merged" after a squash merge or
-a deleted branch). Not merged → ⛔ stop, leave the DoD-human `MR !N reviewed and merged` and never merge it yourself.
-{{Wave-specific preamble: extra skills to load, repos to open, other state assumptions
-and what to do if one fails.}}
-Then run `status-digest --brain {{docs_dir}}` (bare; without the plugin: `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`): this wave's
-deps ✅, no foreign `[PARTIAL]` open; never read task.md whole. Exit 2 → one `adcm-toolkits:digester` with
-`{{docs_dir}}/scripts/status-brief.md` (fallback under AGENT BUDGET & ROLES); without an Agent tool, stop and report.
+<!-- PHASE a — heading `### {{Wx}} · a — Implement + DoD` -->
+Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE a (implement + DoD)
+MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
+and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
+call: you brief, launch, read RETURNs, run the DoD and decide; sub-agents read, edit, render, judge and publish.
+Auto-accept edits (e.g. `claude --permission-mode acceptEdits`), never plan mode: the plan IS this prompt (# SCOPE); the
+only re-planning trigger is a diverging census. This prompt is self-contained: never read execute.md or task.md whole.
+0. `plan-audit --brain {{docs_dir}} --check --wave {{Wx}}` (no plugin: `python3 {{docs_dir}}/scripts/plan_audit.py …`) must
+   exit 0 before any code. Exit 2 = this wave's plan changed since the seal; exit 1 = missing, FAIL or unsealed. Remedy
+   inline: ONE `adcm-toolkits:auditor` runs `{{docs_dir}}/scripts/plan-audit-brief.md` in scoped mode on {{Wx}} (no report
+   yet: the full Step 6b audit); save its RETURN verbatim to `{{docs_dir}}/qa/plan-audit.md`; {{owner}} decides each
+   contradiction; ONE `sonnet` executor applies the decisions and runs `plan-audit --brain {{docs_dir}} --seal`; re-check, then
+   continue. {{owner}} must decide and is away → handoff `Result: fail` · `Next phase: a` (never `none`) and stop.
+1. Load the skill `{{project_context_skill}}`. {{Wave-specific preamble: extra skills, repos to open, state assumptions
+   and what to do if one fails.}}
+2. PRECONDITION (omit on the first wave): the previous wave's MR is merged — `glab mr view {{prev_branch}} --output json` →
+   `merged`, or `gh pr view {{prev_branch}} --json state,mergedAt` → `MERGED`; fallback `git fetch && git merge-base
+   --is-ancestor {{prev_branch}} origin/{{base_branch}}` (false "not merged" after a squash or a deleted branch). Not merged →
+   ⛔ stop, leave the DoD-human `MR !N reviewed and merged`, never merge it yourself.
+3. `status-digest --brain {{docs_dir}}` (no plugin: `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`): deps
+   ✅, no foreign `[PARTIAL]` open, its PHASE line shows no open phase of this wave. Exit 2 → one `adcm-toolkits:digester`
+   with `{{docs_dir}}/scripts/status-brief.md`; no Agent tool → stop and report.
 
 # GOAL — Wave {{Wx}}: {{task_titles}}
-Work EXACTLY the tasks {{IDs}} (specs: `{{docs_dir}}/detailed-plan.md` §{{section}} —
-read them in full; they are the specification). {{Mandatory internal order if any,
-e.g. "T-W2-1 closes before T-W2-3 starts (shared schema)."}}
-DoD-auto (the loop's EXIT criterion; everything by command — the FULL run happens
-AFTER the simplify pass, so what is green is what ships):
+Work EXACTLY the tasks {{IDs}} (specs: `{{docs_dir}}/detailed-plan.md` §{{section}}; the executors read them in full, you
+do not). {{Mandatory internal order if any, e.g. "T-W2-1 closes before T-W2-3 starts (shared schema)."}}
+DoD-auto (the loop's EXIT criterion, all by command; the FULL run happens AFTER the simplify pass, so green = what ships):
 - [ ] {{command}} → {{expected_result}}
-- [ ] {{command}} → {{expected_result}}
-- [ ] {{the comment-hygiene command from detailed-plan §0 Base DoD, inlined with this
-  wave's base branch}} → 0
-{{If a task extracts a helper, also: "- [ ] {{build/test command of EVERY rewired
-consumer}} → exit 0" and "- [ ] {{duplication census command}} → 1".}}
-{{If the wave touches UI, also: "- [ ] reviewed screenshot of the rendered page (see VISUAL CHECK)".}}
-{{One block per internal task if it helps, plus an "Integration (whole wave)" block
-with the repo-wide quality commands.}}
+- [ ] {{the comment-hygiene command from detailed-plan §0 Base DoD, with this wave's base branch}} → 0
+{{If a task extracts a helper: "- [ ] {{build/test of EVERY rewired consumer}} → exit 0" and "- [ ] {{dup census}} → 1".}}
+{{If the wave touches UI: "- [ ] a sub-agent reviewed the rendered page (see VISUAL CHECK)".}}
 
 # TASKS
-Create one task per ID (TaskCreate): {{IDs}}. Mark each in_progress on entry and
-completed when its slice of the DoD-auto is verified. All work on the wave's single
-branch (`{{branch_name}}`), checkpoint commit (Conventional, footer `Refs: <ID>`) at
-each internal task close.
+One task per ID (TaskCreate): {{IDs}}; in_progress on entry, completed when its DoD slice is verified. All work on the
+single branch `{{branch_name}}`; checkpoint commit (Conventional, footer `Refs: <ID>`) at each internal task close.
 
 # SCOPE (manifest)
-The investigation already ran — do NOT re-derive these lists with exploratory
-Glob/Grep. Run each Census FIRST; if it diverges beyond tolerance (or a named file is
-missing), STOP: re-scope against `{{docs_dir}}/detailed-plan.md` §{{section}}, update
-that manifest, and report the drift in the logbook at close.
+The investigation already ran — never re-derive these lists with exploratory Glob/Grep. Each Census runs FIRST (by the
+executor, in its DOD-SLICE); beyond tolerance or a named file missing → STOP: re-scope against detailed-plan
+§{{section}} and report the drift in the handoff.
 ## {{ID}}
-- Modify: `{{path}}` — {{1-line why: what changes there}} {{· one line per file}}
-- Create: `{{path}}` — {{what it is}}
+- Modify: `{{path}}` — {{1-line why}} {{· one line per file}} · Create: `{{path}}` — {{what it is}}
 - Read first: `{{exemplar_path}}` — {{the pattern it demonstrates}}
-- Impact: `{{shared_surface}}` ← {{N}} consumers ({{consumer paths or "list:
-  detailed-plan §{{section}}"}}). Keep its contract for ALL of them or their
-  adaptation is explicitly part of this task; DoD-auto must cover the consumers
-  (build/tests of the affected apps), not just the edited files.
-- Reuse: {{consume `{{path}}` | consume family `{{base}}` → member `{{file}}` | extract → `{{path}}`;
-  rewire {{A, B, C}} | extract family → `{{base}}<T>`; members {{A, B, C}} (model + endpoint only) |
-  deliberate duplicate — {{why}} | none}}. This verdict is DECIDED: apply it, never hunt for
-  duplication here (a pattern family is ONE generic base, each member supplying only its model/type +
-  endpoint — canon in execute.md §1.9; full consumer list: detailed-plan §{{section}}; dup census: the
-  Census line below).
-- Map: {{utilities.md › <name> · patterns.md › <family> | none}} — read only these entries (plus the ONE `rg` lookup the agent's Reuse rule allows before writing an unnamed helper); never edit {{docs_dir}}/map/ (map-refresh writes it at close).
-- Census: `{{command}}` → expected {{N}} (as of {{analysis_date}}) · tolerance
-  {{exact | ±1 for small counts (<10); ±X% only for large censuses}} {{· duplication
-  flavour when this task extracts: `rg -l '{{distinctive_snippet}}' | wc -l` → {{N}}
-  today, 1 after the task — same STOP-on-divergence semantics}}
-- {{Symbol notes if they fit the budget — exact members to delete/preserve/rename —
-  else "symbol detail: detailed-plan.md §{{section}}"}}
+- Impact: `{{shared_surface}}` ← {{N}} consumers ({{paths | "list: detailed-plan §{{section}}"}}): contract kept for ALL
+  of them or their adaptation is part of this task; the DoD covers the consumers, not just the edited files.
+- Reuse: {{consume `{{path}}` | consume family `{{base}}` → member `{{file}}` | extract → `{{path}}`; rewire {{A, B, C}} |
+  extract family → `{{base}}<T>`; members {{A, B, C}} (model + endpoint only) | deliberate duplicate — {{why}} | none}}.
+  DECIDED: apply it, never hunt for duplication (a pattern family is ONE generic base; canon in execute.md §1.9).
+- Map: {{utilities.md › <name> · patterns.md › <family> | none}} — only these entries (plus the ONE `rg` lookup the
+  agent's Reuse rule allows); never edit {{docs_dir}}/map/ (phase d's doc-sync refreshes it).
+- Census: `{{command}}` → {{N}} (as of {{analysis_date}}) · tolerance {{exact | ±1 (<10) | ±X% large}}{{ · dup flavour:
+  `rg -l '{{snippet}}' | wc -l` → {{N}} today, 1 after}}
+- {{Symbol notes if they fit the budget, else "symbol detail: detailed-plan.md §{{section}}"}}
 
 # LOOP
-brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → repeat, then ONE
-simplify pass (code-simplifier over the wave's integrated diff) → re-verify. Max 5
-rounds. Escalation ladder: the executor's 2nd failure of the SAME DoD line moves the
-task one tier up as a NEW agent carrying the attempt log ({{sonnet → opus → you |
-opus → you on ⚠gate waves}}); 3 attempts on the SAME failure at session level
-without converging → stop and report (don't degrade tests, don't mark done what
-isn't done). The simplify pass consumes NO round: if the FULL DoD-auto fails after it,
-ONE fix round to the SAME simplifier (SendMessage, cost 0); a second failure → revert
-to the checkpoint commit and close on the pre-simplify diff, logged. Duplication (logic or shape) an
-executor reports — its `RULE-OF-TWO` line — that this SCOPE does not name: if EVERY implicated file is already in
-this wave's SCOPE, amend the brief(s) and extract in-wave (helper first, consumers
-after, serialized) and update the card at close; if ANY file is outside, log it in the
-`Reuse:` follow-up field and refresh the later-wave manifests at doc-sync. Never
-improvise. {{Wave-specific failure policy: known flaky checks, retries that don't
-count as failures, when to stop early and leave DoD-human.}}
+brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → repeat, then ONE simplify pass → re-verify. Max 5
+rounds. The executor's 2nd failure of the SAME DoD line moves the task one tier up as a NEW agent with the attempt log
+({{sonnet → opus → you | opus → you on ⚠gate waves}}); 3 attempts on the SAME failure without converging → stop and report
+(never degrade tests, never mark done what isn't). The simplify pass consumes no round: a FULL DoD-auto failure after it
+gets ONE fix round to the SAME simplifier (SendMessage), a second one reverts to the checkpoint, logged. A `RULE-OF-TWO`
+line naming only files of this SCOPE → amend the briefs and extract in-wave (helper first, consumers after, serialized);
+any file outside → handoff `Reuse:` follow-up. Never improvise. {{Wave-specific failure policy: flaky checks, early stop.}}
 
 # VISUAL CHECK (mandatory if the wave touches UI: .pug/.html/.scss/.css/components)
-grep + build only prove the code is THERE, not that it LOOKS right — they never catch real width,
-wrong-language text, or overflow/overlap. Before marking a UI task completed, DELEGATE the capture to an
-`adcm-toolkits:researcher` (`sonnet`; browser, no edits; 1 of the 20, 0 Opus quota; the main session does not render or screenshot;
-when this wave's DoD includes the VISUAL CHECK, `adcm-toolkits:executor-frontend` captures it itself — never both) that renders the
-page in headless Chrome and RETURNS the PNG paths plus its findings:
-- It renders against a local server (full env) or, if it can't boot, the deployed URL.
-- It screenshots with a headless-Chrome helper (Playwright/Puppeteer + the system browser, e.g.
-  `node {{repo}}/scripts/shot.{{cjs|mjs — match the repo's module system}} <url> <out.png> [lang] [width]`). Capture desktop (≥1280) AND mobile (375);
-  both languages if the app is i18n. {{If the project has no screenshot helper, the FIRST UI task creates one.}}
-- It checks width/responsive (not "compacted"), i18n correct, no overlaps, design-system
-  fonts/colors and reports each finding. You (the orchestrator) MAY open those PNGs to judge —
-  reviewing sub-agent output is allowed. Only then mark the UI task completed; the courier returns
-  those same PNGs as `MEDIA: unsent` paths and you send them.
+grep + build prove the code is THERE, not that it LOOKS right. Before marking a UI task completed, DELEGATE capture AND
+judgement to an `adcm-toolkits:researcher` (`sonnet`, 1 of the 20; when the DoD names the VISUAL CHECK,
+`executor-frontend` captures it itself — never both): headless Chrome against a local server (full env) or the deployed URL,
+`node {{repo}}/scripts/shot.{{cjs|mjs}} <url> <out.png> [lang] [width]` {{or: the FIRST UI task creates the helper}},
+desktop (≥1280) AND mobile (375), both languages if i18n; it RETURNS findings (width, i18n, overlaps, design-system
+fonts/colors) plus the PNG paths. Sub-agents return `MEDIA: unsent: <paths>` (they cannot send). The main session sends
+unsent paths with SendUserFile by path WITHOUT opening them (load the tool with ToolSearch `select:SendUserFile`). Judging
+screenshots is always a sub-agent's job (capture researcher, executor-frontend VISUAL CHECK, auditor); the guard denies image reads on the main thread. Keep the paths for the handoff.
 
 # WORKFLOW (fan-out)
-AGENT BUDGET & ROLES: max 20 sub-agents in this session TOTAL, one counter starting
-at zero, `model` explicit or an `adcm-toolkits:*` type. YOU (the main session) ORCHESTRATE: you decide
-design and scope, audit what investigators DELIVER (solution · files ·
-considerations · open questions — never code) against this SCOPE, write one
-executor brief per task, run every DoD-slice and the full DoD-auto YOURSELF, and
-integrate. You do NOT implement first, and you never audit a diff with a sub-agent
-of your own tier. `opus` investigates (`adcm-toolkits:researcher` + `model: opus`),
-reviews regression and verifies (`adcm-toolkits:auditor`) (quota
-10, 2 reserved: the ⚠gate verifier and the simplify pass; audits pass to `sonnet`
-once the rest is spent); the ⚠gate executor is `adcm-toolkits:executor` + `model: opus`.
-`sonnet` ({{`adcm-toolkits:executor` | `adcm-toolkits:executor-frontend` on UI and frontend-code
-waves (design skills loaded OR FILES are frontend app code)}}) IMPLEMENTS NO-gate tasks from your briefs — ≤4 in parallel with
-EXCLUSIVE ownership of disjoint files, each in its own worktree; a shared helper is
-NOT a disjoint file, so the task extracting it closes before its consumers start and
-never runs beside them — and return diff
-summary + DoD-slice commands with output + what they extracted or consumed + doubts,
-never a bare "done". ONE simplify pass per wave: the packaged agent
-`code-simplifier:code-simplifier` called with an explicit `model: {{opus | the auditor tier of this session when the main session is not Fable}}` and the
-`## Simplifier brief` below — it costs 1 of the 20 and 1 of the Opus quota, it EDITS
-code so it never self-approves (YOU re-run the FULL DoD-auto after it), and on ⚠gate
-waves it runs BEFORE the reserved verifier. At close one delivery `adcm-toolkits:courier` per batch
-(normally 1, each extra batch = 1 more of the 20) is spawned — `sonnet` ALWAYS, fixed by the
-type, even under Fable —, 0 of the Opus quota (see GUARDRAILS & CLOSE). No plugin in this
-session → `Agent(subagent_type: "general-purpose", model: "<tier>")` with the same brief.
-Model rule: a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the main session is one tier down; types fix the TOOL SET, the tier rules still set the model.
-Follow-ups to a live agent (SendMessage) cost 0; a new agent costs 1. In ultracode: Workflow
-scripts per stage (investigate → implement → review) with ≤20 agent() calls in
-total, `isolation: 'worktree'` on parallel executors, no unbounded loops or panels.
-The 21st agent is a protocol violation — stop and ask. Log `agents used: n/20 (opus
-a · sonnet b) · escalations` at close. You are a PURE orchestrator
-(`references/orchestrator-rule.md` of the skill `execution-prompt-architect`): you do
-not read files in bulk, edit at scale, render, browse or publish — only the ≤~20-line
-logged fixes and the verbatim save of a sub-agent's RETURN to the path its brief names
-(gate reports `qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout, digests) — and every `Agent`/`Workflow` call, Plan and Explore agents included,
-names its `model` or is an `adcm-toolkits:*` type. The user's `sin tanto lío` (that task) or `modo directo` (until
-`modo orquestador`) switches it off.
+AGENT BUDGET & ROLES: max 20 sub-agents in THIS phase session, one counter from zero. YOU ORCHESTRATE: decide design and
+scope, audit what investigators DELIVER (solution · files · considerations · open questions — never code), write one
+executor brief per task, run every DoD-slice and the full DoD-auto yourself, integrate. You never implement first and
+never audit a diff with your own tier. `opus`: investigate (`adcm-toolkits:researcher` + `model: opus`), regression review
+(`adcm-toolkits:auditor`), quota 10 with 1 reserved for the simplify pass; the ⚠gate executor is `adcm-toolkits:executor` +
+`model: opus` (serial). `sonnet` ({{`adcm-toolkits:executor` | `adcm-toolkits:executor-frontend`}}) implements NO-gate tasks
+— ≤4 in parallel, EXCLUSIVE disjoint files, own worktrees; a shared helper is NOT a disjoint file, so its task closes
+before its consumers start. ONE `code-simplifier:code-simplifier` pass, `model: {{opus | the auditor tier when the main
+session is not Fable}}`, 1 of the 20 and 1 of the quota. The gate verifier is NOT here (phase b, a fresh session). No
+plugin → `Agent(subagent_type: "general-purpose", model: "<tier>")`, same brief. SendMessage costs 0; the 21st agent is a
+protocol violation — stop and ask. Ultracode: Workflow per stage, ≤20 agent() calls, `isolation: 'worktree'` on parallel
+executors. Pure orchestrator (`references/orchestrator-rule.md`): only ≤~20-line logged fixes and verbatim RETURN saves;
+`sin tanto lío` (that task) / `modo directo` (until `modo orquestador`) switch it off.
 {{ALWAYS spell out the cycle with real IDs and scopes, e.g.:
-1. Investigate: launch {{k}} `adcm-toolkits:researcher` (`model: opus`) IN PARALLEL, one per {{scope}}, each
-   returning solution · files to touch (with why) · considerations · open questions
-   — NOT code. Sub-agents do NOT run {{expensive_global_check}}.
-2. Audit their deliverables against SCOPE (consumers covered? files missing?
-   inviolable decisions respected?); iterate with SendMessage, ≤5 rounds.
-3. Brief: complete the `## Executor brief` blocks below (DELIVERABLE · DESIGN
-   DECISIONS · STOP IF) from the audited deliverables.
-4. Execute: launch {{k ≤ 4}} `{{adcm-toolkits:executor | adcm-toolkits:executor-frontend}}` executors IN PARALLEL, one brief each, disjoint
-   files ({{A: scope}}, {{B: scope}}), own worktrees; their gate is their DOD-SLICE.
-   {{If a task extracts a shared helper: run it ALONE and FIRST — its consumers start
-   only once it closes, and no two executors ever hold the helper file.}}
-5. Verify: run each DOD-SLICE yourself; a failure goes back to the SAME executor;
-   the 2nd failure of the same line escalates (sonnet → opus → you) with the
-   attempt log. Integrate the worktrees.
-6. Review: {{r}} `adcm-toolkits:auditor` agents (`sonnet` once the quota is spent) review
-   regression over the integrated diff + the named flows; every finding goes back
-   to the executor holding the task.
-7. Simplify: with those findings fixed, make a checkpoint commit, then spawn ONE
-   `code-simplifier:code-simplifier` with an explicit `model: {{opus | the auditor tier of this session when the main session is not Fable}}`
-   and the `## Simplifier brief` below (FILES = `git diff {{base_branch}}...HEAD
-   --name-only`, code files only). It edits the wave branch in place (no worktree):
-   read its returned diff summary, commit its diff, then run the FULL DoD-auto
-   yourself. If it fails: ONE fix round to the SAME simplifier (SendMessage; if it
-   cannot be reached, skip to the revert); a second failure → `git reset --hard
-   {{checkpoint_sha}}` while the branch is unpushed, or `git revert` the simplify
-   commit if already pushed, and close on the pre-simplify diff, recorded in the
-   logbook.}}
-{{If ⚠gate: "This is a ⚠gate wave: the executor in step 4 is ONE `adcm-toolkits:executor` + `model: opus`
-(serial, not sonnet; ladder opus → you). The simplify pass (step 7) runs BEFORE the
-verification — the verifier attacks the bytes that ship and is never the simplifier.
-Before closing: MANDATORY adversarial
-verification — launch ANOTHER `adcm-toolkits:auditor` (the reserved one) that did NOT see
-the implementation, give it only the diff + the DoD + the attack checklist for
-{{Wx}} in execute.md §6, with `REPORT PATH: {{docs_dir}}/qa/gate-{{Wx}}.md` — or the brain's existing layout (e.g. `qa/<wave>/gate-*.md` when `qa/` already has per-wave folders; never change an existing brain's convention) — in its brief: the
-auditor returns the full report under `REPORT:` and you save it verbatim (a mechanical save;
-log `gate report: <path>`). Every finding is fixed and re-verified before close."}}
-{{If advisory (NO-gate but the task spec or risk profile asks for an independent
-review): "Wave is NO-gate, with ADVISORY review — launch ONE `adcm-toolkits:auditor`
-(`sonnet` if the quota is spent) that did NOT see the implementation, give it the
-diff + the DoD + the advisory checklist in execute.md §6. Findings are fixed before
-close but do not block delivery policy."}}
-{{If NO-gate plain: "Wave is NO-gate (§5): no adversarial verification required."}}
+1. Investigate: {{k}} `adcm-toolkits:researcher` (`model: opus`) IN PARALLEL, one per {{scope}}: solution · files (why) ·
+   considerations · open questions — NOT code; they never run {{expensive_global_check}}.
+2. Audit the deliverables against SCOPE (consumers covered? inviolable decisions?); SendMessage rounds, ≤5.
+3. Brief: complete the `## Executor brief` blocks (DELIVERABLE · DESIGN DECISIONS · STOP IF).
+4. Execute: {{k ≤ 4}} executors IN PARALLEL, disjoint files ({{A: scope}}, {{B: scope}}), own worktrees. {{An extraction
+   runs ALONE and FIRST.}}
+5. Verify each DOD-SLICE yourself; a failure goes back to the SAME executor; the 2nd escalates. Integrate the worktrees.
+6. Review: {{r}} `adcm-toolkits:auditor` over the integrated diff + named flows; findings go back to their executor.
+7. Simplify: checkpoint commit, then ONE simplifier with the brief below (FILES = `git diff {{base_branch}}...HEAD
+   --name-only`, code only); it edits the branch in place; commit its diff and run the FULL DoD-auto. Fail → ONE fix round
+   (SendMessage); fail again → `git reset --hard {{checkpoint_sha}}` (unpushed) or `git revert` (pushed), logged.}}
 
 ## Executor brief — {{ID}} ({{one block per task; ≤40 lines each}})
 - TASK: {{ID}} — {{title}} · executor: {{adcm-toolkits:executor | adcm-toolkits:executor-frontend}} · model: {{sonnet | opus (⚠gate)}}
-- FILES: {{Modify/Create with why + Read-first exemplars — copied from # SCOPE; on an
-  extraction: the helper to create or consume + every consumer to rewire (name the
-  helper and the consumer count when the list is long — the full list is in the card) +
-  the Map: entries — read only those entries (plus the ONE `rg` lookup the agent's Reuse rule allows before writing an unnamed helper)}}
-- SKILLS: {{this wave's "Skills to load" (task.md wave map) — the executor loads each with
-  `Skill` BEFORE starting; "none" when the cell is empty}}
-- DELIVERABLE: {{filled in session: Opus's audited deliverable with your decisions}}
-- DESIGN DECISIONS: {{filled in session: what is settled and not negotiable — incl.
-  the reuse verdict (consume / extract to this exact path / deliberate duplicate / none; *family*
-  as a qualifier) and the helper's home; the executor does not re-litigate it}}
-- DOD-SLICE: {{command}} → {{expected}} {{· the lines of the DoD-auto this task owns ·
-  on an extraction: the build/test of every rewired consumer + the dup census → 1}}
-- STOP IF: {{an expected file is missing · the census diverges · a consumer contract
-  would change · a test would have to be degraded · the deliverable would have to WRITE a duplicate
-  (logic or shape) the brief does not name (a sighting goes to the `RULE-OF-TWO`
-  line and the executor continues) · {{on an extraction: a consumer the census does not name · a helper home crossing a
-  repo boundary (detailed-plan §0 coupling rule)}} · {{task-specific condition}}}} —
-  stop and report, do not improvise.
-- FORBIDDEN: {{paths outside this task — the shared helper and its named consumers ARE
-  in scope}} · no dependency upgrades · no secrets · no shared abstraction this brief
-  does not name · no hand-written variant of a type a TS utility type derives · no edit to
-  `{{docs_dir}}/map/` (map-refresh writes it at close) · no comments narrating decisions, rationale, wave/task IDs or
-  execution-doc names (full policy: detailed-plan §0)
-- RETURN: diff summary per file · every DOD-SLICE command with its output · what you
-  extracted or consumed and which consumers you rewired (the `REUSED` line of your agent
-  definition) · its `RULE-OF-TWO` line · open
-  questions. Never report "done" — the orchestrator verifies.
+- FILES: {{Modify/Create with why + Read-first, copied from # SCOPE; on an extraction the helper + every consumer to
+  rewire (count when long) + the Map: entries only}}
+- SKILLS: {{the wave's "Skills to load" — loaded with `Skill` BEFORE starting; "none" when empty}}
+- DELIVERABLE: {{filled in session: the audited deliverable with your decisions}}
+- DESIGN DECISIONS: {{filled in session: settled and not negotiable — the reuse verdict and the helper's home}}
+- DOD-SLICE: {{Census first}} · {{command}} → {{expected}} {{· on an extraction: every rewired consumer's build/test + dup census → 1}}
+- STOP IF: {{a file missing · the census diverges · a consumer contract would change · a test would be degraded · the
+  deliverable would have to WRITE a duplicate the brief does not name (a sighting → `RULE-OF-TWO` line, continue) · a
+  helper home crossing a repo boundary · {{task-specific}}}} — stop and report, never improvise.
+- FORBIDDEN: {{paths outside this task — the named helper and consumers ARE in scope}} · dependency upgrades · secrets ·
+  unnamed shared abstractions · hand-written variants of a derivable TS type · edits to `{{docs_dir}}/map/` · comments
+  narrating decisions, rationale, wave/task IDs or execution-doc names (detailed-plan §0)
+- RETURN: diff summary per file · every DOD-SLICE command with output · the `REUSED` line · the `RULE-OF-TWO` line ·
+  `MEDIA:` line when it captured · open questions. Never a bare "done".
 
 ## Simplifier brief ({{one per wave; ≤20 lines}})
-- AGENT: `code-simplifier:code-simplifier` (Agent `subagent_type` / Workflow `agentType`; if
-  not installed, ONE `adcm-toolkits:executor` with this same brief — the auditor type has no Edit) · `model: {{opus | the auditor tier of this session when the main session is not Fable}}`
-  explicit on the call · ONE pass, after the regression findings are fixed{{, before the
-  ⚠gate verifier}} · edits the wave branch in place.
-- FILES: `git diff {{base_branch}}...HEAD --name-only` in {{repo}}, code files only (no
-  markdown, not `{{docs_dir}}`) — and NOTHING else.
-- CONVENTIONS: `{{project_context_skill}}` + `{{docs_dir}}/detailed-plan.md` §0 OVERRIDE your
-  built-in standards — imports, arrow functions, return types, error handling (never remove
-  or restructure try/catch), component/type patterns, "redundant abstraction" removal;
-  respect `.prettierignore` carve-outs.
-- DESIGN DECISIONS: this wave's executor briefs are NOT negotiable — do not undo them,
-  re-architect or rename public surfaces; never inline, delete or rename a helper or a
-  pattern-family base or member this wave extracted (this overrides your redundant-abstraction default).
-- COMMENTS: remove narration, obvious restatements and plan references (task IDs, wave
-  numbers, execution-doc names); KEEP why-comments and public-API docstrings; add none.
-- FORBIDDEN: files outside FILES · behavior changes · dependency changes · formatting-only
-  churn · removing or weakening tests · `{{docs_dir}}` · acting beyond this brief (anything
-  outside FILES is REPORTED in RETURN, never done).
-- RETURN: diff summary per file + what you skipped and why. You do NOT run the DoD — the
-  orchestrator does — and never report a bare "done".
+- AGENT: `code-simplifier:code-simplifier` (not installed → ONE `adcm-toolkits:executor`, same brief; the auditor has no
+  Edit) · `model: {{opus | the auditor tier when the main session is not Fable}}` · ONE pass after the review findings are
+  fixed · edits the wave branch in place.
+- FILES: `git diff {{base_branch}}...HEAD --name-only` in {{repo}}, code files only (not markdown, not `{{docs_dir}}`).
+- CONVENTIONS: `{{project_context_skill}}` + detailed-plan §0 OVERRIDE your defaults (imports, arrow functions, return
+  types, error handling — never remove or restructure try/catch —, component/type patterns); respect `.prettierignore`.
+- DESIGN DECISIONS: the executor briefs are NOT negotiable; never inline, delete or rename a helper or a pattern-family
+  base or member this wave extracted (overrides your redundant-abstraction default).
+- COMMENTS: remove narration, restatements and plan references; KEEP why-comments and public-API docstrings; add none.
+- FORBIDDEN: files outside FILES · behavior, dependency or formatting-only changes · weakening tests · `{{docs_dir}}`.
+- RETURN: diff summary per file + what you skipped and why. You do NOT run the DoD and never report a bare "done".
 
-# GUARDRAILS & CLOSE
-Touch nothing outside the scope of {{IDs}} ({{explicit allowed paths}}) — the scope IS
-the SCOPE manifest, so the shared helper and its named consumers ARE inside it when
-the manifest lists them. No secrets in
-code/commits/logs. Agent budget 20 with fixed roles — you orchestrate and verify,
-opus investigates/audits (quota 10, 2 reserved: gate verifier + simplify pass), sonnet
-implements from briefs, ONE code-simplifier pass per wave, one sonnet delivery `adcm-toolkits:courier`
-per batch (normally 1; each extra batch = 1 more of the 20, 0 Opus quota), ladder sonnet → opus → you — is a hard limit of this session (see WORKFLOW).
-{{Wave-specific hard limits: "do NOT upgrade dependency X", "do NOT
-touch folder Y (Wave 3's scope)", inviolable decisions from master-plan §8 that this
-wave could violate.}} When the simplify pass has run and the FULL DoD-auto is green
-AFTER it: open the MR (pipeline green), assign it to `{{reviewer_handle}}` and NEVER merge it
-(execute.md §3), then run the FULL doc-sync at close (`execute.md`
-§2b — "append the logbook" means ALL of it): logbook entry in `{{docs_dir}}/task.md`
-(TODAY's date — never hardcoded — + branch/MR + tasks closed + **blocked** (ids + pending DoD-human) + **files touched +
-manifest drift** + notes + wall clock + **reuse** (helpers or pattern family bases consumed/extracted ·
-consumers or members rewired · dup census before → after · unplanned duplication found (logic or shape) →
-follow-up | none) + **map** (map-refresh summary | not refreshed (why) | n/a) + **simplifier** (carrier: packaged | fallback sub-agent · ran over
-{{checkpoint_sha}}..HEAD · files touched · DoD re-verified | reverted (why) | not run (why)) + **orchestrator fix**
-(none, or `<file>` — <why a brief would have cost more than the change>, ≤~20 lines —
-an unlogged one is a protocol violation) + **agents used n/20 (opus a · sonnet
-b)**, one line per agent with its model, role (investigate / execute / review /
-simplify / verify / capture / courier — with the NUMBER of couriers) and scope + **escalations** (none, or
-ID: tier → tier with the reason) + **Next** (exact next command/prompt, or "wave closed")), status flip in task.md's wave map AND this
-prompt's `execute.md §7` header (⛔ while the MR awaits the Reviewer's merge or another DoD-human, ✅ once merged), mark {{IDs}} ✅ in
-`detailed-plan.md` and update THEIR Scope manifests with what was ACTUALLY touched,
-refresh the Scope manifests of LATER waves whose surfaces this wave changed (and
-regenerate their §7 prompts), and delta-refresh the project context skill for the
-files touched, then run ONE `map-refresh --project <repo root> --brain {{docs_dir}} --update <files touched there>
---human '<Symbol>@<path>=<what>|<when>'…` per repo the wave touched (one `--human` per `born` entry of the
-executors' `REUSED` lines; its last `MAP:` line goes into the logbook map field; no `map/` yet or no plugin →
-`not refreshed (why)`; never edit `{{docs_dir}}/map/` by hand). The doc-sync ENDS with `git -C {{docs_dir}} add -A && git commit -m
-"docs({{wave}}): …" && git push` — `{{docs_dir}}` is its own NESTED git repo (the
-harness reports the container as "not a git repo": don't believe it); an unpushed
-logbook does not exist for the next session.
-DELIVERY — the doc-sync is committed and pushed first (a project pre-commit may
-regenerate HTML when it commits the `.md`); THEN load `adcm-toolkits:artifact-courier`
-and spawn one `adcm-toolkits:courier` per batch (normally 1; `Agent`, `sonnet` fixed by the type, brief from the skill's
-`templates/courier-brief.md`: registry, preview URL `localhost` — start the preview
-server yourself if none runs, bound to `0.0.0.0` with HTTP Range support or mobile
-video dies; {{If the repo has a tailnet-preview profile: start it with `tailnet-preview up <slug> --apply` instead (detached) and add its URL as `Tailnet:`;
-use a Bash timeout of at least (profile timeout + 150) s, 600000 ms at most, and dispatch on the verdict word, never on the exit code: `up` or `mapped` → that URL,
-`lan-only` → `Tailnet: none`, any other word → `Preview: none` and `Tailnet: none`, and say why}} —, the VISUAL CHECK screenshots in order, a GIF when the feature spans
-several screens). It runs each registry row's `regen` (`plans-regen.py`,
-`prompts-regen.py`), republishes or re-issues every stale artifact, stamps and commits
-`artifacts.json`, returns the media paths (`MEDIA: unsent`) for you to send, `curl`s localhost and the LAN IP, and returns a table
-plus a `=== LINKS ===` block. You never open or edit the HTML, never call the Artifact
-tool and never assemble the links yourself; if its RETURN has `ERRORS`, one
-`SendMessage` to the SAME courier (cost 0) and report — its new RETURN supersedes the earlier
-block; never publish yourself.
-CLOSE MESSAGE, in this order: (1) the narrative, with repo paths and commit hashes,
-one line each — reference, not delivery; (2) the media, sent by you from the courier's `MEDIA: unsent` list (a short
-final message follows it, so {{owner}} sees files + links on a phone without
-scrolling back up); (3) right before the final message, call `PushNotification` once (with `status: "proactive"`; deferred: `ToolSearch` `select:PushNotification`; absent → skip; "not sent" is fine, never retry): `Claude finished in <folder>`, or `Claude needs you in <folder>` when the stop needs the owner or a gate failed, never from a sub-agent; (4) the FINAL message: the pending DoD-human lines (`Para ti`) marking those
-tasks blocked until the Reviewer merges and {{owner}} confirms —
-- MR !N → review and merge ({{reviewer_handle}})
-- {{ID}}: {{other human_only_actions, or omit the line when none}}
-- {{If a tailnet preview ran: Probado desde el cel → 🌐 <preview> · tailnet (abajo) — the label, never the URL}}
-— and then, as its LAST lines, everything after `=== LINKS ===` in the LAST courier
-RETURN, pasted verbatim: `localhost` FIRST ({{owner}} validates from iTerm on the Mac),
-the LAN IP after it (never one without the other — the LAN IP changes with the network
-and arrives dead, `localhost` does not), the `🌐 … · tailnet` line when the brief had one (the one exception to the two-line rule), then the canonical artifacts.
-Paths, hashes and DoD-human go ABOVE the block, never after it: the `artifact-guard` Stop hook
-rejects any text after the last link, and a close whose courier block is missing.
-FORMAT: every link is a plain Markdown bullet `- [emoji Title](url)` — never inside
-a code fence, backticks, or 4-space indentation ({{owner}} taps these on a phone;
-code-formatted links are dead text); no headings or text inside the block. The raw URL
-inside the Markdown link keeps Claude Code's quick-access footer badges working too.
-The links block appears exactly once per delivery close — in the orchestrator's final message, after the last courier RETURN. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker; with several couriers (batches, `SendMessage` replies) only the last RETURN's block is pasted. No agent other than the courier returns URLs.
+# GUARDRAILS & PHASE CLOSE
+Touch nothing outside {{IDs}} ({{explicit allowed paths}}); the SCOPE manifest IS the scope. No secrets in code, commits
+or logs. {{Wave-specific hard limits and the master-plan §8 inviolable decisions this wave could violate.}}
+When the simplify pass ran and the FULL DoD-auto is green AFTER it: push `{{branch_name}}`, open the MR (pipeline green),
+leave it UNASSIGNED (phase d assigns it to `{{reviewer_handle}}`) and NEVER merge it. Then write the handoff
+`{{docs_dir}}/handoffs/{{Wx}}-<nn>-a.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` (nn = next free number): Result,
+`Next phase: {{b | d (NO-gate plain)}}`, branch/MR, DoD sha, checkpoint sha, Open, every agent line, the logbook notes
+(files, drift, reuse with the `born` entries of the `REUSED` lines, simplifier, fixes, escalations), the screenshot paths.
+A session that cannot finish (STOP IF, the 2nd compaction) writes it anyway with `Result: partial` and `Next phase: a`.
+Before the final message: send the media (unsent paths only, by path), then one `PushNotification` (`status: "proactive"`;
+`ToolSearch` `select:PushNotification`; absent → skip, never retry): `Claude finished in <folder>`, or `Claude needs you in
+<folder>` on a STOP. Final message: narrative (paths, hashes, MR), then as its LAST two lines:
+HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-a.md
+Run /clear and paste the §7 prompt `{{Wx}} · {{b | d}}` (or `status-digest --brain {{docs_dir}} --prompt`).
+
+<!-- PHASE b — heading `### {{Wx}} · b — Gate`; only on ⚠gate and advisory waves -->
+Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE b (gate)
+MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
+and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
+call: you brief, launch, read RETURNs and decide; the auditor reads the diff, never you.
+1. `status-digest --brain {{docs_dir}}`: its PHASE line names the newest handoff of {{Wx}}; read ONLY that file. It must say
+   `Next phase: b` (phase a done, or a phase c round done); otherwise ⛔ stop and report. Round r = previous gate rounds + 1.
+2. Never read the diff, the plan, task.md or execute.md yourself: everything the auditor needs is below.
+AGENT BUDGET: max 20 in this session (normally 1). The verifier is the reserved Opus slot.
+{{If ⚠gate: "3. Launch ONE `adcm-toolkits:auditor` (`model: opus`) that never saw the implementation, with only: the diff
+   (`git -C {{repo}} diff {{base_branch}}...{{branch_name}}`), the DoD-auto and the ATTACK CHECKLIST below, on round r > 1
+   also the previous report path and the fix handoff's Open list, and `REPORT PATH: {{docs_dir}}/qa/gate-{{wx}}.md`
+   (wave id in lowercase; round r > 1: `qa/gate-{{wx}}-r<r>.md`; a brain with `qa/<wave>/gate-*.md` keeps its layout). It must reproduce each
+   finding, rank it Critical / Major / Minor and return the full report under `REPORT:` with the first line
+   `GATE: PASS|FAIL · critical n · major n · minor n`."}}
+{{If advisory: "3. Launch ONE `adcm-toolkits:auditor` (`sonnet` once the quota is spent) that never saw the implementation,
+   with the diff, the DoD-auto and the ADVISORY CHECKLIST below and the same REPORT PATH rule. Its findings are fixed in
+   phase c but do not block the delivery policy; there is no re-gate after c."}}
+4. Save the RETURN's `REPORT:` verbatim to its path (a mechanical save, not an edit). You never soften, merge or re-rank
+   findings; a doubt about one goes back to the SAME auditor by SendMessage (cost 0).
+DoD-auto (what the auditor re-runs):
+- [ ] {{copied from phase a}}
+ATTACK CHECKLIST ({{Wx}}, from execute.md §6): {{inlined, concrete, actionable — tenant escapes, data loss, regressions in
+named flows, injection, broken invariants, leftover duplication, comment noise}}
+Verdict: PASS with no open finding → `Next phase: d` (a PASS skips c) · FAIL or any open finding → `Next phase: c`.
+PHASE CLOSE: write `{{docs_dir}}/handoffs/{{Wx}}-<nn>-b.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` — Result `done`
+(PASS) or `fail` (FAIL), State = report path + the GATE line, Open = the finding ids, the agent line ending `gate report:
+<path>`. Then one `PushNotification` (`status: "proactive"`; absent → skip): `Claude finished in <folder>` on PASS,
+`Claude needs you in <folder>` on FAIL. Final message: the GATE line and the report path, then as its LAST two lines:
+HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-b.md
+Run /clear and paste the §7 prompt `{{Wx}} · {{d | c}}` (or `status-digest --brain {{docs_dir}} --prompt`).
+
+<!-- PHASE c — heading `### {{Wx}} · c — Gate fixes`; only on ⚠gate and advisory waves -->
+Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE c (gate fixes)
+MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
+and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
+call: you brief, launch, read RETURNs, run the DoD and decide; executors read the report and fix.
+1. `status-digest --brain {{docs_dir}}`: the newest handoff of {{Wx}} must be phase b with `Next phase: c`; read ONLY it
+   (its Open line lists the finding ids; its State line names the report). Never read the report whole — pass its path.
+2. Check out `{{branch_name}}` (`git -C {{repo}} switch {{branch_name}} && git pull --ff-only`).
+ONE round per session: fix every open finding once, then hand back to phase b ({{advisory: phase d}}). Never continue
+into a re-gate here, never weaken a test, never close a finding by editing the report.
+AGENT BUDGET: max 20 in this session. {{⚠gate: ONE `adcm-toolkits:executor` + `model: opus`, serial over the findings; ladder
+opus → you | advisory: `adcm-toolkits:executor` (`sonnet`) per disjoint group of findings, ≤4 in parallel, own worktrees;
+ladder sonnet → opus → you}}. No new simplify pass: these are targeted fixes over a simplified diff.
+## Fix brief — {{Wx}} round <r>
+- TASK: fix findings <ids> of `<report path>` — reproduce each one first, then fix it at its root.
+- FILES: the files the findings name, inside phase a's SCOPE ({{explicit allowed paths}}); anything else → STOP IF.
+- SKILLS: {{the wave's Skills to load}}
+- DOD-SLICE: per finding its repro command → now passes · plus the DoD-auto lines below.
+- STOP IF: a fix needs a file outside the allowed paths · a consumer contract would change · a test would be degraded ·
+  a finding cannot be reproduced (report it, do not guess).
+- FORBIDDEN: editing the gate report · dependency changes · secrets · narrating comments · `{{docs_dir}}`.
+- RETURN: per finding: id · root cause in one line · diff summary · repro before/after · open questions.
+DoD-auto (YOU run it in full after the fixes are integrated):
+- [ ] {{copied from phase a}}
+Then commit (`fix({{scope}}): … Refs: <IDs>`), push, pipeline green. A finding left unfixed → `Result: partial` with it
+under Open; a finding the executor disputes → Open with its reason, for the next auditor to judge.
+PHASE CLOSE: write `{{docs_dir}}/handoffs/{{Wx}}-<nn>-c.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` — Result, `Next phase:
+{{b | d (advisory)}}`, State = fix commit sha + DoD green, Open, the agent and escalation lines. Then one `PushNotification`
+(`status: "proactive"`; absent → skip): `Claude finished in <folder>`, or `Claude needs you in <folder>` on a partial.
+Final message: findings fixed / open, commit hash, then as its LAST two lines:
+HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-c.md
+Run /clear and paste the §7 prompt `{{Wx}} · {{b | d}}` (or `status-digest --brain {{docs_dir}} --prompt`).
+
+<!-- PHASE d — heading `### {{Wx}} · d — Doc-sync + delivery close` -->
+Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE d (doc-sync + courier close)
+MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
+and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
+call: you brief, launch, read RETURNs and decide; you never write or edit a doc, a sheet or HTML.
+1. `status-digest --brain {{docs_dir}}`: the newest handoff of {{Wx}} must say `Next phase: d` (phase b PASS, phase a on a
+   NO-gate plain wave, or phase c on an advisory wave); read ONLY it; list the wave's handoffs with `ls {{docs_dir}}/handoffs/{{Wx}}-*`.
+2. Assign the MR to `{{reviewer_handle}}` (`glab mr update <N> --assignee {{reviewer_handle}}` | `gh pr edit <N> --add-reviewer
+   {{reviewer_handle}}`); NEVER merge it — the merge stays a DoD-human item and wave N+1 waits for it.
+AGENT BUDGET: max 20 in this session (normally 3): the doc-sync executor, {{the skill-sync executor,}} one courier per batch.
+3. Doc-sync phase A: ONE `adcm-toolkits:executor` (`sonnet`) with `{{docs_dir}}/scripts/docsync-brief.md` filled — scratch
+   folder `<scratchpad>/docsync-{{Wx}}`, the handoff paths, the gate report paths, the facts (MR id, pipeline, verdicts),
+   target state `⛔ pending merge` (wave map, §7 phase headers, tasks ✅ in detailed-plan, manifests = what was touched,
+   later-wave manifests and §7 prompts refreshed, master-plan execution-state row, the `MR !N reviewed and merged` DoD-human
+   row), markers `{{MAINTHREAD}}` `{{MAP}}`{{ `{{SKILLSYNC}}`}}. It RETURNs `READY`, the `DOCSYNC:` line and its doubts.
+{{4. In parallel: ONE `adcm-toolkits:executor` (`sonnet`) delta-refreshes `{{project_context_skill}}` for the files touched
+   (`scan_project.py --update <paths>`), commits and pushes its repo, and returns one line — the SKILLSYNC value.}}
+5. Write this phase's handoff `{{docs_dir}}/handoffs/{{Wx}}-<nn>-d.md` NOW, before doc-sync B (`Next phase: e`).
+   Hooks stamp its `**Main thread:**` line; `grep -H '\*\*Main thread:\*\*' {{docs_dir}}/handoffs/{{Wx}}-*` gives every phase's
+   line, prefixed by its handoff: MAINTHREAD = `<phase> <n> Bash · <n> Read · <n> compactions` per handoff, joined by `; `.
+6. Doc-sync phase B: SendMessage to the SAME executor with MAINTHREAD{{, SKILLSYNC}} and the answers to its doubts. It
+   pulls, runs map-refresh, `docsync-apply --check`, `--write`, status-digest (`DIGEST: ok`), `git add` by explicit path
+   (handoffs included), commits and pushes; it RETURNs the hash, the DIGEST line and the plan-audit line. A failed B →
+   SendMessage once, then stop.
+6b. PLAN-AUDIT after the doc-sync (its edits change sealed text): `plan-audit --brain {{docs_dir}} --check` (B's RETURN carries
+   the line). Exit 0 → continue. Exit 2 → the doc-sync changed LATER, not-started waves: ONE `adcm-toolkits:auditor` runs
+   `{{docs_dir}}/scripts/plan-audit-brief.md` in scoped mode on the stale waves now; save its RETURN verbatim to
+   `{{docs_dir}}/qa/plan-audit.md`; ask {{owner}} about every contradiction; ONE `sonnet` executor applies the decisions,
+   runs `plan-audit --brain {{docs_dir}} --seal`, commits and pushes. This phase does not close until the check exits 0.
+   Cannot finish after the handoff was written (owner away, session ends) → rewrite that handoff as `Result: partial` ·
+   `Next phase: d` before stopping.
+7. DELIVERY — only after B pushed: load `adcm-toolkits:artifact-courier` and spawn one `adcm-toolkits:courier` per batch
+   (`sonnet`, brief from its `templates/courier-brief.md`): registry, preview `localhost` (start the preview server
+   yourself if none runs, bound to `0.0.0.0` with HTTP Range support){{ · tailnet: `tailnet-preview up <slug> --apply`
+   (detached, Bash timeout ≥ profile timeout + 150 s, ≤ 600000 ms); dispatch on the verdict word, never the exit code: `up`
+   or `mapped` → `Tailnet: <url>`, `lan-only` → `Tailnet: none`, any other word → `Preview: none` and `Tailnet: none`, say
+   why}}, the screenshot paths from phase a's handoff in order, a GIF when the feature spans several screens. It runs each
+   row's `regen`, republishes or re-issues stale artifacts, stamps and commits `artifacts.json`, `curl`s localhost and the
+   LAN IP and returns its table, `MEDIA:` and `=== LINKS ===`. `ERRORS` → ONE SendMessage to the SAME courier; its new
+   RETURN supersedes the block. You never open HTML, call the Artifact tool or assemble links.
+8. Media: sub-agents return `MEDIA: unsent: <paths>` (they cannot send). The main session sends unsent paths with
+   SendUserFile by path WITHOUT opening them (load the tool with ToolSearch `select:SendUserFile`). Judging screenshots is
+   always a sub-agent's job; the guard denies image reads on the main thread.
+PHASE CLOSE, in this order: (1) the narrative — repo paths, commit hashes (code, docs, skill-sync), one line each; (2) the
+media; (3) one `PushNotification` (`status: "proactive"`; `ToolSearch` `select:PushNotification`; absent → skip, never
+retry; never from a sub-agent): `Claude needs you in <folder>` (the MR waits for the Reviewer); (4) the FINAL message —
+`Para ti`: `- MR !N → review and merge ({{reviewer_handle}})`{{ · other DoD-human lines · `Probado desde el cel → 🌐
+<preview> · tailnet (abajo)`}}; then the two PHASE CLOSE lines:
+HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-d.md
+After the Reviewer merges{{ and the deploy}}, run /clear and paste the §7 prompt `{{Wx}} · e` (or `status-digest --brain {{docs_dir}} --prompt`).
+— and LAST, everything after `=== LINKS ===` of the LAST courier RETURN, verbatim: `localhost` first, the LAN IP after
+it (never one without the other), the `🌐 … · tailnet` line when present, then the canonical artifacts. Every link is a
+plain Markdown bullet `- [emoji Title](url)`, never in a code fence, backticks or indentation; no text inside or after the
+block (the `artifact-guard` Stop hook rejects text after the last link and a close whose courier block is missing). The
+links block appears exactly once per delivery close; progress turns and 'Para ti' notes carry no links.
+
+<!-- PHASE e — heading `### {{Wx}} · e — {{Production close | Merge close}}`; EVERY wave has it -->
+Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE e ({{production close | merge close}})
+MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
+and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
+call: you brief, launch, read RETURNs and decide; sub-agents smoke, verify, write the docs and publish.
+1. `status-digest --brain {{docs_dir}}`: the newest handoff of {{Wx}} must be phase d with `Next phase: e`; read ONLY it.
+2. PRECONDITION: the human merged the MR (`glab mr view <N> --output json` → `merged` | `gh pr view <N> --json state` →
+   `MERGED`){{ and it is deployed ({{deploy check: command or URL → expected}})}}. Not yet → ⛔ stop and report; no handoff,
+   nothing written. Claude never merges.
+AGENT BUDGET: max 20 in this session (normally 2–4): the doc-sync executor{{, the smoke agent, the post-prod auditor}},
+one courier per batch when needed.
+3. Doc-sync phase A now: ONE `adcm-toolkits:executor` (`sonnet`) with `{{docs_dir}}/scripts/docsync-brief.md` — target state
+   `✅ {{in prod <today> | merged <today>}}` (wave map, §7 headers a–e, the merge row struck `~~…~~ ✅`, DoD-human rows closed
+   or still open), markers `{{MAINTHREAD}}`{{ `{{SMOKE}}` `{{POSTPROD}}` `{{SKILLSYNC}}`}}. It RETURNs `READY` and its doubts.
+   No deploy (merge close): the only marker is MAINTHREAD, so write the handoff (step 6) FIRST and send A and B as ONE
+   brief with its value; skip steps 4 and 5.
+{{4. In parallel, the smoke: ONE `adcm-toolkits:researcher` (`sonnet`) runs {{smoke commands / routes against production →
+   expected}} and returns one sentence (the SMOKE value) plus `MEDIA:` for any screenshot it took.}}
+{{5. ⚠gate waves: ONE `adcm-toolkits:auditor` (`model: opus`) runs the post-prod checks {{post-prod checklist: what must
+   hold in production}}, with `REPORT PATH: {{docs_dir}}/qa/gate-{{wx}}-postprod.md` (wave id in lowercase); save its
+   `REPORT:` verbatim. Its first line is the POSTPROD value; FAIL → `Result: fail`, and the doc-sync marks the wave ⛔.}}
+6. Write this phase's handoff `{{docs_dir}}/handoffs/{{Wx}}-<nn>-e.md` NOW (`Next phase: none`); MAINTHREAD = the stamped
+   `**Main thread:**` lines of this wave's handoffs (`grep -H '\*\*Main thread:\*\*' {{docs_dir}}/handoffs/{{Wx}}-*`).
+7. Doc-sync phase B: SendMessage to the SAME executor with MAINTHREAD{{, SMOKE, POSTPROD, SKILLSYNC}} and the answers;
+   it pulls, `docsync-apply --check`, `--write`, `DIGEST: ok`, explicit-path add, commit, push; RETURN hash + DIGEST line
+   + plan-audit line. Merge close: steps 3 and 7 are ONE message (docsync-brief one-message variant).
+7b. PLAN-AUDIT after the doc-sync (its edits change sealed text): `plan-audit --brain {{docs_dir}} --check` (B's RETURN carries
+   the line). Exit 0 → continue. Exit 2 → the doc-sync changed LATER, not-started waves: ONE `adcm-toolkits:auditor` runs
+   `{{docs_dir}}/scripts/plan-audit-brief.md` in scoped mode on the stale waves now; save its RETURN verbatim to
+   `{{docs_dir}}/qa/plan-audit.md`; ask {{owner}} about every contradiction; ONE `sonnet` executor applies the decisions,
+   runs `plan-audit --brain {{docs_dir}} --seal`, commits and pushes. This phase does not close until the check exits 0.
+   Cannot finish after the handoff was written (owner away, session ends) → rewrite that handoff as `Result: partial` ·
+   `Next phase: e` before stopping.
+8. {{If a tailnet preview ran: `tailnet-preview down <slug> --apply`.}} DELIVERY: one `adcm-toolkits:courier` per batch
+   (`sonnet`, `templates/courier-brief.md`, `Preview: none` unless production is the preview) — same rules as phase d;
+   a merge close spawns it only when a registered page changed (the §7 headers flip, so normally `prompts.html` and `plans.html`).
+9. Media: sub-agents return `MEDIA: unsent: <paths>` (they cannot send). The main session sends unsent paths with
+   SendUserFile by path WITHOUT opening them (load the tool with ToolSearch `select:SendUserFile`). Judging screenshots is
+   always a sub-agent's job; the guard denies image reads on the main thread.
+PHASE CLOSE, in this order: (1) narrative — {{smoke, post-prod verdict,}} docs commit hash; (2) the media; (3) one
+`PushNotification` (`status: "proactive"`; absent → skip): `Claude finished in <folder>`, or `Claude needs you in <folder>`
+on a FAIL or an open DoD-human; (4) the FINAL message — `Para ti` with the DoD-human lines still open, then:
+HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-e.md
+The wave is closed: run /clear and paste the next wave's §7 prompt `{{next Wx}} · a` (or `status-digest --brain {{docs_dir}} --prompt`).
+— and LAST (when a courier ran), everything after `=== LINKS ===` of the LAST courier RETURN, verbatim (rules as in phase d).

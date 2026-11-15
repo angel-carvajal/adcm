@@ -6,7 +6,7 @@ brain up to the checker's target (`renovate-check --version`) and never re-plans
 ## 0. Requirement and snapshot
 Deterministic first, model second. `{{skill_dir}}` = this skill's base dir; `<docs_dir>` = the brain. A plugin shipping
 `renovate_check.py` must be loaded (`/reload-plugins` or a new session); its `scripts/launchers/` launchers (`status-digest`,
-`renovate-check`, `plans-regen`, `prompts-regen`, `map-refresh`) run bare; without the plugin: `python3 {{skill_dir}}/templates/<script>.py`.
+`renovate-check`, `plans-regen`, `prompts-regen`, `map-refresh`, `plan-audit`, `docsync-apply`) run bare; without the plugin: `python3 {{skill_dir}}/templates/<script>.py`.
 - Never read `task.md` or `execute.md`. State: `status-digest --brain <docs_dir>`
 - Snapshot (pasted into every brief): `renovate-check --brain <docs_dir> --all-modules --invariants`
   Exit 0 `up-to-date` (stop: 0 agents) · 1 `needed(<blocks>)` · 2 no brain or unreadable · 64 usage.
@@ -36,6 +36,9 @@ For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES:
   Modules after the root.
 - EXECUTE keeps the brain's gate-report path (`qa/<wave>/gate-*.md` when `qa/` has per-wave folders) when aligning §1/§7.
   Since 0.16.0 `lacks` can name `reviewer-line`, `merge-rule`, `links-once` or the retired merge policy (`auto-` + `merge`, in §3 only).
+  Since 0.22.0 `lacks` can name `phase-sessions`, `handoff-token`, `docsync-check`, `plan-audit-check` or `main-thread`: the executor
+  copies the matching sentences from the current `execute.md.tmpl` (brief line PHASES) into pending waves' prompts and §1/§2b/§4;
+  executed waves are never re-split or re-audited; once the execute block is ok, run SKILL.md Step 6b once for the pending waves. `--copy-scripts` also brings `plan_audit.py` and `docsync_apply.py` (twelve SCRIPTS files: also the handoff template and the two briefs).
   Since 0.19.0 `lacks` can name `map-step` (no `map-refresh` call in §2b): the executor writes the template's §1 principle 9
   map sentences, the §2b step 1 **map** field, the step 6 `map-refresh` call and the step 7 wording.
   The executor writes the template's text: the `> **Reviewer:** <handle> (<forge>) · **Merge policy:** wait` line under the Protocol line,
@@ -75,8 +78,8 @@ ONE `Agent(subagent_type: "adcm-toolkits:auditor")` (read-only), brief ≤40 lin
 Findings go back to the SAME executor (`SendMessage`, cost 0).
 
 ## 4. Close
-- Doc-sync in the brain's own repo: the logbook entry `[REFRESH] protocol <target>` (with its `Next:` line) appended as
-  the ≤20-line orchestrator shortcut (logged), then commit + push.
+- Doc-sync in the brain's own repo is ONE sonnet executor (`templates/docsync-brief.md`, two phases): the logbook entry
+  `[REFRESH] protocol <target>` (with its `Next:` line) goes in as a `docsync-apply` sheet, then commit + push. The main session writes no sheet.
 - ONE `Agent(subagent_type: "adcm-toolkits:courier")` with the `artifact-courier` skill's `templates/courier-brief.md`,
   `REGEN: yes`; the LAST courier RETURN's links block goes last in the final message, once. Rows never sealed (decks, demos) are republished and sealed once.
 

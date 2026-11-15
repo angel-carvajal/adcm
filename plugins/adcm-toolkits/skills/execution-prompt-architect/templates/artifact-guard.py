@@ -28,6 +28,9 @@ Garantiza dos cosas cada vez que un turno intenta cerrar:
      execute.md / detailed-plan.md) sin entrega ni courier (lanzado o ya corrido), bloquea
      una vez: delega en el courier, no pegues links a mano. El guard nunca arma el bloque
      ni imprime el marcador en sus razones; con `stop_hook_active` solo avisa (systemMessage).
+     v7 (flush retry): si el único problema es "faltan links" (el mensaje final aún no llega al
+     transcript), re-chequea hasta ~2 s en pasos de 0.4 s y calla en cuanto pasa; formato, desactualizado,
+     sin courier y pendiente no reintentan.
      Calla (sin bloquear ni avisar) mientras haya un courier pendiente — lanzado por tipo, por
      descripción o por brief `artifact-courier` (ruta sin plugin) y sin RETURN — y no exige
      courier mientras otro sub-agente del turno siga en vuelo: su RETURN despierta un stop nuevo.
@@ -68,6 +71,8 @@ CLOCK_SKEW = 60  # segundos de tolerancia antes de tratar un mtime futuro como i
 LINKS_MARK = "=== LINKS ==="  # cabecera del bloque de links en el RETURN del courier (solo se DETECTA, nunca se imprime)
 LINKS_RE = re.compile(r"^\s*" + re.escape(LINKS_MARK) + r"\s*$", re.M)
 COURIER_HEAD = re.compile(r"^\s*COURIER\b", re.M)
+FLUSH_RETRY_SECS = 2.0  # ventana máxima para que el mensaje final llegue al transcript antes de dar "faltan links"
+FLUSH_RETRY_STEP = 0.4  # paso entre re-chequeos dentro de esa ventana
 RETURN_SKEW = 2  # segundos de tolerancia entre el sello del RETURN y el mtime de un doc de cierre
 
 
@@ -512,6 +517,14 @@ def main():
         hook_input = {}
     try:
         stale, links, pending = check(hook_input)
+        # v7: el mensaje final puede no estar aún en el transcript; solo el resultado "faltan links" reintenta.
+        if not stale and not pending and links and "no_courier" not in links and links["missing"]:  # MUTATION-KEY: retry_removed
+            deadline = time.time() + FLUSH_RETRY_SECS
+            while time.time() < deadline:
+                time.sleep(FLUSH_RETRY_STEP)
+                stale, links, pending = check(hook_input)
+                if stale or pending or not links or "no_courier" in links or not links["missing"]:
+                    break
         if not stale and not links:
             return 0
         if pending:

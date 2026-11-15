@@ -31,6 +31,19 @@ being patched, then finally the wave id itself as a last resort.
 Status precedence (one glyph per wave, taken from the START of the header's
 status text, else the first glyph found anywhere in it): ✅ > ⛔ > ⏸ > 🔄 > ☐.
 
+Per-phase headers (protocol >= 0.22.0, one self-contained prompt per phase session):
+  `### <ID> · <phase> — <title> [—] <status glyph + text>`  (the dash before the glyph is optional)   (phase is one of a b c d e; an optional
+  `Wave `/`Ola ` before <ID> is accepted). Each becomes its OWN card (`id="w1-a"`, tid `W1 · a`, its
+  own badge, copy button and `<pre id="pre-w1-a">`); the wave id in <comma-list> expands to all of
+  its phase cards, the nav keeps ONE entry per wave (pointing at its first phase) whose mark is
+  the aggregate: ⛔ > ⏸ > 🔄 when any phase has it, ✅ when every phase is ✅. Legacy
+  `### Wave <ID> …` headers keep rendering exactly as before.
+
+Plan-audit gate: when execute.md says `> **Protocol:** adcm-toolkits X.Y.Z` with X.Y.Z >= 0.22.0, the
+sibling plan_audit.py runs `--check` first. Exit 1 prints the reasons and exits 1 with nothing written;
+exit 2 (stale only) prints a `plan-audit warning:` line and continues; a missing sibling is a broken
+renovation: it blocks like exit 1; an unexpected exit, timeout or unparsable output only warn. Lower or absent protocol: no check, exactly the previous behaviour.
+
 Several deliveries per wave: every ```` ```text ```` fence between a wave header and the next
 `### ` is a prompt. A fence preceded by a `## Entrega …` / `## Delivery …` heading carries that
 heading (rendered as an `<h3>` with its own copy button and `<pre id="pre-<id>-N">`); a leading
@@ -65,6 +78,7 @@ import html
 import json
 import pathlib
 import re
+import subprocess
 import sys
 
 GLYPH = re.compile(r'(✅|⛔|⏸|🔄|☐)')
@@ -115,7 +129,7 @@ def refresh_shell(text, tmpl_path, name):
 
 def parse_s7(exec_text):
     """Parse execute.md §7 into a list of {id, title, status, bodies, line} dicts,
-    one per `### Ola|Wave <ID> ...` header, in document order. `bodies` is the wave's
+    one per `### Ola|Wave <ID> ...` header (`phase` None) or `### <ID> · <phase> — ...` header, in document order. `bodies` is the wave's
     list of {heading, text} prompts (see the module docstring): `heading` is the text of
     the `## Entrega|Delivery …` line a fence sits under, or None for a headingless fence."""
     lines = exec_text.split('\n')
@@ -124,14 +138,15 @@ def parse_s7(exec_text):
         sys.exit('execute.md: no §7 header found (expected a line starting with "## 7.")')
     waves, i = [], start
     while i < len(lines):
-        m = re.match(r'^### (?:Ola|Wave) ([A-Z][A-Za-z0-9-]*)\s*(.*)$', lines[i])
+        m = re.match(r'^### (?:(?:(?:Ola|Wave) )?([A-Z][A-Za-z0-9-]*) · ([a-e])|(?:Ola|Wave) ([A-Z][A-Za-z0-9-]*))\s*(.*)$',
+                     lines[i])
         if not m:
             i += 1
             continue
-        wid, rest = m.group(1), m.group(2).strip()
+        wid, phase, rest = m.group(1) or m.group(3), m.group(2), m.group(4).strip()
         rest = rest[2:].strip() if rest.startswith('— ') else rest
         # title = everything before the first " — <glyph>" (or " (<glyph>"); status = from the glyph on.
-        cut = re.search(r'\s—\s(?=[✅⛔⏸🔄☐])|\s\((?=[✅⛔⏸🔄☐])', rest)
+        cut = re.search(r'\s—\s(?=[✅⛔⏸🔄☐])|\s\((?=[✅⛔⏸🔄☐])' + (r'|\s(?=[✅⛔⏸🔄☐])' if phase else ''), rest)
         if GLYPH.match(rest):
             # the header starts straight into the status (`### Wave W2 — 🔄 IN PROGRESS (…)`): no title of its own.
             title, status = wid, rest
@@ -173,7 +188,7 @@ def parse_s7(exec_text):
                 while j < len(lines) and not closer.match(lines[j].strip()):
                     j += 1
             j += 1
-        waves.append({'id': wid, 'title': title, 'status': status, 'bodies': bodies, 'line': i + 1})
+        waves.append({'id': wid, 'phase': phase, 'title': title, 'status': status, 'bodies': bodies, 'line': i + 1})
         i = j
     return waves
 
@@ -293,12 +308,48 @@ def render_prompts(wid, bodies, L):
     return btn, ''.join(parts)
 
 
+def make_card(brain, L, tid, cid, w, closed):
+    """One card: (status shown, nav-less card markup). `cid` is the lowercase card id (`w2`, `w2-a`)."""
+    resolved_closed = closed == 'summary' and is_closed(brain, w)
+    w['collapsed'] = bool(w['bodies']) and resolved_closed
+    btn, prompts = render_prompts(cid, [] if w['collapsed'] else w['bodies'], L)
+    # a header with no status of its own that the task.md wave map closed: badge and nav show the resolved ✅
+    # (with or without a prompt; only a wave that has one is collapsed)
+    shown = '✅' if resolved_closed and w['status'] == '☐' else w['status']
+    row = wave_map_row(brain, w['id'])
+    return shown, (
+        f'<section class="card" id="{cid}">\n'
+        f'<header class="card-h"><div><span class="tid">{tid}</span> '
+        f'<span class="badge {badge_class(shown)}">{md_inline(short_status(shown))}</span>\n'
+        f'<h2>{md_inline(w["title"])}</h2></div>\n'
+        + btn
+        + '</header>\n'
+        + (prompts if prompts else
+           f'<p class="muted">{L["closed"] if w["collapsed"] else L["no_prompt"]}</p>\n'
+           + (f'<p><strong>{L["real_status"]}</strong> {md_inline(row)}</p>\n' if row else '')
+           + f'<p class="muted">{L["detail"]}</p>\n')
+        + '</section>\n')
+
+
+def aggregate(glyphs):
+    """One wave glyph out of its phases': ✅ only when all are, else the first of ⛔ ⏸ 🔄, else ☐."""
+    if glyphs and all(g == '✅' for g in glyphs):
+        return '✅'
+    return next((g for g in ('⛔', '⏸', '🔄') if g in glyphs), '☐')
+
+
 def build(brain, allow, lang, titles_path, html_text, closed='summary'):
     """Compute the patched HTML plus the data used for the console summary. `closed` is 'summary'
     (✅ waves render without their prompt) or 'full' (every prompt in full); a collapsed wave
-    gets `collapsed: True` in its dict."""
+    gets `collapsed: True` in its dict. A wave with phase headers renders one card per phase and its
+    `waves` entry carries `phases` (the phase dicts) and the aggregate `status`."""
     exec_text = (brain / 'execute.md').read_text()
-    waves = {w['id']: w for w in parse_s7(exec_text)}
+    entries = parse_s7(exec_text)
+    waves = {w['id']: w for w in entries if not w['phase']}
+    phased = {}
+    for w in entries:
+        if w['phase']:
+            phased.setdefault(w['id'], []).append(w)
     hand = hand_titles(html_text)
     titles = load_titles(titles_path)
     for wid, tt in titles.items():
@@ -307,36 +358,28 @@ def build(brain, allow, lang, titles_path, html_text, closed='summary'):
     for wid, w in waves.items():
         if w['title'] == wid and wid.upper() in hand:
             w['title'] = hand[wid.upper()]
-    missing = [a for a in allow if a not in waves]
+    missing = [a for a in allow if a not in waves and a not in phased]
     if missing:
         sys.exit(f'missing from §7: {missing}')
 
     L = LANG[lang]
     cards, nav_links = [], []
     for a in allow:
-        w = waves[a]
-        wid = a.lower()
-        resolved_closed = closed == 'summary' and is_closed(brain, w)
-        w['collapsed'] = bool(w['bodies']) and resolved_closed
-        btn, prompts = render_prompts(wid, [] if w['collapsed'] else w['bodies'], L)
-        # a header with no status of its own that the task.md wave map closed: badge and nav show the resolved ✅
-        # (with or without a prompt; only a wave that has one is collapsed)
-        shown = '✅' if resolved_closed and w['status'] == '☐' else w['status']
-        nav_links.append(f'<a class="nav-a" href="#{wid}">{a}{nav_mark(shown)}</a>\n')
-        cards.append(
-            f'<section class="card" id="{wid}">\n'
-            f'<header class="card-h"><div><span class="tid">{a}</span> '
-            f'<span class="badge {badge_class(shown)}">{md_inline(short_status(shown))}</span>\n'
-            f'<h2>{md_inline(w["title"])}</h2></div>\n'
-            + btn
-            + '</header>\n'
-            + (prompts if prompts else
-               f'<p class="muted">{L["closed"] if w["collapsed"] else L["no_prompt"]}</p>\n'
-               + (f'<p><strong>{L["real_status"]}</strong> {md_inline(wave_map_row(brain, a))}</p>\n'
-                  if wave_map_row(brain, a) else '')
-               + f'<p class="muted">{L["detail"]}</p>\n')
-            + '</section>\n'
-        )
+        low = a.lower()
+        if a in phased:
+            shown_all, first = [], f'{low}-{phased[a][0]["phase"]}'
+            for ph in phased[a]:
+                shown, c = make_card(brain, L, f'{a} · {ph["phase"]}', f'{low}-{ph["phase"]}', ph, closed)
+                shown_all.append(shown)
+                cards.append(c)
+            agg = aggregate([glyph(x) for x in shown_all])
+            waves[a] = {'id': a, 'phase': None, 'title': phased[a][0]['title'], 'status': agg, 'phases': phased[a],
+                        'bodies': [], 'collapsed': all(ph['collapsed'] for ph in phased[a])}
+            nav_links.append(f'<a class="nav-a" href="#{first}">{a}{nav_mark(agg)}</a>\n')
+            continue
+        shown, c = make_card(brain, L, a, low, waves[a], closed)
+        nav_links.append(f'<a class="nav-a" href="#{low}">{a}{nav_mark(shown)}</a>\n')
+        cards.append(c)
     nav = ''.join(nav_links)
     t = html_text
     a0 = t.find('<a class="nav-a"')
@@ -346,6 +389,35 @@ def build(brain, allow, lang, titles_path, html_text, closed='summary'):
     c1 = t.rfind('</section>', 0, t.find('</main>')) + len('</section>')
     t = t[:c0] + ''.join(cards).rstrip('\n') + t[c1:]
     return t, waves, nav, cards
+
+
+def plan_audit_gate(brain, execute_text):
+    """Protocol >= 0.22.0 only: run the sibling plan_audit.py --check. Exit 1 → message + sys.exit(1) (nothing
+    written yet); exit 2 → a warning line; a missing sibling or an unexpected exit → a warning line."""
+    m = re.search(r'>\s*\*\*Protocol:\*\*\s*adcm-toolkits\s+(\d+)\.(\d+)(?:\.(\d+))?', execute_text)
+    if not m or tuple(int(x or 0) for x in m.groups()) < (0, 22, 0):
+        return
+    script = pathlib.Path(__file__).resolve().parent / 'plan_audit.py'
+    if not script.is_file():
+        sys.exit('plan-audit gate: plan_audit.py is missing next to prompts-regen.py — renovate the brain')
+    try:
+        p = subprocess.run([sys.executable, '-B', str(script), '--brain', str(brain), '--check', '--json'],
+                           capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f'plan-audit warning: the audit check did not run ({type(exc).__name__}); not checked')
+        return
+    try:
+        info = json.loads(p.stdout)
+    except ValueError:
+        info = {'reasons': [(p.stderr or p.stdout).strip()[:200]]}
+    why = '; '.join(info.get('reasons') or []) or 'no detail'
+    if p.returncode == 1:
+        sys.exit(f'plan-audit gate: {why}. Nothing written. Run the plan auditor (templates/plan-audit-brief.md), '
+                 f'save its RETURN to {brain}/qa/plan-audit.md and `plan-audit --brain {brain} --seal`.')
+    if p.returncode == 2:
+        print(f'plan-audit warning: {why}; re-audit those waves and re-seal')
+    elif p.returncode != 0:
+        print(f'plan-audit warning: unexpected exit {p.returncode} ({why}); the audit was not checked')
 
 
 def main():
@@ -382,6 +454,7 @@ def main():
 
     if not (brain / 'execute.md').exists():
         sys.exit(f'{brain}/execute.md not found')
+    plan_audit_gate(brain, (brain / 'execute.md').read_text())
 
     would_init = False
     if args.init and not out.exists():
@@ -423,10 +496,8 @@ def main():
         diffing = []
         for a in allow:
             wid = a.lower()
-            pat = rf'<section class="card" id="{re.escape(wid)}">.*?</section>'
-            old_card = re.search(pat, html_text, re.S)
-            new_card = re.search(pat, new_text, re.S)
-            if (old_card.group(0) if old_card else None) != (new_card.group(0) if new_card else None):
+            pat = rf'<section class="card" id="{re.escape(wid)}(?:-[a-e])?">.*?</section>'
+            if re.findall(pat, html_text, re.S) != re.findall(pat, new_text, re.S):
                 diffing.append(a)
         print(f'  --check: {out} is STALE, {len(diffing)}/{len(allow)} waves differ: {diffing} · {shell_line}')
         sys.exit(1)
@@ -438,6 +509,8 @@ def main():
     for a in allow:
         w = waves[a]
         print(f'    {a:11} {glyph(w["status"])}  {badge_class(w["status"]):8} {w["title"][:60]}')
+        for ph in w.get('phases', []):
+            print(f'      {a} · {ph["phase"]}  {glyph(ph["status"])}  {ph["title"][:56]}')
     collapsed = [a for a in allow if waves[a].get('collapsed')]
     if collapsed:
         print(f'  closed waves rendered as summaries ({len(collapsed)}): {",".join(collapsed)} '

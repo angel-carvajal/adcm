@@ -81,11 +81,18 @@ class Ctx:
             self.write(name + "/" + rel, body)
         return self.path(name)
 
-    def run(self, brain, *flags):
-        cmd = [sys.executable, self.digest] + (["--brain", brain] if brain else []) + list(flags)
+    def run(self, brain, *flags, digest=None):
+        cmd = [sys.executable, digest or self.digest] + (["--brain", brain] if brain else []) + list(flags)
         p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            env=self.env, cwd=self.root, timeout=60)
         return R(p)
+
+    def digest_copy(self, name, stub=None):
+        """Copy of the digest in its own dir, with an optional plan_audit.py stub next to it."""
+        shutil.copy(self.digest, self.write(name + "/status_digest.py", ""))
+        if stub is not None:
+            self.write(name + "/plan_audit.py", stub)
+        return self.path(name + "/status_digest.py")
 
     @contextlib.contextmanager
     def env_patch(self, **kv):
@@ -1211,6 +1218,406 @@ def case_pending_mr_row(ctx, t):
         t.ok(not any("MR !13" in x for x in under), "the resolved MR !13 row is not listed")
 
 
+# ------------------------------------------------------------------ phase sessions, metric, prompt, mrs, plan-audit
+def main_doc(val):
+    return simple(log=[entry("2026-01-05 — Wave W2", "- **Next:** continue W2", f"- **Main thread:** {val}")])
+
+
+def main_of(ctx, t, name, val):
+    d = both(ctx, t, ctx.brain(name, main_doc(val)), "--no-git")
+    return d, (dig(d, "logbook", "last", "main") or {}), find((d or {}).get("text"), "main:")
+
+
+def case_main_metric_ok(ctx, t):
+    d, m, ln = main_of(ctx, t, "ok", "12 Bash · 3 Read · 1 compactions")
+    t.eq(m.get("warn"), False, "no warning")
+    t.eq([(x["phase"], x["bash"], x["read"], x["compactions"]) for x in m.get("segs") or []], [(None, 12, 3, 1)], "triple")
+    t.ok(ln is not None and "⚠" not in ln, f"main line without the sign: {ln!r}")
+    d, m, ln = main_of(ctx, t, "edge", "25 Bash · 8 Read · 1 compactions")
+    t.eq(m.get("warn"), False, "25 Bash / 1 compaction is the limit, not over it")
+
+
+def case_main_warn_compactions(ctx, t):
+    d, m, ln = main_of(ctx, t, "c2", "10 Bash · 2 Read · 2 compactions")
+    t.eq(m.get("warn"), True, "2 compactions warn")
+    t.ok(ln is not None and "⚠" in ln, f"main line carries the sign: {ln!r}")
+
+
+def case_main_warn_bash(ctx, t):
+    d, m, ln = main_of(ctx, t, "b26", "26 Bash · 2 Read · 0 compactions")
+    t.eq(m.get("warn"), True, "26 Bash warn")
+    t.ok(ln is not None and "⚠" in ln, f"main line carries the sign: {ln!r}")
+
+
+def case_main_multi_phase(ctx, t):
+    d, m, ln = main_of(ctx, t, "multi", "a 12 Bash · 3 Read · 1 compactions; b 4 Bash · 1 Read · 0 compactions; "
+                       "c 30 Bash · 5 Read · 0 compactions")
+    t.eq([(x["phase"], x["bash"]) for x in m.get("segs") or []], [("a", 12), ("b", 4), ("c", 30)], "three phased triples")
+    t.eq(m.get("warn"), True, "the third triple warns")
+    d, m, ln = main_of(ctx, t, "multi-ok", "a 12 Bash · 3 Read · 1 compactions; b 4 Bash · 1 Read · 0 compactions")
+    t.eq(m.get("warn"), False, "no triple over the limit")
+    t.eq(len(m.get("segs") or []), 2, "two triples")
+
+
+def case_main_es_aliases(ctx, t):
+    for lab in ("Principal", "Hilo principal"):
+        body = simple(log=[entry("2026-01-05 — Wave W2", f"- **{lab}:** 30 Bash · 3 Lecturas · 0 compactaciones")])
+        d = both(ctx, t, ctx.brain("es-" + lab[:2], body), "--no-git")
+        m = dig(d, "logbook", "last", "main") or {}
+        t.eq((m.get("warn"), (m.get("segs") or [{}])[0].get("bash")), (True, 30), f"alias {lab!r}")
+
+
+def hand(wave, nn, phase, nxt, result="done", main="12 Bash · 3 Read · 1 compactions (session abcd1234)"):
+    return {f"handoffs/{wave}-{nn:02d}-{phase}.md": "\n".join([
+        f"# Handoff {wave} · {phase}", "", f"- **Wave:** {wave}", f"- **Phase closed:** {phase}", f"- **Result:** {result}",
+        f"- **Next phase:** {nxt}", "- **Branch/MR:** feat/w2 (!14)", "- **State:** green", "- **Open:** none",
+        "- **Agents used:** 3/20", f"- **Main thread:** {main}",
+        f"- **Next prompt:** Start a clean session in EXECUTION mode — Acme · Wave {wave} · PHASE {nxt}", "", "body"])}
+
+
+def prompt_text(wave, ph):
+    return (f"Start a clean session in EXECUTION mode — Acme · Wave {wave} · PHASE {ph}\n"
+            f"MAIN-THREAD GUARD: delegate.\n\nTASKS for {wave}/{ph}: do it.")
+
+
+def exec_phased(proto="0.21.0", waves=("W2",)):
+    parts = [f"# Acme — Execution protocol\n\n> **Protocol:** adcm-toolkits {proto}", "## 6 · Checklists\n\n### Wave W2 gate notes\n\nnot a prompt",
+             "## 7 · Wave prompts"]
+    for w in waves:
+        for ph, ttl in (("a", "implement"), ("b", "gate"), ("c", "fixes"), ("d", "close"), ("e", "prod")):
+            parts.append(f"### {w} · {ph} — {ttl} ☐\n\n```text\n{prompt_text(w, ph)}\n```")
+    return doc(*parts)
+
+
+def exec_legacy(proto="0.21.0"):
+    return doc(f"# Acme — Execution protocol\n\n> **Protocol:** adcm-toolkits {proto}", "## 7 · Wave prompts",
+               f"### Wave W2 — Billing\n\n```text\n{prompt_text('W2', 'x')}\n```")
+
+
+def phased_brain(ctx, name, handoffs, proto="0.21.0", stamp=(2026, 1, 5), legacy=False, task=None, waves=("W2",)):
+    extra = {"execute.md": exec_legacy(proto) if legacy else exec_phased(proto, waves)}
+    for h in handoffs:
+        extra.update(h)
+    b = ctx.brain(name, task or simple(), extra)
+    for i, rel in enumerate(sorted(k for k in extra if k.startswith("handoffs/"))):
+        ts = __import__("time").mktime(stamp + (12, i, 0, 0, 0, -1))
+        os.utime(os.path.join(b, *rel.split("/")), (ts, ts))
+    return b
+
+
+def phase_of(d):
+    return find((d or {}).get("text"), "PHASE")
+
+
+def case_phase_after_a(ctx, t):
+    d = both(ctx, t, phased_brain(ctx, "pa", [hand("W2", 1, "a", "b")]), "--no-git")
+    t.eq(dig(d, "handoffs", "next"), "b", "next phase")
+    t.eq(dig(d, "handoffs", "closed"), ["a"], "closed phases")
+    ln = phase_of(d) or ""
+    t.ok(ln.startswith("PHASE W2") and "next b" in ln and "W2-01-a.md" in ln, f"PHASE line: {ln!r}")
+    t.ok("--prompt" in ln, "the line says how to get the prompt")
+
+
+def case_phase_after_failed_gate(ctx, t):
+    hs = [hand("W2", 1, "a", "b"), hand("W2", 2, "b", "c", result="fail", main="30 Bash · 4 Read · 2 compactions (session abcd1234)")]
+    d = both(ctx, t, phased_brain(ctx, "pf", hs), "--no-git")
+    t.eq(dig(d, "handoffs", "next"), "c", "a failed gate leads to c")
+    t.eq(dig(d, "handoffs", "closed"), ["a", "b"], "closed phases")
+    ln = phase_of(d) or ""
+    t.ok("next c" in ln and "W2-02-b.md" in ln and "⚠" in ln, f"PHASE line names c, the newest handoff and the warning: {ln!r}")
+    t.eq(dig(d, "handoffs", "warn"), True, "handoff metric warns")
+
+
+def case_phase_none_after_d(ctx, t):
+    hs = [hand("W2", 1, "a", "b"), hand("W2", 2, "b", "d"), hand("W2", 3, "d", "none")]
+    d = both(ctx, t, phased_brain(ctx, "pn", hs), "--no-git")
+    t.eq(dig(d, "handoffs", "next"), "none", "no deploy: next none")
+    t.ok("next none" in (phase_of(d) or ""), "PHASE line says none")
+    r = ctx.run(phased_brain(ctx, "pn2", hs), "--no-git", "--prompt")
+    t.eq(r.rc, 1, "--prompt exit 1 when no phase is pending")
+    t.ok(bool((r.err + r.out).strip()) and "PHASE c" not in r.out, "a message and no prompt")
+
+
+def case_no_handoffs_unchanged(ctx, t):
+    d = both(ctx, t, phased_brain(ctx, "nh", [], legacy=True), "--no-git")
+    t.ok(all(find(d["text"], k) is None for k in ("PHASE", "PLAN-AUDIT", "STALE", "MRS")), "legacy brain prints none of the new lines")
+    t.ok("handoffs" not in d or not d["handoffs"], "no handoffs block")
+
+
+def case_prompt_pending(ctx, t):
+    r = ctx.run(phased_brain(ctx, "pp", [hand("W2", 1, "a", "b")]), "--no-git", "--prompt")
+    t.eq(r.rc, 0, "exit")
+    t.eq(r.out.rstrip("\n"), prompt_text("W2", "b"), "the pending phase prompt, verbatim")
+
+
+def case_prompt_named(ctx, t):
+    b = phased_brain(ctx, "pnm", [hand("W2", 1, "a", "b")])
+    r = ctx.run(b, "--no-git", "--prompt", "W2:d")
+    t.eq((r.rc, r.out.rstrip("\n")), (0, prompt_text("W2", "d")), "named phase d")
+    r = ctx.run(b, "--no-git", "--prompt", "W9:a")
+    t.eq(r.rc, 1, "unknown wave: exit 1")
+    t.ok("W9" in (r.err + r.out), "the message names what was not found")
+
+
+def case_prompt_legacy(ctx, t):
+    r = ctx.run(phased_brain(ctx, "pl", [], legacy=True), "--no-git", "--prompt")
+    t.eq((r.rc, r.out.rstrip("\n")), (0, prompt_text("W2", "x")), "the single wave prompt of a legacy brain")
+
+
+def case_prompt_missing(ctx, t):
+    r = ctx.run(ctx.brain("pm", simple()), "--no-git", "--prompt")
+    t.eq(r.rc, 1, "no execute.md: exit 1")
+    t.ok("execute.md" in (r.err + r.out), "the message names execute.md")
+
+
+def case_mrs_unavailable(ctx, t):
+    empty = ctx.path("emptybin")
+    os.makedirs(empty, exist_ok=True)
+    b = ctx.brain("mu", simple())
+    with ctx.env_patch(PATH=empty):
+        d = both(ctx, t, b, "--no-git", "--mrs")
+    ln = find((d or {}).get("text"), "MRS") or ""
+    t.ok(ln.startswith("MRS: unavailable (") and ln.endswith(")"), f"one unavailable line: {ln!r}")
+    t.eq(len([x for x in d["text"] if x.startswith("MRS")]), 1, "exactly one MRS line")
+
+
+def case_mrs_listed(ctx, t):
+    ctx.write("fakebin/glab", "#!/bin/sh\nprintf 'Showing 7 open merge requests on acme/x. (Page 1)\\n\\n'\n"
+              "for i in 1 2 3 4 5 6 7; do printf '!%s\\tacme/x!%s\\tTitle %s\\t(main) <- (feat-%s)\\n' $i $i $i $i; done\n", 0o755)
+    with ctx.env_patch(PATH=ctx.path("fakebin") + os.pathsep + "/usr/bin:/bin"):
+        d = both(ctx, t, ctx.brain("ml", simple()), "--no-git", "--mrs")
+    mr = [x for x in d["text"] if x.startswith("MRS") or x.startswith("  !")]
+    t.ok(2 <= len(mr) <= 5, f"at most 5 MRS lines, got {len(mr)}")
+    t.ok(any("Title 1" in x for x in d["text"]), "the first MR is listed")
+
+
+def case_stale(ctx, t):
+    b = phased_brain(ctx, "st", [hand("W2", 1, "a", "b")], stamp=(2026, 2, 1))
+    d = both(ctx, t, b, "--no-git")
+    ln = find(d["text"], "STALE") or ""
+    t.ok("W2-01-a.md" in ln, f"STALE names the handoff: {ln!r}")
+    d = both(ctx, t, phased_brain(ctx, "st2", [hand("W2", 1, "a", "b")], stamp=(2026, 1, 5)), "--no-git")
+    t.ok(find(d["text"], "STALE") is None, "a handoff from the entry day is not stale")
+    g = ctx.brain("stg", simple())
+    ctx.git(g, "init", "-q")
+    ctx.git(g, "add", "-A")
+    with ctx.env_patch(GIT_COMMITTER_DATE="2026-03-01T12:00:00", GIT_AUTHOR_DATE="2026-03-01T12:00:00"):
+        ctx.git(g, "commit", "-q", "-m", "later")
+    d = both(ctx, t, g)
+    ln = find(d["text"], "STALE") or ""
+    t.ok("commit" in ln and "2026-03-01" in ln, f"STALE names the commit: {ln!r}")
+
+
+STUB = ("import json, sys, os\n"
+        "a = sys.argv[1:]\n"
+        "if '--check' not in a or '--json' not in a or '--brain' not in a:\n    sys.exit(64)\n"
+        "open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'called'), 'w').write(' '.join(a))\n"
+        "print(json.dumps({'status': 'x', 'reasons': [%r], 'stale_waves': %r, 'sealed_at': None}))\nsys.exit(%d)\n")
+
+
+def audit_run(ctx, t, name, code, stale=(), proto="0.22.0", stub=True, legacy=False):
+    dig_path = ctx.digest_copy(name + "-bin", STUB % ("open findings 2", list(stale), code) if stub else None)
+    b = phased_brain(ctx, name, [hand("W2", 1, "a", "b")], proto=proto, legacy=legacy)
+    plain = ctx.run(b, "--no-git", digest=dig_path)
+    pr = ctx.run(b, "--no-git", "--prompt", digest=dig_path)
+    return plain, pr, os.path.exists(os.path.join(os.path.dirname(dig_path), "called"))
+
+
+def case_audit_ok(ctx, t):
+    plain, pr, called = audit_run(ctx, t, "ao", 0)
+    t.ok(called, "the check ran")
+    t.ok("PLAN-AUDIT: ok" in plain.out, "PLAN-AUDIT ok line")
+    t.eq((plain.rc, pr.rc, pr.out.rstrip("\n")), (0, 0, prompt_text("W2", "b")), "prompt printed")
+
+
+def case_audit_blocked(ctx, t):
+    plain, pr, _ = audit_run(ctx, t, "ab", 1)
+    t.ok("PLAN-AUDIT: BLOCKED · open findings 2" in plain.out, "BLOCKED line with the first reason")
+    t.eq(plain.rc, 0, "digest exit code unchanged")
+    t.ok("withheld" in (find(plain.lines, "PHASE") or ""), "PHASE line says the prompt is withheld")
+    t.eq(pr.rc, 1, "--prompt exit 1")
+    t.ok("PHASE b" not in pr.out and "withheld" in (pr.out + pr.err), "no prompt, a withheld message")
+
+
+def case_audit_stale_next_wave(ctx, t):
+    plain, pr, _ = audit_run(ctx, t, "an", 2, stale=["W2"])
+    t.ok("PLAN-AUDIT: stale" in plain.out and "W2" in (find(plain.lines, "PLAN-AUDIT") or ""), "stale line names W2")
+    t.eq(pr.rc, 1, "stale on the next wave withholds")
+    t.ok("PHASE b" not in pr.out, "no prompt")
+
+
+def case_audit_stale_other_wave(ctx, t):
+    plain, pr, _ = audit_run(ctx, t, "ax", 2, stale=["W5"])
+    t.ok("PLAN-AUDIT: stale" in plain.out, "stale line")
+    t.eq((pr.rc, pr.out.rstrip("\n")), (0, prompt_text("W2", "b")), "another wave stale: prompt still printed")
+
+
+def case_audit_script_absent(ctx, t):
+    plain, pr, _ = audit_run(ctx, t, "aa", 0, stub=False)
+    t.ok("PLAN-AUDIT: BLOCKED (plan_audit.py missing — renovate the brain)" in plain.out, "missing script blocks, loudly")
+    t.eq(plain.rc, 0, "digest exit code unchanged")
+    t.ok("withheld" in (find(plain.lines, "PHASE") or ""), "PHASE line says withheld")
+    t.eq(pr.rc, 1, "prompt withheld")
+    t.ok("PHASE b" not in pr.out, "no prompt text")
+    plain, pr, _ = audit_run(ctx, t, "aa2", 0, stub=False, proto="0.21.0")
+    t.ok("PLAN-AUDIT" not in plain.out and pr.rc == 0, "legacy protocol without the script stays silent")
+
+
+def case_audit_legacy_protocol(ctx, t):
+    plain, pr, called = audit_run(ctx, t, "al", 1, proto="0.21.0")
+    t.ok(not called and "PLAN-AUDIT" not in plain.out, "protocol < 0.22.0 never calls the audit")
+    t.eq(pr.rc, 0, "prompt printed")
+
+
+def three_waves(w1="✅", w2="✅", w3="☐"):
+    wm = wave_map(r7(w1, "**W1**"), r7(w2, "**W2**", dep="W1"), r7(w3, "**W3**", dep="W2"))
+    return doc(H1, wm, BURN, logbook(entry("2026-01-05 — Wave W2", "- **Next:** go")))
+
+
+def case_phase_first_wave_no_handoff(ctx, t):
+    b = phased_brain(ctx, "fw", [], task=three_waves("✅", "☐", "☐"), waves=("W2", "W3"))
+    d = both(ctx, t, b, "--no-git")
+    ln = phase_of(d) or ""
+    t.ok(ln.startswith("PHASE W2") and "next a" in ln and "--prompt" in ln, f"PHASE next a for the ready wave: {ln!r}")
+    r = ctx.run(b, "--no-git", "--prompt")
+    t.eq((r.rc, r.out.rstrip("\n")), (0, prompt_text("W2", "a")), "phase a prompt of the ready wave")
+
+
+def case_phase_moves_to_next_wave(ctx, t):
+    hs = [hand("W2", 1, "d", "e"), hand("W2", 2, "e", "none")]
+    b = phased_brain(ctx, "mv", hs, task=three_waves(), waves=("W2", "W3"))
+    d = both(ctx, t, b, "--no-git")
+    ln = phase_of(d) or ""
+    t.ok(ln.startswith("PHASE W3") and "next a" in ln and "W2-02-e.md" in ln, f"moves on to W3 phase a: {ln!r}")
+    r = ctx.run(b, "--no-git", "--prompt")
+    t.eq((r.rc, r.out.rstrip("\n")), (0, prompt_text("W3", "a")), "W3 phase a prompt")
+    r = ctx.run(phased_brain(ctx, "mv2", [hand("W2", 1, "d", "e")], task=three_waves(), waves=("W2", "W3")), "--no-git", "--prompt")
+    t.eq(r.out.rstrip("\n"), prompt_text("W2", "e"), "d ends with next e")
+
+
+def case_prompt_heading_glyphs(ctx, t):
+    ex = doc("# Acme — Execution protocol", "## 7. Phase prompts (instantiated, copy-paste)",
+             "### W2 · b — Gate ☐\n\n```text\nB prompt\n```", "### ✅ W2 · c — Fixes\n\n```text\nC prompt\n```")
+    b = ctx.brain("hg", simple(), {"execute.md": ex})
+    t.eq(ctx.run(b, "--no-git", "--prompt", "W2:b").out, "B prompt\n", "trailing glyph after the title")
+    t.eq(ctx.run(b, "--no-git", "--prompt", "W2:c").out, "C prompt\n", "leading glyph before the wave")
+
+
+def case_stale_scoped_to_module(ctx, t):
+    b = ctx.brain("sm", None, {"modules/a/task.md": simple(), "modules/b/task.md": simple()})
+    ctx.git(b, "init", "-q")
+    ctx.git(b, "add", "-A")
+    day = {"GIT_COMMITTER_DATE": "2026-01-01T12:00:00", "GIT_AUTHOR_DATE": "2026-01-01T12:00:00"}
+    with ctx.env_patch(**day):
+        ctx.git(b, "commit", "-q", "-m", "base")
+    ctx.write("sm/modules/b/notes.md", "x\n")
+    ctx.git(b, "add", "-A")
+    with ctx.env_patch(GIT_COMMITTER_DATE="2026-03-01T12:00:00", GIT_AUTHOR_DATE="2026-03-01T12:00:00"):
+        ctx.git(b, "commit", "-q", "-m", "later in b")
+    d = both(ctx, t, b, "--module", "modules/a")
+    t.ok(find(d["text"], "STALE") is None, "a newer commit outside the module is not stale")
+    d = both(ctx, t, b, "--module", "modules/b")
+    t.ok("commit" in (find(d["text"], "STALE") or ""), "a newer commit inside the module is stale")
+
+
+def real_blocks():
+    """The five fenced phase prompts of execute.md.tmpl section 2 (they hold `## ` lines inside the fence)."""
+    with open(os.path.join(HERE, "execute.md.tmpl"), encoding="utf-8") as fh:
+        txt = fh.read()
+    sec = txt.split("\n## 2. ", 1)[1].split("\n## 2b.", 1)[0]
+    blocks = re.findall(r"^```text\n(.*?)^```$", sec, re.S | re.M)
+    return [b.rstrip("\n") for b in blocks]
+
+
+def case_prompt_real_templates(ctx, t):
+    blocks = real_blocks()
+    t.eq(len(blocks), 5, "execute.md.tmpl carries 5 phase prompts")
+    t.ok(any("\n## " in "\n" + b for b in blocks), "fixture really has `## ` lines inside a fence")
+    parts = ["# Acme — Execution protocol\n\n> **Protocol:** adcm-toolkits 0.21.0", "## 7. Phase prompts (instantiated, copy-paste)"]
+    want = {}
+    for w in ("W1", "W2"):
+        for ph, b in zip("abcde", blocks):
+            body = b.replace("<Wx>", w)
+            want[(w, ph)] = body
+            parts.append(f"### {w} · {ph} — Title ☐\n\n```text\n{body}\n```")
+    parts.append("## 8. Appendix\n\n### W1 · a — not a prompt\n\n```text\nNOPE\n```")
+    b = ctx.brain("rt", simple(), {"execute.md": doc(*parts)})
+    for (w, ph), body in want.items():
+        r = ctx.run(b, "--no-git", "--prompt", f"{w}:{ph}")
+        t.eq((r.rc, r.out), (0, body + "\n"), f"{w}:{ph} prints byte-identical")
+    # legacy: the whole wave-prompt template inside one fence
+    with open(os.path.join(HERE, "wave-prompt.tmpl"), encoding="utf-8") as fh:
+        wp = fh.read().rstrip("\n")
+    t.ok("\n## " in wp, "wave-prompt.tmpl has `## ` lines")
+    leg = doc("# Acme — Execution protocol", "## 7. Wave prompts", f"### Wave W2 — Billing\n\n```text\n{wp}\n```", "## 8. Next")
+    r = ctx.run(ctx.brain("rl", simple(), {"execute.md": leg}), "--no-git", "--prompt")
+    t.eq((r.rc, r.out), (0, wp + "\n"), "legacy prompt with `## ` lines inside the fence")
+
+
+def case_active_wave_by_map_order(ctx, t):
+    wm = wave_map(r7("🔄", "**W9**"), r7("☐", "**W10**", dep="W9"))
+    task = doc(H1, wm, BURN, logbook(entry("2026-01-05 — Wave W9", "- **Next:** go")))
+    hs = [hand("W9", 1, "a", "b"), hand("W10", 1, "a", "b")]
+    b = phased_brain(ctx, "w9", hs, task=task, waves=("W9", "W10"))
+    for rel, ts in (("handoffs/W9-01-a.md", (2026, 1, 3)), ("handoffs/W10-01-a.md", (2026, 1, 4))):  # W10 is the newest file
+        stamp = __import__("time").mktime(ts + (12, 0, 0, 0, 0, -1))
+        os.utime(os.path.join(b, *rel.split("/")), (stamp, stamp))
+    d = both(ctx, t, b, "--no-git")
+    t.eq(dig(d, "handoffs", "wave"), "W9", "first unfinished wave in map order, not the newest file")
+    r = ctx.run(b, "--no-git", "--prompt")
+    t.eq(r.out.rstrip("\n"), prompt_text("W9", "b"), "W9 prompt")
+    hs = [hand("W9", 1, "d", "e"), hand("W9", 2, "e", "none"), hand("W10", 1, "a", "b")]
+    d = both(ctx, t, phased_brain(ctx, "w9b", hs, task=task, waves=("W9", "W10")), "--no-git")
+    t.eq(dig(d, "handoffs", "wave"), "W10", "W9 finished: W10 is active")
+
+
+def case_phase_retry(ctx, t):
+    hs = [hand("W2", 1, "a", "b"), hand("W2", 2, "b", "b", result="partial")]
+    b = phased_brain(ctx, "rt2", hs)
+    d = both(ctx, t, b, "--no-git")
+    t.ok("(retry)" in (phase_of(d) or ""), f"PHASE says retry: {phase_of(d)!r}")
+    t.eq(dig(d, "handoffs", "retry"), True, "json retry")
+    t.eq(ctx.run(b, "--no-git", "--prompt").out.rstrip("\n"), prompt_text("W2", "b"), "retry prints the same phase prompt")
+    d = both(ctx, t, phased_brain(ctx, "rt3", [hand("W2", 1, "a", "b")]), "--no-git")
+    t.ok("(retry)" not in (phase_of(d) or ""), "a normal handoff is not a retry")
+
+
+def case_audit_real_script(ctx, t):
+    real = os.path.join(HERE, "plan_audit.py")
+    if not os.path.isfile(real):
+        raise Skip("plan_audit.py not next to the selftest")
+    with open(real, encoding="utf-8") as fh:
+        dpath = ctx.digest_copy("real-bin", fh.read())
+    b = phased_brain(ctx, "ar", [hand("W2", 1, "a", "b")], proto="0.22.0")
+    plain = ctx.run(b, "--no-git", digest=dpath)
+    t.ok("PLAN-AUDIT: BLOCKED" in plain.out, f"no report blocks: {find(plain.lines, 'PLAN-AUDIT')!r}")
+    ctx.write("ar/qa/plan-audit.md", "PLAN-AUDIT: PASS · contradictions 0 · open 0\n")
+    ctx.write("ar/detailed-plan.md", "# Plan\n\n## Wave W2 — Billing\n\nbody\n\n## Wave W3 — Later\n\nbody\n")
+    seal = subprocess.run([sys.executable, os.path.join(os.path.dirname(dpath), "plan_audit.py"), "--brain", b, "--seal"],
+                          capture_output=True, text=True, env=ctx.env)
+    t.eq(seal.returncode, 0, "seal: " + (seal.stdout + seal.stderr)[:100])
+    plain = ctx.run(b, "--no-git", digest=dpath)
+    t.ok("PLAN-AUDIT: ok" in plain.out, f"sealed report is ok: {find(plain.lines, 'PLAN-AUDIT')!r}")
+    t.ok("PLAN-AUDIT: unavailable" not in plain.out, "never unavailable")
+    ctx.write("ar/detailed-plan.md", "# Plan\n\n## Wave W2 — Billing\n\nbody\n\n## Wave W3 — Later\n\nbody changed\n")
+    plain = ctx.run(b, "--no-git", digest=dpath)
+    pr = ctx.run(b, "--no-git", "--prompt", digest=dpath)
+    t.ok("PLAN-AUDIT: stale (W3)" in plain.out, f"edited wave is stale: {find(plain.lines, 'PLAN-AUDIT')!r}")
+    t.eq(pr.rc, 0, "stale on a wave that is not the pending one does not withhold")
+    ctx.write("ar/detailed-plan.md", "# Plan\n\n## Wave W2 — Billing\n\nbody\n\n## Wave W3 — Later\n\nbody\n")
+    ctx.write("ar/qa/plan-audit.md", "PLAN-AUDIT: FAIL · contradictions 1 · open 1\n")
+    t.eq(ctx.run(b, "--no-git", "--prompt", digest=dpath).rc, 1, "a FAIL report withholds the prompt")
+
+
+def case_audit_unavailable(ctx, t):
+    dpath = ctx.digest_copy("un-bin", "import sys\nsys.exit(64)\n")
+    b = phased_brain(ctx, "un", [hand("W2", 1, "a", "b")], proto="0.22.0")
+    plain = ctx.run(b, "--no-git", digest=dpath)
+    pr = ctx.run(b, "--no-git", "--prompt", digest=dpath)
+    t.ok("PLAN-AUDIT: unavailable (exit 64)" in plain.out and plain.rc == 0, "unavailable line, exit unchanged")
+    t.eq((pr.rc, pr.out.rstrip("\n")), (0, prompt_text("W2", "b")), "prompt not withheld")
+
+
 CASES = [
     ("en_template_exact", case_en_template_exact),
     ("es_aliases", case_es_aliases),
@@ -1241,6 +1648,37 @@ CASES = [
     ("hardening", case_hardening),
     ("audit_round3", case_audit_round3),
     ("pending_mr_row", case_pending_mr_row),
+    ("main_metric_ok", case_main_metric_ok),
+    ("main_warn_compactions", case_main_warn_compactions),
+    ("main_warn_bash", case_main_warn_bash),
+    ("main_multi_phase", case_main_multi_phase),
+    ("main_es_aliases", case_main_es_aliases),
+    ("phase_after_a", case_phase_after_a),
+    ("phase_after_failed_gate", case_phase_after_failed_gate),
+    ("phase_none_after_d", case_phase_none_after_d),
+    ("no_handoffs_unchanged", case_no_handoffs_unchanged),
+    ("prompt_pending", case_prompt_pending),
+    ("prompt_named", case_prompt_named),
+    ("prompt_legacy", case_prompt_legacy),
+    ("prompt_missing", case_prompt_missing),
+    ("mrs_unavailable", case_mrs_unavailable),
+    ("mrs_listed", case_mrs_listed),
+    ("stale", case_stale),
+    ("audit_ok", case_audit_ok),
+    ("audit_blocked", case_audit_blocked),
+    ("audit_stale_next_wave", case_audit_stale_next_wave),
+    ("audit_stale_other_wave", case_audit_stale_other_wave),
+    ("audit_script_absent", case_audit_script_absent),
+    ("audit_legacy_protocol", case_audit_legacy_protocol),
+    ("phase_first_wave_no_handoff", case_phase_first_wave_no_handoff),
+    ("phase_moves_to_next_wave", case_phase_moves_to_next_wave),
+    ("prompt_heading_glyphs", case_prompt_heading_glyphs),
+    ("stale_scoped_to_module", case_stale_scoped_to_module),
+    ("prompt_real_templates", case_prompt_real_templates),
+    ("active_wave_by_map_order", case_active_wave_by_map_order),
+    ("phase_retry", case_phase_retry),
+    ("audit_real_script", case_audit_real_script),
+    ("audit_unavailable", case_audit_unavailable),
 ]
 
 
@@ -1262,16 +1700,47 @@ def run_case(fn, digest, keep):
     return verdict, why
 
 
+MUTANTS = {"warn-threshold": (">= 2", ">= 99", "> 25", "> 9999")}
+
+
+def mutation(digest, keep):
+    """Copy the digest, neutralise each `# MUTATION-KEY: <name>` line, re-run the suite: it must FAIL."""
+    with open(digest, encoding="utf-8") as fh:
+        src = fh.read().split("\n")
+    bad = 0
+    for name, (a1, b1, a2, b2) in MUTANTS.items():
+        idx = [i for i, x in enumerate(src) if x.rstrip().endswith("# MUTATION-KEY: " + name)]
+        if len(idx) != 1:
+            print(f"SURVIVED {name}: marker found {len(idx)} times")
+            bad += 1
+            continue
+        mut = list(src)
+        mut[idx[0]] = mut[idx[0]].replace(a1, b1).replace(a2, b2)
+        d = tempfile.mkdtemp(prefix="digest-mutant-")
+        path = os.path.join(d, "status_digest.py")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(mut))
+        shutil.copy(os.path.join(HERE, "plan_audit.py"), d) if os.path.isfile(os.path.join(HERE, "plan_audit.py")) else None
+        fails = sum(run_case(fn, path, keep)[0] == "FAIL" for _, fn in CASES)
+        shutil.rmtree(d, ignore_errors=True)
+        print(f"KILLED {name} ({fails} cases failed)" if fails else f"SURVIVED {name}")
+        bad += not fails
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Behavioural tests for status_digest.py")
     ap.add_argument("--digest", default=os.path.join(HERE, "status_digest.py"))
     ap.add_argument("--only", help="run a single case by name")
     ap.add_argument("--keep", action="store_true", help="leave the temp trees on disk")
+    ap.add_argument("--mutation", action="store_true", help="neutralise the MUTATION-KEY lines one by one; the suite must fail")
     args = ap.parse_args()
     digest = os.path.abspath(os.path.expanduser(args.digest))
     if not os.path.isfile(digest):
         print(f"digest not found: {digest}")
         return 2
+    if args.mutation:
+        return mutation(digest, args.keep)
     cases = [c for c in CASES if not args.only or c[0] == args.only]
     if not cases:
         print(f"unknown case {args.only!r}; known: {', '.join(n for n, _ in CASES)}")

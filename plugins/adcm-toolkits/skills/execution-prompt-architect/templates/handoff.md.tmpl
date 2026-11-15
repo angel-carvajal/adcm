@@ -1,0 +1,31 @@
+<!--
+Template: one phase handoff — `{{docs_dir}}/handoffs/<Wave>-<nn>-<phase>.md` (nn = 01, 02 … within the wave, the next
+free number; phase ∈ a b c d e). The main session writes it at the close of EVERY phase session, before the final
+message, and ends that session with the exact line `HANDOFF: <path>`. It is the only state the next phase session reads.
+- Keep the header labels exactly as written: hooks stamp `- **Main thread:**` (leave it empty) and status-digest
+  parses the others. Result ∈ done | partial | fail · Next phase ∈ a | b | c | d | e | none.
+- `Next prompt:` is the FIRST line of the next phase's §7 prompt, verbatim (none → `none`).
+- ≤ 40 lines, no file contents, no URLs. The logbook notes feed the doc-sync sheet of phase d (and e).
+-->
+# Handoff {{Wave}} · {{phase}} — {{one-line outcome}}
+
+- **Wave:** {{Wave}} — {{wave title}}
+- **Phase closed:** {{phase}} ({{phase name}}) · {{date}} · round {{n}}
+- **Result:** {{done | partial | fail}}
+- **Next phase:** {{a | b | c | d | e | none}} (d always → e; e → none)
+- **Branch/MR:** {{branch}} · {{MR !N | PR #N | not opened}} · pipeline {{green | red | running | n/a}} · {{assigned to <Reviewer> | not assigned}}
+- **State:** {{what is true now: HEAD sha · DoD-auto green at <sha> · simplify ran over <checkpoint>..<sha> · gate report <path> PASS|FAIL · commit pushed}}
+- **Open:** {{none | finding ids, failing DoD lines, pending DoD-human, the step in progress when Result is partial}}
+- **Agents used:** {{n}}/20 of this session (opus {{a}} · sonnet {{b}}) — {{one line per agent: model (type) + role + scope}}
+- **Main thread:**
+- **Next prompt:** {{first line of the next phase's §7 prompt | none}}
+
+## Logbook notes (for the doc-sync sheet)
+
+- **Files touched:** {{list | per manifest}} · **Manifest drift:** {{none | expected vs found}}
+- **Reuse:** {{consumed/extracted · rewired · dup census before → after · born entries `<Symbol>@<path>=<what>|<when>` | none}}
+- **Simplifier:** {{carrier · ran over <checkpoint>..HEAD · DoD re-verified | reverted (why) | not run (why) | n/a in this phase}}
+- **Orchestrator fix:** {{none | `<file>` — <why a brief cost more>}}
+- **Escalations:** {{none | ID: tier → tier (reason)}}
+- **Wall clock:** {{duration of this phase session}}
+- **Notes:** {{what the next phase must know; decisions taken in this phase}}

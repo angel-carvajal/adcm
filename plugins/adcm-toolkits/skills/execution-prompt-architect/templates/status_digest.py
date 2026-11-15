@@ -9,11 +9,17 @@ with status-brief.md produces the same layout.
 
 Usage
   status_digest.py --brain DOCS_DIR [--module REL] [--lines 40] [--width 160] [--json]
-                   [--entry [K]] [--no-git] [--courier PATH] [--version]
+                   [--entry [K]] [--mrs] [--prompt [WAVE:PHASE]] [--no-git] [--courier PATH] [--version]
   --module REL   read <brain>/REL/task.md and pass `--module REL` to the preflight (no `..`)
   --width N      N >= 60; the DIGEST line is never cut
   --entry [K]    the K-th most recent logbook entry (default 1): <= 40 lines, the last one is
                  `ENTRY K/N @La-b · <status>`; K beyond N is a usage error
+  --mrs          add `MRS:` (open MRs/PRs via glab, else gh; 8 s timeout, <= 5 lines); a missing CLI or
+                 an error prints `MRS: unavailable (<why>)` and never changes the exit code
+  --prompt [W:P] print ONLY the fenced section 7 prompt of the pending phase (newest handoff's
+                 `Next phase`, else phase a of the first 🔄/ready wave) or of the named WAVE[:PHASE];
+                 legacy brains (`### Wave W — title`) give their single prompt; message on stderr and
+                 exit 1 when there is none, when `Next phase: none`, or when PLAN-AUDIT withholds it
   --json         same data as one JSON object; its "text" key holds the plain lines
   --courier P    courier_preflight.py to run; default <script_dir>/../../artifact-courier/scripts/
                  courier_preflight.py, then <brain>/scripts/courier_preflight.py, then the newest
@@ -37,14 +43,25 @@ Layout (fixed order; a line is left out when its data does not exist)
   WAVES N: ✅ a · 🔄 b · ⛔ c (tag n) ...[ · k irregular rows][ · k unparsed rows], <=3 🔄 / <=3 ⛔ lines
   NEXT ☐ ready: <ids> | none ready (waiting on <ids>)
   LAST LOG <date>[ (sfx)] · <wave>[ · PARTIAL][ · STOP] · @L<a>-<b>[ · order ...], heading,
-    next/blocked/agents, 2 `prev:` lines  |  LAST LOG none yet[ · k undated headings]
+    main/next/blocked/agents, 2 `prev:` lines  |  LAST LOG none yet[ · k undated headings]
+      main: [<phase> ]<n>B/<n>R/<n>c[ · ...][ ⚠]  from the `**Main thread:**` bullet (aliases Principal,
+      Hilo principal); ⚠ = any triple with compactions >= 2 or Bash > 25
+  PHASE <wave> · closed a b · next <a-e|none> · handoffs/<file>[ · main <triple>][ ⚠][ · paste: --prompt |
+      · prompt withheld (plan-audit)]   when handoffs/ files exist, or section 7 has phase headings (then next a of
+      the first 🔄/ready wave); active wave = first in wave-map order with an unfinished handoff chain (never by
+      mtime); `next b (retry)` when a fail/partial handoff points at its own phase; after `Next phase: none` it moves on to the next ready wave, phase a
+  PLAN-AUDIT: ok | BLOCKED · <reason> | stale (<waves>) | unavailable (<why>)   only when plan_audit.py sits
+      next to this script and execute.md declares protocol >= 0.22.0 (script missing = BLOCKED; blocked, or stale on the pending wave,
+      withholds the prompt)
+  STALE: handoff|commit <x> (<date>) is newer than the last logbook entry (<date>)
   PENDING-HUMAN <open>/<total> open · <shape> · §"<section>" | ? · §"<section>" unparsed | none tracked
   RESUME <first bullet of "Punto de retomada">
+  MRS: n open (glab|gh) + <= 4 lines  |  MRS: unavailable (<why>)        (only with --mrs)
   ARTIFACTS <preflight --summary line> | no registry | preflight not found | preflight error (exit n)
   DIGEST: ok | partial(<header,waves,logbook>) | unparsed (<reason>)          (always last)
 Over --lines the digest sheds, in order: prev, RESUME, pending > 3, blocked > 1, in-progress > 1,
-the heading line of LAST LOG, then everything except the never-cut lines: STATUS, git, WAVES,
-LAST LOG, PENDING-HUMAN, ARTIFACTS and DIGEST (printed even when --lines is smaller).
+the MRS items, the heading line of LAST LOG, then everything except the never-cut lines: STATUS, git,
+WAVES, LAST LOG, PHASE, PLAN-AUDIT, STALE, PENDING-HUMAN, MRS:, ARTIFACTS and DIGEST (printed even when --lines is smaller).
 """
 import argparse
 import glob
@@ -53,9 +70,10 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unicodedata
 
-__version__ = "0.21.0"
+__version__ = "0.22.0"
 
 KNOWN = "✅⛔⏸🔄☐🔀🔬"  # keep in sync with plans-regen.py GL ('✅⛔⏸🔄☐'), which this set extends
 GLYPH_ORDER = KNOWN[0] + KNOWN[3] + KNOWN[1:3] + KNOWN[4:]  # display order: done, doing, blocked, paused, ...
@@ -77,6 +95,7 @@ LABELS = (  # normalised label prefix -> entry field
     ("agents", ("agents used", "agentes usados")),
     ("closed", ("tasks closed", "tareas cerradas", "tasks cerradas")),
     ("branch", ("branch/mr", "branch", "rama")),
+    ("main", ("main thread", "principal", "hilo principal")),
 )
 ENTRY = re.compile(r"###\s+(\d{4}-\d{2}-\d{2})(?:\s*\((\d{1,3}|[a-z])\))?\s*[—–-]?\s*(.*)$")
 BULLET = re.compile(r"\s*[-*]\s+\*\*(.+?)\*\*\s*:?\s*(.*)$")
@@ -90,7 +109,12 @@ EMPTY_WORDS = frozenset("none ninguno ninguna nada n/a na nothing right now for 
 NOT_A_WAVE = re.compile(r"(?:sub)?totals?|suma|legend|leyenda", re.I)
 PLACEHOLDER = re.compile(r"\{[^{}\n]+\}|<[^>\n]*>")  # {{x}}, {x} and <x> template placeholders
 HR = re.compile(r"\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
-MUST = re.compile(r"(?:STATUS|git|WAVES|NEXT|LAST LOG|PENDING-HUMAN|ARTIFACTS|DIGEST:)")
+MUST = re.compile(r"(?:STATUS|git|WAVES|NEXT|LAST LOG|PHASE|PLAN-AUDIT|STALE|PENDING-HUMAN|MRS:|ARTIFACTS|DIGEST:)")
+MAIN_TRIPLE = re.compile(r"(?:\b([a-e])\s+)?(\d+)\s*Bash\s*·\s*(\d+)\s*(?:Read|Lect\w*)\s*·\s*(\d+)\s*compact\w*", re.I)
+HAND_NAME = re.compile(r"^(.+)-(\d{2,})-([a-e])\.md$")
+PROTOCOL = re.compile(r">\s*\*\*Protocol:\*\*\s*adcm-toolkits\s+(\d+)\.(\d+)(?:\.(\d+))?")
+PROMPT_HEAD = re.compile(r"###\s+(?:[^\w\s]+\s+)*(?:(?:Wave|Ola)\s+)?([\w/.-]+)(?:\s*·\s*([a-e])\b)?")
+AUDIT_FROM = (0, 22, 0)  # first protocol that carries the plan audit
 
 
 # ---------------------------------------------------------------- helpers copied from plans-regen.py
@@ -363,6 +387,22 @@ def sfx_key(s):
     return 0 if not s else int(s) if s.isdigit() else ord(s) - 96
 
 
+def main_warn(segs):
+    return any(x['compactions'] >= 2 or x['bash'] > 25 for x in segs)  # MUTATION-KEY: warn-threshold
+
+
+def parse_main(val):
+    """{segs: [{phase, bash, read, compactions}], warn} from `[a ]12 Bash · 3 Read · 1 compactions[; ...]`, or None."""
+    segs = [{'phase': (m.group(1) or '').lower() or None, 'bash': int(m.group(2)), 'read': int(m.group(3)),
+             'compactions': int(m.group(4))} for m in MAIN_TRIPLE.finditer(val)]
+    return {'segs': segs, 'warn': main_warn(segs)} if segs else None
+
+
+def main_text(m):
+    return ' · '.join('%s%dB/%dR/%dc' % (x['phase'] + ' ' if x['phase'] else '', x['bash'], x['read'], x['compactions'])
+                      for x in m['segs']) + (' ⚠' if m['warn'] else '')
+
+
 def parse_bullets(body):
     """{next, blocked, closed: [str], branch: str|None, agents: dict|None} from the entry's labelled bullets."""
     items, cur = [], None
@@ -376,7 +416,7 @@ def parse_bullets(body):
             cur[1] = (cur[1] + ' ' + re.sub(r'^[-*]\s+', '', ln.strip())).strip()
         else:
             cur = None
-    out = {'next': [], 'blocked': [], 'closed': [], 'branch': None, 'agents': None}
+    out = {'next': [], 'blocked': [], 'closed': [], 'branch': None, 'agents': None, 'main': None}
     for label, value in items:
         parts = INLINE.split(value)
         for lab, val in [(label, parts[0])] + list(zip(parts[1::2], parts[2::2])):
@@ -389,6 +429,8 @@ def parse_bullets(body):
                     o, s = re.search(r'opus\s+(\d+)', val), re.search(r'sonnet\s+(\d+)', val)
                     out['agents'] = {'used': int(m.group(1)), 'budget': int(m.group(2)),
                                      'opus': int(o.group(1)) if o else None, 'sonnet': int(s.group(1)) if s else None}
+            elif field == 'main':
+                out['main'] = out['main'] or parse_main(val)
             elif field == 'branch':
                 out['branch'] = out['branch'] or val or None
             elif field and val and not (field == 'blocked' and EMPTYISH.match(val)):
@@ -538,11 +580,11 @@ def parse_resume(lines, secs):
 
 
 # ---------------------------------------------------------------- git, artifacts
-def run(cmd, timeout=5, env=None):
+def run(cmd, timeout=5, env=None, cwd=None):
     """(rc, stdout, stderr); rc is None when the command could not run (stderr 'missing'/'failed') or timed out."""
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                           timeout=timeout, env=env, stdin=subprocess.DEVNULL)
+                           timeout=timeout, env=env, cwd=cwd, stdin=subprocess.DEVNULL)
     except FileNotFoundError:
         return None, '', 'missing'
     except subprocess.TimeoutExpired:
@@ -629,6 +671,198 @@ def artifacts_info(brain, module, courier_arg):
     return res('ok', 0, ' '.join((line.partition('courier-preflight:')[2] or line).split()) or 'no output')
 
 
+# ---------------------------------------------------------------- handoffs, plan audit, prompts, MRs
+def read_handoffs(tdir, brain, order):
+    """Header bullets of <docs>/handoffs/<Wave>-<nn>-<phase>.md. Active wave = the first wave of the map `order`
+    whose newest handoff (highest nn) has a Next phase other than none; file mtime never picks a wave."""
+    base = next((d for d in dict.fromkeys((tdir, brain)) if os.path.isdir(os.path.join(d, 'handoffs'))), None)
+    if base is None:
+        return None
+    items = []
+    for n in sorted(os.listdir(os.path.join(base, 'handoffs'))):
+        m, path = HAND_NAME.match(n), os.path.join(base, 'handoffs', n)
+        if not m or not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding='utf-8', errors='replace') as fh:
+                head = [fh.readline() for _ in range(60)]
+            mt = os.path.getmtime(path)
+        except OSError:
+            continue
+        f = {}
+        for ln in head:
+            b = BULLET.match(ln)
+            if b:
+                f.setdefault(norm(plain(b.group(1))).rstrip(':').strip(), tidy(b.group(2)))
+        def pick(key, dflt):
+            mm = re.match(r'(none|[a-e])\b', f.get(key, '').lower())
+            return mm.group(1) if mm else dflt
+        items.append({'file': 'handoffs/' + n, 'wave': m.group(1), 'nn': int(m.group(2)), 'mtime': mt,
+                      'phase': pick('phase closed', m.group(3)), 'next': pick('next phase', None),
+                      'result': f.get('result') or None, 'main': parse_main(f.get('main thread', ''))})
+    if not items:
+        return None
+    newest = {}
+    for it in items:
+        if it['wave'] not in newest or it['nn'] > newest[it['wave']]['nn']:
+            newest[it['wave']] = it
+    rank = {w: i for i, w in enumerate(order)}
+    pos = lambda it: rank.get(it['wave'], len(rank))
+    open_ = [it for it in newest.values() if it['next'] != 'none']
+    top = min(open_, key=lambda it: (pos(it), -it['mtime'])) if open_ else \
+        max(newest.values(), key=lambda it: (pos(it), it['mtime']))
+    mine = sorted((it for it in items if it['wave'] == top['wave']), key=lambda it: it['nn'])
+    latest = max(items, key=lambda it: it['mtime'])
+    return {'wave': top['wave'], 'closed': sorted({it['phase'] for it in mine}), 'next': top['next'],
+            'newest': top['file'], 'main': top['main'], 'warn': any(it['main'] and it['main']['warn'] for it in mine),
+            'latest': latest['file'], 'date': time.strftime('%Y-%m-%d', time.localtime(latest['mtime'])),
+            'retry': (top['result'] or '').lower().startswith(('fail', 'partial')) and top['next'] == top['phase'],
+            'withheld': False, 'items': [{k: it[k] for k in ('file', 'phase', 'result', 'next', 'main')} for it in mine]}
+
+
+def execute_md(tdir, brain):
+    return next((p for p in (os.path.join(tdir, 'execute.md'), os.path.join(brain, 'execute.md')) if os.path.isfile(p)), None)
+
+
+def plan_audit(brain, module, tdir):
+    """Result of `plan_audit.py --check --json` (sits next to this script; protocol >= 0.22.0 only), else None."""
+    script, ex = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plan_audit.py'), execute_md(tdir, brain)
+    if ex is None:
+        return None
+    try:
+        with open(ex, encoding='utf-8', errors='replace') as fh:
+            m = PROTOCOL.search(fh.read(8000))
+    except OSError:
+        return None
+    if not m or tuple(int(x or 0) for x in m.groups()) < AUDIT_FROM:
+        return None
+    if not os.path.isfile(script):
+        return {'state': 'missing', 'exit': None, 'stale': [], 'reason': '', 'withheld': False}
+    rc, out, _ = run([sys.executable, script, '--brain', brain] + (['--module', module] if module else []) +
+                     ['--check', '--json'], timeout=5)
+    state, stale, why = {0: 'ok', 1: 'blocked', 2: 'stale'}.get(rc, 'unavailable'), [], ''
+    try:
+        j = json.loads(out)
+        stale = [str(x) for x in j.get('stale_waves') or []]
+        why = tidy(str((j.get('reasons') or [''])[0]))
+    except (ValueError, AttributeError, TypeError, IndexError):
+        state = 'unavailable'
+    if state == 'unavailable':
+        why = 'timeout' if rc is None else 'exit %d' % rc if rc not in (0, 1, 2) else 'unparsable output'
+    return {'state': state, 'exit': rc, 'stale': stale, 'reason': why, 'withheld': False}
+
+
+def audit_withholds(pa, wave):
+    return bool(pa) and (pa['state'] in ('blocked', 'missing') or (pa['state'] == 'stale' and wave in pa['stale']))
+
+
+def pending_target(R, h, phased):
+    """(wave, phase) of the next session: the newest handoff's `Next phase`; after `none` (or without handoffs)
+    the first 🔄 / ready wave other than the closed one, phase a (None on a legacy brain); (wave, 'none') when
+    the closed wave has no successor; (None, None) when nothing is pending."""
+    if h and h['next'] and h['next'] != 'none':
+        return h['wave'], h['next']
+    done = h['wave'] if h else None
+    rows = [r['id'] for r in R['waves']['rows'] if r['glyph'] == '🔄' and r['id'] != done]
+    nxt = (rows + [w for w in R['ready'] if w != done] or [None])[0]
+    if nxt:
+        return nxt, 'a' if phased else None
+    return (done, 'none') if h else (None, None)
+
+
+def phased_exec(tdir, brain):
+    ex = execute_md(tdir, brain)
+    try:
+        return ex is not None and any(e[1] for e in prompts_of(ex))
+    except OSError:
+        return False
+
+
+def prompts_of(path):
+    """[(wave, phase|None, [lines])]: the fenced block under every `### <Wave>[ · <phase>] — title` of section 7."""
+    with open(path, encoding='utf-8', errors='replace') as fh:
+        lines = fh.read().split('\n')
+    lo, hi, fz = -1, len(lines), None  # section 7 = from `## 7` to the next `## ` heading OUTSIDE a code fence
+    for i, x in enumerate(lines):
+        if fz is None and re.match(r'##\s', x):
+            if lo >= 0:
+                hi = i
+                break
+            lo = i if re.match(r'##\s+(?:§\s*)?7\b', x) else lo
+        fz = fence_next(x, fz)
+    lines, out, i = lines[lo + 1:hi], [], 0
+    while i < len(lines):
+        s = lines[i].strip()
+        m = PROMPT_HEAD.match(lines[i])
+        if FENCE.match(s):  # a fenced block outside a prompt heading is skipped whole
+            mark, i = FENCE.match(s).group(1), i + 1
+            while i < len(lines) and fence_next(lines[i], mark) is not None:
+                i += 1
+        elif m:
+            j = i + 1
+            while j < len(lines) and not re.match(r'#{1,6}\s', lines[j]) and not FENCE.match(lines[j].strip()):
+                j += 1
+            if j < len(lines) and FENCE.match(lines[j].strip()):
+                mark, k = FENCE.match(lines[j].strip()).group(1), j + 1
+                while k < len(lines) and fence_next(lines[k], mark) is not None:
+                    k += 1
+                out.append((m.group(1), m.group(2), lines[j + 1:k]))
+                j = k
+            i = j
+        i += 1
+    return out
+
+
+def prompt_cmd(args, brain, module, tdir, R, h):
+    """Print the fenced prompt of the pending (or named) phase; message on stderr and exit 1 when there is none."""
+    def fail(msg):
+        sys.stderr.write('status_digest.py: --prompt: %s\n' % msg)
+        return 1
+    wave, _, ph = args.prompt.partition(':')
+    wave, ph = wave.strip(), ph.strip().lower()
+    ex = execute_md(tdir, brain)
+    if ex is None:
+        return fail('no execute.md in %s' % brain)
+    entries = prompts_of(ex)
+    phased = any(e[1] for e in entries)
+    if not wave:
+        wave, ph = pending_target(R, h, phased)
+        if not wave:
+            return fail('no pending wave in the tracker (pass WAVE[:PHASE])')
+    elif not ph and h and h['wave'].lower() == wave.lower():
+        ph = h['next'] or ''
+    if ph == 'none':
+        return fail('no pending phase: wave %s ends at its newest handoff (Next phase: none)' % wave)
+    ph = (ph or 'a') if phased else None
+    hit = next((e for e in entries if e[0].lower() == wave.lower() and e[1] == ph), None)
+    if hit is None:
+        return fail('no section 7 prompt for %s%s in execute.md' % (wave, ':' + ph if ph else ''))
+    pa = plan_audit(brain, module, tdir)
+    if audit_withholds(pa, wave):
+        return fail('PLAN-AUDIT %s%s: prompt for %s withheld; fix the plan audit first' % (
+            pa['state'], ' (' + ', '.join(pa['stale']) + ')' if pa['stale'] else '', wave))
+    print('\n'.join(hit[2]))
+    return 0
+
+
+def mrs_info(brain):
+    """Open MRs/PRs through glab, else gh (8 s each); never raises, never changes the exit code."""
+    why = 'no glab or gh'
+    for cli, cmd, pat in (('glab', ['glab', 'mr', 'list', '--per-page', '5'], r'!\d+\t'),
+                          ('gh', ['gh', 'pr', 'list', '--limit', '5'], r'\d+\t')):
+        rc, out, _ = run(cmd, timeout=8, cwd=brain)
+        if rc is None:
+            if _ == 'timeout':
+                return {'state': 'unavailable', 'why': cli + ' timed out', 'cli': cli, 'items': []}
+            continue
+        if rc != 0:
+            why = '%s exit %d' % (cli, rc)
+            continue
+        items = [' · '.join(x.strip() for x in ln.split('\t') if x.strip()) for ln in out.splitlines() if re.match(pat, ln)]
+        return {'state': 'ok', 'why': None, 'cli': cli, 'items': items[:5]}
+    return {'state': 'unavailable', 'why': why, 'cli': None, 'items': []}
+
+
 # ---------------------------------------------------------------- analysis
 def list_modules(brain):
     base = os.path.join(brain, 'modules')
@@ -669,7 +903,7 @@ def analyse(text):
         'logbook': {'order': log['order'], 'entries': log['entries'], 'undated': log['undated'],
                     'last': last, 'prev': log['prev']},
         'pending': parse_pending(lines, secs, last), 'resume': parse_resume(lines, secs),
-        'artifacts': None, '_entries': log['all'],
+        'artifacts': None, 'handoffs': None, 'phase': None, 'plan_audit': None, 'stale': None, 'mrs': None, '_entries': log['all'],
     }
 
 
@@ -752,6 +986,8 @@ def log_lines(R, width, trim):
     if trim < 6 and last['title']:
         out.append('  ' + clip(last['title'], 140))
     segs = []
+    if last['main']:
+        segs.append('main: ' + main_text(last['main']))
     if last['next']:
         segs.append('next: ' + clip(' / '.join(last['next'][:2]), 70))
     if last['blocked']:
@@ -777,6 +1013,37 @@ def log_lines(R, width, trim):
     return out
 
 
+def phase_lines(R):
+    h, pa, ph = R['handoffs'], R['plan_audit'], R['phase']
+    out = []
+    if ph:
+        same = bool(h) and h['wave'] == ph['wave']
+        paste = '' if ph['phase'] == 'none' else ' · prompt withheld (plan-audit)' if ph['withheld'] else ' · paste: --prompt'
+        m = h['main'] if same else None
+        out.append('PHASE %s · closed %s · next %s%s%s%s%s%s' % (
+            ph['wave'], ' '.join(h['closed']) if same else '-', ph['phase'], ' (retry)' if same and h['retry'] else '',
+            ' · ' + h['newest'] if same else ' · after %s closed at %s' % (h['wave'], h['newest']) if h else '',
+            ' · main ' + main_text(m).replace(' ⚠', '') if m else '', ' ⚠' if same and h['warn'] else '', paste))
+    if pa:
+        out.append({'ok': 'PLAN-AUDIT: ok', 'missing': 'PLAN-AUDIT: BLOCKED (plan_audit.py missing — renovate the brain)', 'blocked': 'PLAN-AUDIT: BLOCKED' + (' · ' + pa['reason'] if pa['reason'] else ''),
+                    'stale': 'PLAN-AUDIT: stale (%s)' % ', '.join(pa['stale']),
+                    'unavailable': 'PLAN-AUDIT: unavailable (%s)' % pa['reason']}[pa['state']])
+    if R['stale']:
+        out.append(R['stale'])
+    return out
+
+
+def mrs_lines(R, trim):
+    m = R['mrs']
+    if not m:
+        return []
+    if m['state'] != 'ok':
+        return ['MRS: unavailable (%s)' % m['why']]
+    keep = 4 if trim < 1 else 2 if trim < 3 else 0
+    k = len(m['items'])
+    return ['MRS: %s open (%s)' % (('%d+' % k) if k >= 5 else k, m['cli'])] + ['  ' + clip(x, 150) for x in m['items'][:keep]]
+
+
 def pending_lines(R, trim):
     pe = R['pending']
     if pe['shape'] == 'none':
@@ -800,9 +1067,10 @@ def build(R, width, trim):
     p = R['project']
     out = ['STATUS ' + (p['title'] + (' — ' + p['subtitle'] if p['subtitle'] else '') if p['title'] else R['_dirname']),
            brain_line(R['_brain'], p['module'], p['modules'], width), git_line(R['git'])]
-    out += waves_lines(R, trim) + log_lines(R, width, trim) + pending_lines(R, trim)
+    out += waves_lines(R, trim) + log_lines(R, width, trim) + phase_lines(R) + pending_lines(R, trim)
     if R['resume'] and trim < 2:
         out.append('RESUME ' + clip(R['resume'], 140))
+    out += mrs_lines(R, trim)
     out.append('ARTIFACTS ' + R['artifacts']['line'])
     out.append('DIGEST: ' + ('ok' if R['status'] == 'ok' else 'partial(%s)' % ','.join(R['missing'])))
     return out
@@ -905,7 +1173,30 @@ def run_digest(args):
         body.append('ENTRY %d/%d @L%d-%d · %s' % (args.entry, len(es), a, z, R['status']))
         return emit(args, {'version': __version__, 'status': R['status'],
                            'entry': {'k': args.entry, 'n': len(es), 'lines': [a, z]}}, body, 0)
+    h = R['handoffs'] = read_handoffs(tdir, brain, [r['id'] for r in R['waves']['rows']])
+    if args.prompt is not None:
+        return prompt_cmd(args, brain, module, tdir, R, h)
     R['git'] = {'kind': 'off'} if args.no_git else git_info(brain)
+    R['plan_audit'] = plan_audit(brain, module, tdir)
+    if h or phased_exec(tdir, brain):
+        wave, phase = pending_target(R, h, True)
+        if wave:
+            R['phase'] = {'wave': wave, 'phase': phase, 'withheld': audit_withholds(R['plan_audit'], wave)}
+    if R['plan_audit']:
+        R['plan_audit']['withheld'] = audit_withholds(R['plan_audit'], (R['phase'] or {}).get('wave') or
+                                                      pending_target(R, h, False)[0])
+        if R['phase']:
+            R['phase']['withheld'] = R['plan_audit']['withheld']
+    last = R['logbook']['last']
+    if last and h and h['date'] > last['date']:
+        R['stale'] = 'STALE: %s (%s) is newer than the last logbook entry (%s)' % (h['latest'], h['date'], last['date'])
+    elif last and R['git'].get('head') == 'ok':  # scoped to this docs folder: another module's commit is not ours
+        rc, out, _ = run(['git', '-C', brain, 'log', '-1', '--format=%h%x09%cs', '--', tdir], env=GIT_ENV)
+        sha, _, day = out.strip().partition('\t')
+        if rc == 0 and day > last['date']:
+            R['stale'] = 'STALE: commit %s (%s) is newer than the last logbook entry (%s)' % (sha, day, last['date'])
+    if args.mrs:
+        R['mrs'] = mrs_info(brain)
     R['artifacts'] = artifacts_info(brain, module, args.courier)
     return emit(args, R, render(R, args.width, args.lines), 0 if R['status'] == 'ok' else 1)
 
@@ -920,6 +1211,9 @@ def main(argv=None):
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--entry', nargs='?', const=1, type=at_least(1), metavar='K')
     ap.add_argument('--no-git', action='store_true')
+    ap.add_argument('--mrs', action='store_true', help='add the open MRs/PRs (glab, else gh; best effort)')
+    ap.add_argument('--prompt', nargs='?', const='', metavar='WAVE:PHASE',
+                    help='print the section 7 prompt of the pending (or named) phase and nothing else')
     ap.add_argument('--courier', metavar='PATH')
     ap.add_argument('--version', action='version', version='status_digest.py ' + __version__)
     args = ap.parse_args(argv)

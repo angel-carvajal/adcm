@@ -10,6 +10,10 @@ they carry the executable bit, no manifest key. Where that hook does not run (cl
 `plans-regen.py` and `prompts-regen.py` of `skills/execution-prompt-architect/templates/`; `map-refresh` runs
 `skills/code-project-context-generator/scripts/map_refresh.py`.
 
+`check-memory-index` runs `scripts/check-memory-index.py` (the memory-index limits: line length and token estimate; `--file`, `--all`, `--brief`, `--json`; exits 0/1/64).
+
+`plan-audit` and `docsync-apply` run `plan_audit.py` (the contradiction-audit seal and check of a brain's plan before prompts are rendered) and `docsync_apply.py` (the two-phase doc-sync sheet: `--check`, then `--write`) of `skills/execution-prompt-architect/templates/`.
+
 `explainer-record` is a Node launcher: it runs `skills/explainer-video/scripts/record.mjs` with `node` instead of `python3`.
 Recording needs Node 20+, so it puts the newest nvm 2x install (version order) first on PATH and falls back to the `node` already there;
 its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, voice).
@@ -37,6 +41,7 @@ tailnet link, in the same entry shape as the owner's existing `footerLinksRegexe
 `{"type":"regex","pattern":"\\[(?<t>[^\\]]{1,40})\\]\\(https://(?<h>[a-z0-9-]+\\.[a-z0-9-]+\\.ts\\.net(?::\\d{1,5})?)/[^)\\s]*\\)","url":"https://{h}/","label":"{t}"}`
 
 ## Hooks
+The plugin's own `hooks/hooks.json` ships `main-thread-guard.py` (SessionStart, UserPromptSubmit, PreCompact, PreToolUse, PostToolUse), `notify-stop.py` (Stop) and the PATH hook; they need no registration. The two hooks below stay owner-installed.
 `artifact-guard.py` (Stop) and `merge-guard.py` (PreToolUse · matcher `Bash|mcp__.*merge.*` · timeout 10) live in `skills/execution-prompt-architect/templates/`. The owner copies them to
 `$CLAUDE_CONFIG_DIR/hooks/` (default `~/.claude/hooks/`) and registers them in the user `settings.json` (`hooks.Stop` / `hooks.PreToolUse`):
 ```json

@@ -58,8 +58,8 @@ artifacts with the previous URL kept in the registry.
 
 ## Requirements
 
-Python 3 (stdlib only). A session whose sub-agents expose the Artifact tool. `SendUserFile`
-and the Chrome extension are needed only for the optional media step.
+Python 3 (stdlib only). A session whose sub-agents expose the Artifact tool. The Chrome extension is needed only for the optional GIF step; the main session
+sends the returned `MEDIA: unsent` paths with `SendUserFile` without opening them.
 
 ## Layout
 

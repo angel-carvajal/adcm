@@ -27,7 +27,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/skills/artifact-courier/references/procedure.md` and
 - Run the preflight only as the bare `courier-preflight …` (the plugin's `scripts/launchers/` is on PATH): nothing before it, no `cd … &&`, no env assignment.
 - A seal (`--mark-published`) denied by permissions: do not retry, do not rewrite the registry another way, RETURN `REGISTRY: blocked by permissions: <the exact command>`.
 - Git runs only in procedure step 7, by the last courier, with explicit paths. Never `--no-verify`, never force.
-- Media never leaves the machine through you. Save it to disk and RETURN `MEDIA: unsent: <paths>` in the brief's order; the main session sends it.
+- Media never leaves the machine through you. Save it to disk and RETURN `MEDIA: unsent: <paths>` in the brief's order; the main session sends it by path without opening it.
 - The links block always comes from the resolved session account (`--block-only --account <resolved>`); a row whose canonical `url` this session could not open prints with the script's warning: report it under ERRORS as `<file>: not opened by this account`.
 - Not found / not owned means another account: follow procedure step 6 (retry with `url_<ACCOUNT>`, else `blocked`; re-issue only when the brief says `REISSUE ON OTHER ACCOUNT: yes`).
 - Rows outside the brief's list are not yours, even if stale. Per-row problems (blocked, refused) are reported and the batch continues.

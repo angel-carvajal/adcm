@@ -22,6 +22,8 @@ layout. A brand-new client is registered the same day as a `directory` marketpla
 │   │   ├── modules/<mod>/   ←   lazy per-module doc (its own six-doc family) when the
 │   │   │                        container hosts several modules/initiatives
 │   │   ├── map/             ←   lazy brain map (utilities.md · patterns.md · where-to-look.md), generated and refreshed by script; a module keeps its own modules/<mod>/map/
+│   │   ├── handoffs/        ←   one `<Wave>-<nn>-<phase>.md` per closed phase session (templates/handoff.md.tmpl)
+│   │   ├── qa/              ←   gate reports `gate-<wave>.md` and `plan-audit.md` (the plan-contradiction audit, sealed)
 │   │   └── …                ←   the six execution documents + visuals (plans/prompts html)
 │   ├── <slug>-{ai|ia}-admin/    ← own git repo — private plugin marketplace (business context, council)
 │   └── <slug>-{ai|ia}-common/   ← own git repo — operational/engineering plugins (optional)
@@ -104,6 +106,9 @@ a no-op. A symlink satisfies the check — create it in the SAME session that cr
    `artifacts.json.close_markers` names the real third document (e.g.
    `["task.md","execute.md","plan-detallado.md"]`). Never rename an existing
    deployment.
+11. **Phase sessions leave handoffs and an audit.** `ai-brain/handoffs/<Wave>-<nn>-<phase>.md` is written by the closing
+    phase session (the hook stamps its `**Main thread:**` line); `ai-brain/qa/plan-audit.md` is the auditor's RETURN, saved
+    verbatim and sealed by `plan-audit --seal`. Both are brain files, committed in the brain repo with the doc-sync.
 10. **Day-0 marketplace registration is a `directory` source**: before a client
     container has a remote, register from the local path
     (`{"source":"directory","path":"<container>/ai/<slug>-ia-admin"}` in the

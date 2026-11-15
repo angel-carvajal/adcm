@@ -6,7 +6,7 @@ ADCM public toolkits for Claude Code (open-source).
 
 | Plugin | What it does | Skills |
 |---|---|---|
-| `adcm-toolkits` | Public ADCM toolkits: multi-advisor council, code-project and business-context generators, execution-prompt architect, dependency renovator, agentic SEO reporter, design-direction architect, artifact courier, explainer-video recorder. | agentic-seo-report, artifact-courier, business-context-generator, code-project-context-generator, council, dependency-renovate, design-direction-architect, execution-prompt-architect, explainer-video |
+| `adcm-toolkits` | Public ADCM toolkits: multi-advisor council, code-project and business-context generators, execution-prompt architect, dependency renovator, agentic SEO reporter, design-direction architect, artifact courier, explainer-video recorder, main-thread guard hooks. | agentic-seo-report, artifact-courier, business-context-generator, code-project-context-generator, council, dependency-renovate, design-direction-architect, execution-prompt-architect, explainer-video |
 
 ## Install
 

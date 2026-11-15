@@ -162,13 +162,23 @@ def cases(now):
     add("long_folder_cut_60", long_folder)
 
     def hooks_json():
+        want = {"SessionStart": ["launchers-path.sh", "main-thread-guard.py"], "Stop": ["notify-stop.py"],
+                "UserPromptSubmit": ["main-thread-guard.py"], "PreCompact": ["main-thread-guard.py"],
+                "PreToolUse": ["main-thread-guard.py"], "PostToolUse": ["main-thread-guard.py"]}
         try:
             h = json.load(open(os.path.join(PLUGIN, "hooks", "hooks.json"), encoding="utf-8"))["hooks"]
-            cmds = [x["command"] for ev in ("SessionStart", "Stop") for g in h[ev] for x in g["hooks"]]
+            got = {ev: [x["command"] for g in groups for x in g["hooks"]] for ev, groups in h.items()}
+            post = [g.get("matcher") for g in h["PostToolUse"]]
         except Exception as exc:
             return f"hooks.json unreadable: {exc!r}"
-        bad = [c for c in cmds if '"${CLAUDE_PLUGIN_ROOT}' not in c]
-        return f"unquoted ${{CLAUDE_PLUGIN_ROOT}}: {bad}" if bad or len(cmds) != 2 else None
+        if set(got) != set(want) or any(len(got[ev]) != len(s) or not all(any(n in c for c in got[ev]) for n in s)
+                                        for ev, s in want.items()):
+            return f"unexpected hooks: {got}"
+        bad = [c for cs in got.values() for c in cs if '"${CLAUDE_PLUGIN_ROOT}' not in c]
+        py = [c for cs in got.values() for c in cs if "python3" in c and not c.endswith('.py" || true')]
+        if bad or py:
+            return f"unquoted ${{CLAUDE_PLUGIN_ROOT}} or not fail-open: {bad or py}"
+        return None if post == ["Write|Edit"] else f"PostToolUse matcher {post}, expected ['Write|Edit']"
     add("hooks_json_quoted", hooks_json)
     return out
 

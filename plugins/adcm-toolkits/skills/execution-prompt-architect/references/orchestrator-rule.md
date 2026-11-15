@@ -6,12 +6,27 @@ In any substantive task the main session is a **pure orchestrator**: it analyzes
 briefs, launches sub-agents with an explicit `model`, reads their RETURNs and
 decides/integrates. It does NOT execute the task itself:
 
-- no reading files in bulk (a sub-agent reads; the RETURN carries what matters), no
-  editing at scale, no browsing, scraping or screenshotting;
-- no rendering or regenerating HTML, no calling the Artifact tool, no assembling the
-  links block (the `artifact-courier` does all of it);
-- no reading `task.md`, `execute.md` or plan docs to learn the state of a project — the
-  status digest answers it (see "Session start").
+- reading files, editing at scale, browsing and screenshots belong to sub-agents (the RETURN carries what matters);
+- rendering HTML, publishing Artifacts and assembling the links block belong to the `artifact-courier`;
+- the state of a project comes from one `status-digest` call, never from `task.md`, `execute.md` or the plans
+  (see "Status questions").
+
+## Enforced by hooks
+
+The plugin's hooks impose these; the reason a denial prints names the way out. Do not restate them in prompts; the one exception is the mandatory 3-line guard note at the top of every phase prompt.
+- `main-thread-guard` (every tool call of the main thread):
+  - T0 tamper: the guard's own state dir is untouchable.
+  - R1 lock at the 3rd compaction and R1b handoff gate at the 2nd: only handoff and memory writes pass until a handoff exists.
+  - M1: a memory index line longer than 150 chars is denied.
+  - R6 status turn: the 4th tool call of a status question is denied.
+  - R3 heavy reads: images and PDFs, whole-file reads over 40 KB or of `task.md`, `execute.md`, plans, `plans.html`, `prompts.html`, bulk dumpers.
+  - X1: browser MCP tools and any Artifact action other than open, list, pin, unpin.
+  - X2 edit cap: more than 20 lines per Write or Edit, except handoffs, memory files and `qa/*.md`.
+  - R2 budget: 25 Bash/Grep/Glob and 8 Read calls per main session.
+- `merge-guard` (PreToolUse): merge commands and merge APIs are denied; Claude never merges.
+- `artifact-guard` (Stop): the links block appears once per delivery close, as the last lines, from the last courier RETURN.
+- Not enforced by any hook, so they stay rules: the agent budget and roles, the model on every call, briefs of at most 40 lines,
+  the logged shortcut, MR assigned to the Reviewer with wave N+1 waiting for the merge, no URLs from any agent but the courier.
 
 ## Exceptions (three, nothing else)
 
@@ -23,15 +38,27 @@ decides/integrates. It does NOT execute the task itself:
    - `sin tanto lío` — direct mode for THAT task or turn only.
    - `modo directo` — direct mode stays on until the user says `modo orquestador`.
 
-   In direct mode the main session does everything itself. Never infer it from tone or
-   from the task looking small.
+   In direct mode the main session does everything itself and the guard lifts R2, R3, R6, X1 and X2
+   (never T0, R1, R1b, M1). Never infer it from tone or from the task looking small.
 3. **Verbatim saves.** Saving a sub-agent's RETURN unchanged to the path the brief names
    (gate reports `qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout, digests) is a mechanical save, not an edit.
 
-## Merge and links
+## Merge, links, media
 
-- **Claude never merges.** A wave ends with its MR open, pipeline green, simplify pass done and assigned to the Reviewer (`> **Reviewer:**` in execute.md); the merge is a DoD-human item and wave N+1 starts only after MR N is merged (merge policy: wait). This applies to the waves' code MRs — the docs repo (ai-brain, any of its three positions) and the marketplaces commit and push to main directly.
-- The links block appears exactly once per delivery close — in the orchestrator's final message, after the last courier RETURN. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker; with several couriers (batches, `SendMessage` replies) only the last RETURN's block is pasted. No agent other than the courier returns URLs.
+- A wave ends with its MR open, pipeline green, simplify pass done and assigned to the Reviewer (`> **Reviewer:**` in execute.md); the merge is a DoD-human item and wave N+1 starts only after MR N is merged (merge policy: wait).
+  The docs repo (ai-brain) and the marketplaces commit and push to main directly.
+- The links block is the last RETURN's block of the last courier, pasted once per delivery close. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker. No agent other than the courier returns URLs.
+- Media: a sub-agent cannot load SendUserFile, so it returns `MEDIA: unsent: <paths>`. The main session sends them with SendUserFile by path WITHOUT opening them
+  (load it with ToolSearch `select:SendUserFile`). Judging screenshots is always a sub-agent's job; the guard denies image reads on the main thread.
+
+## Phase sessions and doc-sync
+
+- A wave runs as phase sessions, one clean session per phase: a implement + DoD · b gate · c gate fixes · d doc-sync + courier close · e merge close (production close when the wave deploys; a no-deploy wave gets the mini e, then `Next phase: none`).
+  A phase never continues into the next one: it ends with `HANDOFF: <path>` and one sentence telling the owner to /clear and paste the next phase prompt.
+- Doc-sync is always a sonnet executor, from `templates/docsync-brief.md`, in two phases. A builds the edit sheet and the markers file and leaves
+  `docsync-apply --check` clean, writing no doc. B (by `SendMessage` with the marker values and the answers) pulls, runs `--check`, `--write`,
+  `status-digest`, commits by explicit path and pushes. When a doc-sync changes a LATER wave's plan, the closing phase re-audits those waves in
+  scoped mode (`plan-audit --check` exit 2, scoped `plan-audit-brief.md`, `--seal`) before it closes; done or started waves are exempt. The main session never writes or edits a sheet; in phase d the handoff comes before B.
 
 ## Notify the owner
 Only the main session notifies (no brief asks a sub-agent to). When a turn ends on (1) a delivery close, (2) a stop that needs the
@@ -43,18 +70,15 @@ native `PushNotification` tool ONCE, right BEFORE the final message (after any m
 - A "not sent" result means the owner is at the terminal: fine, never retry, never mention it.
 - One per stop. If the plugin's Stop hook asks for it in a turn you already notified, end the turn with no text.
 
-## Session start: the status digest
+## Status questions
 
-When the user opens or resumes a project ('where did we leave off', 'dónde nos quedamos',
-'project status'), the main session runs `status-digest --brain <docs_dir> [--module
-modules/<mod>]` (the plugin's `scripts/launchers/` launcher, bare: nothing before it) — without the plugin
-`python3 <path> --brain <docs_dir>` with `<path>` = `execution-prompt-architect/templates/status_digest.py`
-or the brain copy `<docs_dir>/scripts/status_digest.py` — and reads only its ≤40 lines. Exit 0 ok · 1
-partial (digest printed, `DIGEST: partial(<parts>)`): the digest is enough, spawn the fallback
-only if the missing part matters · 2 unparsed: always ONE `Agent(subagent_type:
-"adcm-toolkits:digester")` with `execution-prompt-architect/templates/status-brief.md`
-(1 of the 20, 0 Opus quota; the type fixes `sonnet` and read-only tools) · 64 usage error. `--entry [K]` prints the K-th newest logbook entry
-in full (≤40 lines).
+On a session start or a status question ('where did we leave off', 'dónde nos quedamos', 'project status', 'qué sigue') the main
+session makes ONE call: `status-digest --brain <docs_dir> [--module modules/<mod>] --mrs` (the plugin's `scripts/launchers/` launcher, bare:
+nothing before it; without the plugin `python3 <path> --brain <docs_dir>`, `<path>` = `templates/status_digest.py` or the brain's
+`scripts/status_digest.py`). It answers from that output, with the links it printed; when the digest prints STALE it says so;
+it offers to dig deeper and never investigates silently (the guard caps a status turn at 3 calls; the 4th is denied, rule R6).
+`--prompt [WAVE:PHASE]` prints the exact next phase prompt. Exit 0 ok · 1 partial (the digest is enough) · 2 unparsed: ONE
+`Agent(subagent_type: "adcm-toolkits:digester")` with `templates/status-brief.md` (1 of the 20, 0 Opus quota) · 64 usage. `--entry [K]` prints a logbook entry (≤40 lines).
 
 ## `model` on EVERY delegated call
 
@@ -71,7 +95,7 @@ agents load at the next session or on `/reload-plugins`.
 
 | Tier | Agent type | Does | Never |
 |---|---|---|---|
-| Main session (orchestrator) | — | Decides design and scope, audits deliverables, writes briefs, runs the DoD, integrates | Executes, reads in bulk, renders, publishes, browses, merges an MR / pushes code to the default branch, prints links in progress turns |
+| Main session (orchestrator) | — | Decides design and scope, audits deliverables, writes briefs, runs the DoD, integrates | Executes, writes doc-sync, opens screenshots, renders, publishes, browses, merges an MR / pushes code to the default branch, prints links in progress turns |
 | `opus` (quota 10 per session; 2 reserved) | `adcm-toolkits:auditor` (reviews, gate verifier) · `adcm-toolkits:researcher` + `model: opus` (investigations) · `adcm-toolkits:executor` + `model: opus` (⚠gate waves) | Investigates, audits, reviews regression, verifies gates, implements ⚠gate waves | Decides scope; merges an MR / pushes code to the default branch |
 | `sonnet` | `adcm-toolkits:executor` · `adcm-toolkits:executor-frontend` (UI and frontend-code waves — when the wave loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload, ~3.1k tokens) · `adcm-toolkits:researcher` (default; also the capture role: browser, no edits) · `adcm-toolkits:courier` · `adcm-toolkits:digester` | Executes, renders, publishes (courier), researches, captures, runs scripts, digests status | Self-approves; merges an MR / pushes code to the default branch; returns URLs (only the courier does) |
 | `haiku` | `general-purpose` + `model: haiku` | Inventory-only tasks: listing, counting, grepping, file-existence checks | Anything that needs judgement |

@@ -5,7 +5,7 @@ logbook at close. Never hardcode dates — entries use the date of the day they 
 Generate in the user's language; keep the document name task.md — it never
 translates (tooling addresses it).
 `scripts/status_digest.py` reads the wave map, the DoD-human pending table and the logbook
-labels (`Next:`, `Blocked:`, `Agents used:`) — keep their names; sessions read this file
+labels (`Next:`, `Blocked:`, `Agents used:`, `Main thread:`) — keep their names; sessions read this file
 only through that digest.
 -->
 # {{project_name}} — Task tracker: {{initiative_title}}
@@ -49,7 +49,8 @@ cycle (move waves out), never accumulate.**
 
 ## Logbook
 
-Append one entry per wave session (including `[PARTIAL]` ones — see `execute.md` §4):
+Append one entry at each wave close (phase d) and merge / production close (phase e), written by the doc-sync executor from
+the wave's handoffs (`execute.md` §2b, §4); legacy one-session waves also append `[PARTIAL]` entries:
 
 ### {{date_of_execution}} — Wave {{Wx}} {{[PARTIAL] if unfinished}}
 
@@ -76,5 +77,7 @@ Append one entry per wave session (including `[PARTIAL]` ones — see `execute.m
   quota; the `verify` line of a ⚠gate wave ends with `gate report: <path>` when its REPORT was saved verbatim; the `courier` line is the `artifact-courier` delivery close — always sonnet: one courier per batch (normally 1; each extra batch = 1 more of the 20, 0 Opus quota) —
   record the NUMBER of couriers on that line — plus the `regen` commands it ran and the artifact rows it updated or re-issued; the
   budget and the roles are a hard limit of the session (execute.md §1.7)}}
+- **Main thread:** {{<seg>[; <seg>…] — seg = `[<phase> ]<n> Bash · <n> Read · <n> compactions`, copied from the stamped
+  `**Main thread:**` lines of the wave's handoffs, e.g. `a 18 Bash · 6 Read · 0 compactions; b 4 Bash · 1 Read · 0 compactions`}}
 - **Escalations:** {{none | ID: sonnet → opus (reason, attempts) · ID: opus →
   orchestrator (reason)}}

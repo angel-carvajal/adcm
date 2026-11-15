@@ -1,5 +1,49 @@
 # Changelog — adcm-toolkits
 
+## 0.22.0 — 2026-11-14
+
+- **main-thread-guard.** New plugin hook `scripts/main-thread-guard.py` (SessionStart, UserPromptSubmit, PreCompact,
+  PreToolUse, PostToolUse; registered in `hooks/hooks.json`, fail open) that keeps the main session orchestrating.
+  Rules, first match wins: T0 (every thread: nothing in a session changes the guard's state folder or its own files,
+  meaning the three files that decide whether it runs and the folders that hold them; on those paths, or when one of them is the working directory, Bash is limited to
+  a read-only allowlist with no write redirection and no environment prefix, editors are denied, and scheduling tools
+  whose text carries an escape phrase are refused). The rest apply to the main thread only: R1 (lock on the 3rd
+  compaction), R1b (at the 2nd compaction every other tool is denied until a handoff of at least 300 characters is
+  written: state, pending items, live agents, next step, resume prompt), M1 (memory index line over 150 characters),
+  R6 (a status question, a prompt that is essentially the status phrase alone, gets 3 calls; ordinary prompts that merely
+  contain the word are not capped), R3 (no whole-file reads of files over 40 KB or of plan docs, no image or PDF reads, no
+  transcript dumps), X1 (no browser tools, no Artifact publish or read), X2 (edits over 20 lines, Bash scripts over 25
+  lines), R2 (25 Bash/Grep/Glob and 8 Read calls per session; environment caps can only lower the defaults).
+  Sub-agents are exempt after T0.
+- **Direct mode.** `sin tanto lío` (one turn) and `modo directo` (sticky until `modo orquestador`) are honoured only from the owner's own prompt, never inside quotes, code, pasted blocks or hand-backs; they switch off R2, R3, R6, X1 and X2 but never T0, R1, R1b or M1.
+- **Unattended runs.** Headless and SDK sessions count compactions and receive notes but are never denied anything except by T0; `ADCM_GUARD_FORCE=1` forces attended mode for tests.
+- **Phase sessions with handoffs.** The execute.md protocol runs one clean session per phase (a implement, b gate, c
+  gate fixes, d doc-sync and close, e production close). Each phase ends with `HANDOFF: <path>`, a file from the new
+  `handoff.md.tmpl`; the guard stamps a `Main thread` metric line into it, and phase prompts open with a short guard
+  note.
+- **Two-phase doc-sync.** New `docsync_apply.py` (launcher `docsync-apply`) applies a JSON edit sheet with `--check` then `--write`, resolves marker placeholders and lints long lines; doc-sync is always one executor in two phases (`docsync-brief.md`), and the main session never writes a sheet.
+- **Plan-audit gate (Step 6b).** New `plan_audit.py` (launcher `plan-audit`, `plan-audit-brief.md`): an auditor's
+  contradiction report is sealed per wave with hashes; `--check` fails on a missing, failed, open or stale seal,
+  `prompts-regen` refuses to render and the digest withholds the next prompt until it passes.
+- **Status digest.** `status_digest.py` gains a PHASE line, `--prompt [WAVE:PHASE]` (prints the exact phase prompt), `--mrs` (best-effort open MRs/PRs, 8 s timeout), a STALE note when a handoff or commit is newer than the logbook, and a `main:` metric with a warning flag.
+- **check-memory-index.** New `scripts/check-memory-index.py` (launcher `check-memory-index`): line length and token-estimate limits for memory indexes (`--file`, `--all`, `--brief`, `--json`); the guard runs it at session start.
+- **artifact-guard v7 and media rule.** The owner-installed `artifact-guard.py` template retries before blocking;
+  sub-agents return `MEDIA: sent` or `MEDIA: unsent: <paths>` and the main session sends unsent paths by path without
+  opening them. The courier, executor-frontend and researcher agents carry the rule.
+- **Renovate.** `renovate_check.py` detects the phase-protocol literals and reports `partial` until a brain is renovated; renovate and status briefs updated.
+- **Selftests.** New `scripts/selftest-all.py` runs every `*-selftest.py` (`--only`, `--list`, `--mutation`): 21
+  suites, 902 checks, 0 failures. New suites: `main-thread-budget` (89), `compaction-breaker` (43), `heavy-read-guard`
+  (26), `memory-index-check` (11), `docsync-apply` (22), `plan-audit` (21). Extended: `artifact-guard` (33),
+  `status-digest` (60), `prompts-regen` (20), `renovate` (27). Eight suites carry mutation controls that neutralise
+  one marked condition each and require the suite to fail; `--mutation` kills all 44 mutants (main-thread-budget 22,
+  compaction-breaker 7, heavy-read-guard 5, docsync-apply 3, plan-audit 3, memory-index-check 2, status-digest 1,
+  artifact-guard 1).
+- **Version constants.** `plugin.json`, the `execute.md.tmpl` Protocol line and the version strings of `courier_preflight.py`, `renovate_check.py`, `status_digest.py` and the renovate selftest read 0.22.0.
+
+Notes: run `claude plugin marketplace update adcm` and `claude plugin update adcm-toolkits@adcm`, then restart open sessions. After the update the owner re-copies the artifact-guard template over the installed copy:
+`cp "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/adcm/adcm-toolkits/0.22.0/skills/execution-prompt-architect/templates/artifact-guard.py" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/artifact-guard.py"`.
+Existing brains adopt the phase protocol only through the renovation phrase "Renueva el brain al protocolo vigente". The owner's global rule file is not touched by the plugin; its prose now defers to the hooks.
+
 ## 0.21.0 — 2026-11-13
 
 - **Phone notification after long turns.** New Stop hook `scripts/notify-stop.py`, registered in the plugin's

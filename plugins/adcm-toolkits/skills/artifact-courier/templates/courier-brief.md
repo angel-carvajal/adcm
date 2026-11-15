@@ -22,7 +22,7 @@ FILES: only the Rows listed above, {{docs_dir}}/artifacts.json (through --mark-p
   --set-regen only) and the regen output files.
 
 DELIVERABLE: every listed row republished (in place, re-issued above 600 KB, or new), sealed in
-  the registry, media sent, and the RETURN of procedure.md.
+  the registry, media saved to disk (`MEDIA: unsent: <paths>`; the main session sends it), and the RETURN of procedure.md.
 
 DOD-SLICE: the final `courier-preflight ... --block-only` lists every row with a url; each
   processed row is `fresh` in a last preflight; preview curl (localhost and LAN) printed 200, and the Tailnet URL too when the brief gives one.

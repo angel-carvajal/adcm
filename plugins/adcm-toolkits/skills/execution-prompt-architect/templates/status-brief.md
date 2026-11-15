@@ -22,8 +22,11 @@ WAVES N: ✅ a · 🔄 b · ⛔ c (superada 3) · ⏸ d · ☐ e (deuda 2) · �
 NEXT ☐ ready: <id>, <id>[ (+cond)] | none ready (waiting on <ids>)
 LAST LOG <date>[ (sfx)] · <wave|—>[ · PARTIAL][ · STOP] · @L<a>-<b>[ · order mixed|oldest-first] | LAST LOG none yet
   <rest of the heading, plain, ≤140>
-  next: <≤2 lines>      blocked: <≤2 lines>      agents: 7/20 (opus 3 · sonnet 4)
+  main: [a ]12B/3R/1c[ · b ...][ ⚠]  next: <≤2 lines>      blocked: <≤2 lines>      agents: 7/20 (opus 3 · sonnet 4)
+        (main = the `**Main thread:**` bullet: <n> Bash · <n> Read · <n> compactions per phase; ⚠ when compactions ≥ 2 or Bash > 25)
   prev: <date> · <wave>[ · PARTIAL] — <≤80>            (the 2 entries before it)
+PHASE <wave> · closed a b · next <a-e|none> · <newest handoffs/ file>   (only if <docs_dir>/handoffs/*.md exist; header bullets Phase closed / Next phase)
+STALE: handoff|commit <x> (<date>) is newer than the last logbook entry (<date>)   (only when true; dates only)
 PENDING-HUMAN <open>/<total> open · <shape> · §"<section≤40>" | none tracked · from last log
   <#|•> <item≤90> → <blocks≤30>                        (≤6: ⛔ first, then file order; "+n more")
 RESUME <first bullet of a "Punto de retomada"/"Resume point" section ≤140>   (only if it exists)
