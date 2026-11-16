@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import time
+import traceback
 from contextlib import contextmanager
 
 LOCK_AT, GATE_AT, STATUS_CAP = 3, 2, 3
@@ -31,6 +32,11 @@ BASH_CAP, READ_CAP = 25, 8
 HEAVY_BYTES, PEEK_BYTES, TRANSCRIPT_BYTES = 40 * 1024, 8 * 1024, 5 * 1024 * 1024
 WHOLE_PROMPT, EDGE_LINE, STATUS_PROMPT = 280, 200, 160
 PRUNE_SECONDS, PENDING_SECONDS, CHUNK = 14 * 86400, 72 * 3600, 1 << 20
+MAX_WORD, MAX_PARSE, EVAL_SECONDS, WALK_LEVELS, LOG_LINES = 4096, 16 * 1024, 0.6, 64, 200
+RECOVERY_SECONDS = 5.0
+HOOK_DENY_RE = re.compile(r"PreToolUse:\S* hook error: \W{0,3}main-thread-guard \[")
+DENY_MARK = b"main-thread-guard ["
+DEADLINE, PROBE = [0.0], {"word": ""}
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".bmp", ".tif", ".tiff", ".heic", ".avif"}
 PROTECTED = {"task.md", "execute.md", "plan-detallado.md", "detailed-plan.md", "plans.html", "prompts.html"}
 DUMPERS = {"cat", "bat", "less", "more", "nl", "tac"}
@@ -39,6 +45,9 @@ SHELLS = {"bash", "sh", "zsh"}
 READ_ONLY = {"cd", "ls", "cat", "head", "tail", "wc", "nl", "stat", "file", "grep", "egrep", "fgrep", "diff", "md5", "md5sum",
              "shasum", "sha1sum", "sha256sum", "test", "[", "realpath", "readlink", "du", "pwd"}
 ASSIGNERS = {"export", "declare", "typeset", "readonly", "local"}
+CHDIRS = {"cd", "pushd", "chdir"}
+GLOB_CHARS = "*?["
+WIPERS = {"rm", "mv", "find", "rsync", "git", "chmod", "chown", "rmdir"}
 INTERPRETERS = {"python", "node", "ruby", "perl", "php", "deno", "bun", "osascript"}
 BUDGET = {"Bash": "bash", "Grep": "bash", "Glob": "bash", "LS": "bash", "Read": "read"}
 EDITORS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
@@ -49,6 +58,7 @@ SEGMENT = "orchestrator-guard-state"
 XARGS = "\x00xargs-stdin"
 ENV_PREFIX = "\x00env-prefix"
 ASSIGN = "\x00assign"
+MARKERS = {XARGS, ENV_PREFIX, ASSIGN}
 NEEDLE = b'"subtype":"compact_boundary"'
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUARD_FILES = (os.path.join(".claude-plugin", "plugin.json"), os.path.join("hooks", "hooks.json"),
@@ -58,7 +68,8 @@ CONFIG_PROJECTS_RE = re.compile(r"/\.claude[^/]*/projects/")
 MEMORY_RE = re.compile(r"/\.claude[^/]*/projects/[^/]+/memory/")
 STAMP_RE = re.compile(r"^\s*- \*\*Main thread:\*\*")
 SUBST_RE = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
-BRACE_RE = re.compile(r"\{([^{}]*,[^{}]*)\}")
+BRACE_RE = re.compile(r"\{([^{},]*(?:,[^{},]*)+)\}")
+SURROGATE_RE = re.compile("[\ud800-\udfff]")
 QUOTED_RE = re.compile(r"<pasted_content\b.*?(?:</pasted_content>|\Z)|```.*?(?:```|\Z)|`[^`\n]*`|\"[^\"\n]*\"|"
                        r"“[^”\n]*”|«[^»\n]*»", re.S)
 NEGATION_RE = re.compile(r"\b(no|nunca|sin|desactiva\w*|apaga\w*|quita\w*|sal(?:ir)? del?)\b")
@@ -123,14 +134,51 @@ def state_dir():
 
 
 def absolute(path, cwd):
-    path = os.path.expanduser(str(path or ""))
+    path = str(path or "")
+    if path.startswith("~"):
+        path = fs(os.path.expanduser, path, default=path)
     if not os.path.isabs(path):
         path = os.path.join(cwd or os.getcwd(), path)
     return os.path.normpath(path)
 
 
+class GuardTimeout(Exception):
+    """Rule evaluation ran over its time budget; PreToolUse falls back to the parse-free decision."""
+
+
+def probeable(s):
+    """A model-derived string the filesystem may be asked about: no NUL, no lone surrogate, not over-long."""
+    return isinstance(s, str) and "\x00" not in s and len(s) <= MAX_WORD and not SURROGATE_RE.search(s)
+
+
+def tick(word=""):
+    PROBE["word"] = word
+    if DEADLINE[0] and time.monotonic() > DEADLINE[0]:
+        raise GuardTimeout("evaluation over its time budget")
+
+
+def fs(fn, *args, default=False):
+    """Run a filesystem probe that never raises: an unprobeable argument or any error yields `default`."""
+    guarded = True  # MUTATION-KEY: safe_probe
+    if not guarded:
+        return fn(*args)
+    if not all(probeable(a) for a in args):
+        return default
+    try:
+        return fn(*args)
+    except (OSError, ValueError, UnicodeError, RecursionError):
+        return default
+
+
+def fault(stage):
+    """Test hook: ADCM_GUARD_TEST_FAULT=<stage> raises inside that stage to exercise the fallbacks."""
+    if os.environ.get("ADCM_GUARD_TEST_FAULT") == stage:
+        raise RuntimeError(f"forced fault in {stage}")
+
+
 def forms(path):
-    return {path, os.path.realpath(path)}
+    tick(path)
+    return {path, fs(os.path.realpath, path, default=path)}
 
 
 def inside(path, roots):
@@ -140,18 +188,15 @@ def inside(path, roots):
         pc = p.casefold()
         if any(pc == r or pc.startswith(r.rstrip(os.sep) + os.sep) for r in folded):
             return True
-    real = [r for r in roots if os.path.exists(r)]
-    probe = path
-    while real and probe:
-        if os.path.exists(probe):
-            for r in real:
-                try:
-                    if os.path.samefile(probe, r):
-                        return True
-                except OSError:
-                    pass
+    real = [r for r in roots if fs(os.path.exists, r)]
+    probe, levels = path, 0
+    while real and probe and levels < WALK_LEVELS:
+        tick(path)
+        if fs(os.path.exists, probe):
+            if any(fs(os.path.samefile, probe, r) for r in real):
+                return True
         parent = os.path.dirname(probe)
-        probe = None if parent == probe else parent
+        probe, levels = (None if parent == probe else parent), levels + 1
     return False
 
 
@@ -172,10 +217,12 @@ def real_handoff(path, d):
     fallback = os.path.join(os.path.dirname(str(d.get("transcript_path") or "")), "handoffs")
     if os.path.dirname(path).casefold() == os.path.normpath(fallback).casefold():
         return True
+    if not probeable(path):
+        return False
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             text = fh.read(65536)
-    except OSError:
+    except (OSError, ValueError):
         return False
     return "- **Wave:**" in text and ("- **Phase closed:**" in text or "- **Result:**" in text)  # MUTATION-KEY: real_handoff
 
@@ -239,7 +286,7 @@ def write_text(path, text):
 
 
 def write_json(path, data):
-    write_text(path, json.dumps(data, ensure_ascii=False))
+    write_text(path, json.dumps(data))  # ASCII escapes: a lone surrogate can never break the write
 
 
 def read_json(path):
@@ -252,7 +299,8 @@ def read_json(path):
 
 
 DEFAULTS = {"compactions": 0, "compact_log": [], "bash": 0, "read": 0, "direct": "off", "status": False,
-            "status_calls": 0, "handoff_written": False, "handoff_path": ""}
+            "status_calls": 0, "handoff_written": False, "handoff_path": "", "errors": 0, "coarse": 0,
+            "recovered": False, "recovered_told": False, "recoveries": 0}
 
 
 def no_lock_once(folder, exc):
@@ -262,8 +310,69 @@ def no_lock_once(folder, exc):
         log_error(RuntimeError(f"sin bloqueo de archivo ({exc}); reglas activas solo con reemplazo atómico"))
 
 
+def recovery_seconds():
+    try:
+        return min(float(os.environ.get("ADCM_GUARD_RECOVERY_SECONDS", RECOVERY_SECONDS)), RECOVERY_SECONDS)
+    except ValueError:
+        return RECOVERY_SECONDS
+
+
+def recover(transcript):
+    """Rebuild a lost state from the session's main transcript (streamed; only tool_use lines are parsed)."""
+    found = {"compactions": 0, "bash": 0, "read": 0, "handoff_written": False, "handoff_path": ""}
+    if not transcript or not fs(os.path.isfile, transcript):
+        return found
+    limit, start, uses, denied = recovery_seconds(), time.monotonic(), {}, set()
+    with open(transcript, "rb") as fh:
+        for raw in fh:
+            if time.monotonic() - start > limit:
+                raise GuardTimeout(f"state recovery over {limit:g} s; starting at zero")
+            if NEEDLE in raw:
+                found["compactions"] += 1
+                continue
+            mine = DENY_MARK in raw and b'"tool_result"' in raw
+            if not mine and b'"tool_use"' not in raw:
+                continue
+            try:
+                e = json.loads(raw)
+            except ValueError:
+                continue
+            msg = e.get("message") if isinstance(e, dict) else None
+            if e.get("isSidechain") or not isinstance(msg, dict) or not isinstance(msg.get("content"), list):
+                continue
+            for b in msg["content"]:
+                if not isinstance(b, dict):
+                    continue
+                if mine and b.get("type") == "tool_result" and b.get("is_error") and HOOK_DENY_RE.search(result_text(b)):
+                    denied.add(b.get("tool_use_id"))
+                elif b.get("type") == "tool_use" and e.get("type") == "assistant":
+                    name, ti = str(b.get("name") or ""), b.get("input") if isinstance(b.get("input"), dict) else {}
+                    path = target_of(ti, str(e.get("cwd") or ""))
+                    if name in ("Write", "Edit", "MultiEdit") and is_handoff(path):
+                        found["handoff_written"], found["handoff_path"] = True, path
+                    key = budget_key(name, path)
+                    if key:
+                        uses[b.get("id")] = key
+    for tid, key in uses.items():
+        found[key] += 0 if tid in denied else 1
+    if found["handoff_written"]:  # the gate opens only if the handoff on disk now holds >= 300 characters
+        try:
+            with open(found["handoff_path"], encoding="utf-8", errors="replace") as fh:
+                found["handoff_written"] = len(fh.read(HANDOFF_MIN)) >= HANDOFF_MIN  # MUTATION-KEY: recovered_handoff
+        except (OSError, ValueError):
+            found["handoff_written"] = False
+    return found
+
+
+def result_text(block):
+    content = block.get("content")
+    if isinstance(content, list):
+        return " ".join(str(c.get("text") or "") for c in content if isinstance(c, dict))
+    return str(content or "")
+
+
 @contextmanager
-def session_state(sid):
+def session_state(sid, transcript=None):
     folder = state_dir()
     os.makedirs(folder, exist_ok=True)
     key = safe(sid)
@@ -276,8 +385,21 @@ def session_state(sid):
     with open(os.path.join(folder, key + ".lock"), "a+") as lock:
         if fcntl:
             fcntl.flock(lock, fcntl.LOCK_EX)
-        st = dict(DEFAULTS, **read_json(path))
-        before = json.dumps(st, sort_keys=True)
+        data = read_json(path)
+        rebuilt = not data and transcript is not None
+        if rebuilt:  # MUTATION-KEY: recovery
+            began = time.monotonic()
+            try:
+                data = recover(transcript)
+            except Exception as exc:
+                log_error(exc, {"hook_event_name": "recovery"})
+                data = {}
+            if DEADLINE[0]:
+                DEADLINE[0] += time.monotonic() - began
+            data["recoveries"] = 1
+            data["recovered"] = any(data.get(k) for k in ("compactions", "bash", "read", "handoff_written"))
+        st = dict(DEFAULTS, **data)
+        before = "" if rebuilt else json.dumps(st, sort_keys=True)
         yield st
         if json.dumps(st, sort_keys=True) != before:
             write_json(path, st)
@@ -308,15 +430,34 @@ def prune(current):
                 pass
 
 
-def log_error(exc):
+def log_error(exc, d=None):
+    """One line per failure: time · event · tool · thread · exception · two innermost frames · offending word."""
     try:
+        d = d if isinstance(d, dict) else {}
+        frames = traceback.extract_tb(exc.__traceback__)[-2:]
+        where = " < ".join(f"{f.name}:{f.lineno}" for f in reversed(frames)) or "-"
+        message = " ".join(str(exc).split())[:160]
+        line = (f"{time.strftime('%Y-%m-%dT%H:%M:%S')} \u00b7 {d.get('hook_event_name') or '-'} \u00b7 "
+                f"{d.get('tool_name') or '-'} \u00b7 {'sub' if d.get('agent_id') else 'main'} \u00b7 "
+                f"{type(exc).__name__}: {message} \u00b7 {where} \u00b7 word={repr(PROBE['word'])[:80]}")
         folder = state_dir()
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, "errors.log")
-        if os.path.exists(path) and os.path.getsize(path) > 256 * 1024:
-            os.remove(path)
-        with open(path, "a", encoding="utf-8") as fh:
-            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {type(exc).__name__}: {str(exc)[:300]!r}\n")
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                old = fh.read().splitlines()
+        except OSError:
+            old = []
+        keep = old[-(LOG_LINES - 1):] + [line.encode("utf-8", "backslashreplace").decode("utf-8")]
+        write_text(path, "\n".join(keep) + "\n")
+    except Exception:
+        pass
+
+
+def bump_errors(d):
+    try:
+        with session_state(d.get("session_id"), d.get("transcript_path")) as st:
+            st["errors"] += 1
     except Exception:
         pass
 
@@ -342,7 +483,11 @@ def counter_line(st):
     c = caps()
     line = (f"[adcm-guard] principal: {st['bash']}/{c['bash']} Bash · {st['read']}/{c['read']} Read · "
             f"{st['compactions']}/{LOCK_AT} compactaciones")
-    return line + (f" · modo directo: {st['direct']}" if st["direct"] != "off" else "")
+    line += f" · modo directo: {st['direct']}" if st["direct"] != "off" else ""
+    if st.get("recovered") and not st.get("recovered_told"):
+        st["recovered_told"] = True
+        line += " · estado reconstruido del transcript"
+    return line + (f" · \u26a0 guard errors: {st['errors']}" if st.get("errors") else "")
 
 
 def handoff_target(d, st):
@@ -365,7 +510,7 @@ def strip_prefixes(argv):
             argv = argv[1:]
             while argv and argv[0].startswith("-"):
                 argv = argv[2:] if argv[0] in ("-I", "-n", "-P", "-d", "-L", "-s", "-E", "-a") else argv[1:]
-        elif base in ("env", "sudo", "command", "time", "nohup", "exec"):
+        elif base in ("env", "sudo", "command", "builtin", "time", "nohup", "exec"):
             argv = argv[1:]
             while argv and (argv[0].startswith("-") or (base == "env" and re.match(r"^[A-Za-z_]\w*=", argv[0]))):
                 takes = base == "sudo" and argv[0] in ("-u", "-g", "-C", "-h", "-p", "-U")
@@ -396,18 +541,27 @@ def shell_script(argv):
 def commands(cmd, cwd, depth=0):
     """(argv, cwd) per simple command, tracking `cd`; one level into $(...), backticks and `sh -c`."""
     import shlex
+    if len(cmd) > MAX_PARSE:
+        raise GuardTimeout(f"command of {len(cmd)} chars is over the parse budget")
+    cmd = cmd.replace("\\\n", "")  # the shell drops backslash-newline before anything else
     inner = [m.group(1) if m.group(1) is not None else m.group(2) for m in SUBST_RE.finditer(cmd)] if depth == 0 else []
-    lex = shlex.shlex(SUBST_RE.sub(" _subst_ ", cmd).replace("\n", " ; "), posix=True, punctuation_chars=True)
+    text = SUBST_RE.sub(" _subst_ ", cmd)
+    lex = shlex.shlex(text.replace("\n", " ; "), posix=True, punctuation_chars=True)
     lex.whitespace_split = True
+    try:
+        tokens = list(lex)
+    except ValueError:  # unbalanced quote: still judge each physical line, split by whitespace, quotes stripped
+        tokens = [t.strip("'\"") for line in text.splitlines() for part in re.split(r"[;&|()]+", line)
+                  for t in part.split() + [";"]]
     groups, cur = [], []
-    for tok in list(lex) + [";"]:
+    for tok in tokens + [";"]:
         if tok and set(tok) <= set("();&|"):
             if cur:
                 groups.append(cur)
             cur = []
         else:
             cur.append(tok)
-    out = []
+    out, previous = [], []
     for group in groups:
         argv = strip_prefixes(group)
         if not argv:
@@ -422,8 +576,14 @@ def commands(cmd, cwd, depth=0):
             argv = argv + [ENV_PREFIX] + assigned
         prog = os.path.basename(argv[0])
         out.append((argv, cwd))
-        if prog == "cd":
-            cwd = (expand(argv[1], cwd) or [cwd])[0] if len(argv) > 1 else os.path.expanduser("~")
+        if prog in CHDIRS:
+            ops = operands(argv)[:1]
+            if ops == ["-"]:
+                target = previous[-1] if previous else cwd
+            else:
+                target = (expand(ops[0], cwd) or [cwd])[0] if ops else os.path.expanduser("~")
+            previous.append(cwd)
+            cwd = target
         elif prog in SHELLS and depth == 0:
             script = shell_script(argv)
             if script is not None:
@@ -448,7 +608,13 @@ def braces(word, budget=64):
 
 
 def expand(tok, cwd):
-    """Paths a shell word may name: ~, $HOME, $PWD, brace lists and globs, against cwd."""
+    """Paths a shell word may name: ~, $HOME, $PWD, brace lists and globs, against cwd. Unprobeable -> none."""
+    tick(tok)
+    if not isinstance(tok, str) or tok in MARKERS:
+        return []
+    tok = SURROGATE_RE.sub("\ufffd", tok.split("\x00", 1)[0])  # a shell word ends at NUL
+    if not tok:
+        return []
     home = os.path.expanduser("~")
     word = re.sub(r"\$(?:HOME\b|\{HOME\})", lambda _: home, tok)
     word = re.sub(r"\$(?:PWD\b|\{PWD\})", lambda _: cwd or os.getcwd(), word)
@@ -456,12 +622,24 @@ def expand(tok, cwd):
     out = []
     for w in braces(word):
         w = os.path.normpath(absolute(w, cwd))
-        if any(ch in w for ch in "*?["):
-            import glob
-            out.extend(glob.glob(w) or [w])
+        wild = [part for part in w.split(os.sep) if any(ch in part for ch in "*?[")]
+        if wild and len(wild) <= 2 and len(w) <= 1024:
+            out.extend(fs(bounded_glob, w, default=[]) or [w])
         else:
             out.append(w)
     return out
+
+
+def bounded_glob(pattern):
+    """At most 64 hits, with the evaluation deadline checked after every one."""
+    import glob
+    hits = []
+    for hit in glob.iglob(pattern):
+        hits.append(hit)
+        tick(pattern)
+        if len(hits) >= 64:
+            break
+    return hits
 
 
 def is_redirect(tok):
@@ -489,6 +667,8 @@ def split_redirects(argv):
     """(words, writes): non-option words (input redirections included) and output-redirection targets."""
     out, writes, mode = [], [], None
     for tok in argv[1:]:
+        if tok in MARKERS:
+            continue
         if mode:
             if mode == "w":
                 writes.append(tok)
@@ -518,6 +698,8 @@ def operands(argv):
     """Every word a command names: positional words plus the values of `key=value` and `--opt=value` tokens."""
     out, skip = [], False
     for tok in argv[1:]:
+        if tok in MARKERS:
+            continue
         if skip:
             skip = False
             continue
@@ -589,10 +771,11 @@ def tamper(tool, ti, cwd):
             return "el plugin que corre este guard no se edita desde la sesión; el cambio va al repo fuente por un executor."
     if tool != "Bash":
         return None
+    cmd = str(ti.get("command") or "")
     try:
-        parsed = commands(str(ti.get("command") or ""), cwd)
+        parsed = commands(cmd, cwd)
     except ValueError:
-        return None
+        parsed = []
     state_msg = ("el estado del guard solo se lee desde Bash (ls, cat, grep, find…); cualquier otro comando sobre él "
                  "se niega; si hay que reiniciarlo, A lo borra a mano.")
     guard_msg = ("el guard, sus carpetas y su hooks.json / plugin.json solo se leen desde la sesión; el cambio va al repo "
@@ -601,6 +784,7 @@ def tamper(tool, ti, cwd):
     feeders = [t for argv, _ in parsed for t in operands(argv) if t not in (XARGS, ENV_PREFIX)]
     assigns = any(ENV_PREFIX in argv or argv[0] == ASSIGN or os.path.basename(argv[0]) in ASSIGNERS or (
         os.path.basename(argv[0]) == "set" and any(a.startswith("-") and "a" in a[1:] for a in argv[1:])) for argv, _ in parsed)
+    structured = False
     for argv, here in parsed:
         prog = os.path.basename(argv[0])
         args, writes = split_redirects(argv)
@@ -615,6 +799,7 @@ def tamper(tool, ti, cwd):
             return state_msg if any(inside(p, roots) for p in written) else guard_msg
         in_state = any(inside(p, roots) for p in touched)
         in_guard = any(guard_set(p) for p in touched)
+        structured = structured or in_state or in_guard
         if (in_state or in_guard) and not read_only(prog, argv):  # MUTATION-KEY: tamper
             return state_msg if in_state else guard_msg
         moved = os.path.normpath(here) != os.path.normpath(cwd or os.getcwd())
@@ -639,7 +824,94 @@ def tamper(tool, ti, cwd):
             return state_msg
         if wipes_ancestor(prog, argv, args, here, hits_guard_tree):  # MUTATION-KEY: guard_tree
             return guard_msg
+    progs = {os.path.basename(a[0]) for a, _ in parsed}
+    hit = any_dir_hit(cmd, cwd, parsed, roots, guard_paths)
+    if hit in ("state", "guard") and progs - READ_ONLY:  # MUTATION-KEY: c1
+        return state_msg if hit == "state" else guard_msg
+    if hit == "tree":
+        return guard_msg
+    named_raw = structured or hit or raw_names(cmd, roots, plugin, guard_paths)
+    if named_raw and not plain(cmd):  # MUTATION-KEY: c2
+        return "para leer el estado del guard (o el plugin) usa un comando simple de una l\u00ednea, sin heredoc, $(), backticks ni #."
     return None
+
+
+def any_dir_hit(cmd, cwd, parsed, roots, guard_paths):
+    """C1: a relative word names the protected set under the hook cwd, any cd / pushd target or any directory word."""
+    protected = [p for g in guard_paths for p in forms(g)] + list(roots)
+    folders = {os.path.dirname(p) for p in protected if p not in roots} | {os.path.dirname(os.path.dirname(p))
+                                                                          for p in protected if p not in roots}
+    keys = {c.casefold() for p in protected for c in p.split(os.sep) if c} | {"..", "."}
+    words = {w for argv, _ in parsed for w in operands(argv) + split_redirects(argv)[1]}
+    words |= {w.strip("'\"();&|<>`") for w in cmd.split()}
+    wipers = {w for argv, _ in parsed if os.path.basename(argv[0]) in WIPERS for w in operands(argv)}
+    import fnmatch
+
+    def leaf_ok(w):
+        leaf = os.path.basename(w.rstrip("/") or w).casefold()
+        globbed = any(ch in w for ch in GLOB_CHARS)
+        return leaf in keys or (globbed and any(fnmatch.fnmatchcase(k, leaf) for k in keys))
+    rel = [w for w in words if w and probeable(w) and not w.startswith(("~", "$"))
+           and (not w.startswith("/") or any(ch in w for ch in GLOB_CHARS)) and leaf_ok(w)]
+    if not rel:
+        return None
+    bases = {os.path.normpath(cwd or os.getcwd())}
+    for argv, here in parsed:
+        if os.path.basename(argv[0]) in CHDIRS:
+            bases |= {p for t in operands(argv) for p in expand(t, here) + expand(t, cwd)}
+    absolute_words = [w for w in words if w.startswith("/") and probeable(w)][:64]
+    bases |= {os.path.normpath(w) for w in absolute_words if fs(os.path.isdir, w)}
+    bases |= {fs(os.path.realpath, b, default=b) for b in sorted(bases)[:16]}
+    state = [r.casefold() for r in roots]
+    exact = {p.casefold() for p in protected if p not in roots} | {f.casefold() for f in folders}
+    lowered = [p.casefold() for p in protected]
+    chain = set()
+    for p in lowered:
+        while p and p != os.sep and len(chain) < 4096:
+            chain.add(p)
+            p = os.path.dirname(p)
+
+    def classify(c):
+        if any(c == r or c.startswith(r + os.sep) for r in state):
+            return "state"
+        return "guard" if c in exact else "tree"
+    for b in sorted(bases)[:96]:
+        tick(b)
+        for w in rel[:512]:
+            pc = os.path.normpath(os.path.join(b, w)).casefold()
+            if any(ch in w for ch in GLOB_CHARS):  # MUTATION-KEY: c1_glob
+                hits = sorted({classify(c) for c in chain if fnmatch.fnmatchcase(c, pc)})
+                if hits and (hits[0] != "tree" or w in wipers):
+                    return hits[0]
+                continue
+            if any(pc == r or pc.startswith(r + os.sep) for r in state):
+                return "state"
+            if pc in exact:
+                return "guard"
+            if w in wipers and any(p.casefold().startswith(pc.rstrip(os.sep) + os.sep) for p in protected):
+                return "tree"
+    return None
+
+
+def raw_names(cmd, roots, plugin, guard_paths):
+    """C2 trigger: the raw text names the state dir, a guard file, or the running root / one of its folders itself."""
+    low = cmd.casefold()
+    if SEGMENT in low or any(r.casefold() in low for r in roots) or any(g.casefold() in low for g in guard_paths):
+        return True
+    folders = {os.path.dirname(g) for g in guard_paths} | set(plugin)
+    return any(re.search(re.escape(f.casefold()) + r"/?(?=$|[\s'\";|&)<>])", low) for f in folders)
+
+
+def plain(cmd):
+    """One physical line, balanced quotes, and none of heredoc, $(, backtick, $' or #."""
+    import shlex
+    if "\n" in cmd.strip() or any(t in cmd for t in ("<<", "$(", "`", "$'", "#")):
+        return False
+    try:
+        shlex.split(cmd)
+    except ValueError:
+        return False
+    return True
 
 
 def edits_of(tool, ti):
@@ -656,8 +928,8 @@ def memory_line(tool, ti, cwd):
         return None
     try:
         with open(path, encoding="utf-8") as fh:
-            old = fh.read()
-    except (OSError, UnicodeDecodeError):
+            old = fh.read() if probeable(path) else ""
+    except (OSError, ValueError):
         old = ""
     if tool == "Write":
         new = str(ti.get("content") or "")
@@ -680,14 +952,14 @@ def memory_line(tool, ti, cwd):
 
 def whole_refusal(path):
     """Why a whole-file read of `path` is refused on the main thread, or None."""
-    names = {os.path.basename(path).lower(), os.path.basename(os.path.realpath(path)).lower()}
+    names = {os.path.basename(path).lower(), os.path.basename(fs(os.path.realpath, path, default=path)).lower()}
     if any(os.path.splitext(n)[1] in IMAGE_EXT for n in names):  # MUTATION-KEY: image
         return "image"
-    if not os.path.isfile(path):
+    if not fs(os.path.isfile, path):
         return None
     if names & PROTECTED:
         return "protected"
-    if os.path.getsize(path) > HEAVY_BYTES:  # MUTATION-KEY: size
+    if fs(os.path.getsize, path, default=0) > HEAVY_BYTES:  # MUTATION-KEY: size
         return "big"
     return None
 
@@ -695,8 +967,8 @@ def whole_refusal(path):
 def peek_bytes(path, offset, limit):
     total = 0
     try:
-        start = max(int(offset or 1), 1)
-    except (TypeError, ValueError):
+        start = max(read_limit(offset or 1), 1)
+    except (TypeError, ValueError, OverflowError):
         start = 1
     with open(path, "rb") as fh:
         for n, line in enumerate(fh, 1):
@@ -711,11 +983,12 @@ def peek_bytes(path, offset, limit):
 
 
 def read_limit(value):
+    """A Read limit / offset counts only as a finite integer; anything else is 0 (a whole-file read)."""
     if isinstance(value, bool):
         return 0
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
@@ -727,14 +1000,14 @@ def heavy_read(ti, cwd):
                 "visual es de un sub-agente.")
     if not why:
         return None
-    name, kb = os.path.basename(path), os.path.getsize(path) // 1024
+    name, kb = os.path.basename(path), fs(os.path.getsize, path, default=0) // 1024
     limit = read_limit(ti.get("limit"))
     if limit < 1:
         return (f"{name} ({kb} KB{', doc protegido' if why == 'protected' else ''}) no se lee entero en el hilo "
                 "principal: lee un tramo con offset/limit (≤ 8 KB) o delega en adcm-toolkits:researcher.")
     try:
         size = peek_bytes(path, ti.get("offset"), limit)
-    except OSError:
+    except (OSError, ValueError):
         return None
     if size > PEEK_BYTES:  # MUTATION-KEY: peek
         return (f"el tramo pedido de {name} pasa de 8 KB: pide menos líneas con offset/limit o delega en "
@@ -753,12 +1026,12 @@ def heavy_bash(cmd, cwd):
             continue
         for tok in words(argv):
             for path in expand(tok, here):
-                if not os.path.isfile(path) and os.path.splitext(path)[1].lower() not in IMAGE_EXT:
+                if not fs(os.path.isfile, path) and os.path.splitext(path)[1].lower() not in IMAGE_EXT:
                     continue
                 if prog in DUMPERS and whole_refusal(path):
                     return (f"`{prog}` volcaría {os.path.basename(path)} entero en el hilo principal: usa Read con "
                             "offset/limit (≤ 8 KB) o delega en adcm-toolkits:researcher.")
-                big = path.endswith(".jsonl") and os.path.isfile(path) and os.path.getsize(path) > TRANSCRIPT_BYTES  # MUTATION-KEY: jsonl
+                big = path.endswith(".jsonl") and fs(os.path.getsize, path, default=0) > TRANSCRIPT_BYTES  # MUTATION-KEY: jsonl
                 if big and under_config_projects(path):
                     return "los transcripts son trabajo de un researcher: delega en adcm-toolkits:researcher con un brief."
     return None
@@ -871,15 +1144,79 @@ def decide(d, st, tool, ti, cwd):
     return None
 
 
-def pre_tool(d):
+def evaluate(d):
     tool, ti, cwd = str(d.get("tool_name") or ""), tool_input(d), str(d.get("cwd") or "")
+    fault("pre")
     why = tamper(tool, ti, cwd)
     if why:
         return deny("T0", why)
     if is_sub(d):
         return memory_deny(tool, ti, cwd) if attended() else None
-    with session_state(d.get("session_id")) as st:
+    with session_state(d.get("session_id"), d.get("transcript_path")) as st:
         return decide(d, st, tool, ti, cwd)
+
+
+def fallback(d, coarse=False):
+    """Parse-free decision when evaluation raised or ran over budget: textual T0 always; on the attended main R1 / R1b,
+    and outside direct mode the X2 Bash line cap (64 KB included) and R2."""
+    tool, ti, cwd = str(d.get("tool_name") or ""), tool_input(d), str(d.get("cwd") or "")
+    home = os.path.expanduser("~").casefold()
+    raw = json.dumps(ti, ensure_ascii=False).casefold()
+    raw = raw.replace("${home}", home).replace("$home", home).replace("~/", home + "/").replace('"~"', '"' + home + '"')
+    texts = {SEGMENT} | {p.casefold() for p in forms(state_dir()) | forms(PLUGIN_ROOT) | forms(os.path.dirname(PLUGIN_ROOT))}
+    if not os.environ.get("ADCM_GUARD_STATE_DIR"):
+        texts |= {p.casefold() for p in forms(os.path.dirname(state_dir()))}
+    if any(t in raw for t in texts):
+        if tool == "Bash" and len(str(ti.get("command") or "")) > MAX_PARSE:  # MUTATION-KEY: size_reason
+            return deny("T0", "comando de m\u00e1s de 16 KB que nombra el estado o la instalaci\u00f3n del guard: escribe ese "
+                              "archivo con Write o Edit, o divide el comando.")
+        return deny("T0", "la evaluaci\u00f3n de reglas fall\u00f3 y la entrada nombra el estado o el plugin del guard; "
+                          "reformula el comando sin nombrarlos o delega en un sub-agente con un brief.")
+    if is_sub(d) or not attended():
+        return None
+    try:
+        path = target_of(ti, cwd)
+    except Exception:
+        path = ""
+    with session_state(d.get("session_id"), d.get("transcript_path")) as st:
+        st["coarse" if coarse else "errors"] += 1
+        comp = st["compactions"]
+        if comp >= LOCK_AT or (comp == GATE_AT and not st["handoff_written"]):
+            if lock_allows(tool, ti, path):
+                return None
+            rule = "R1" if comp >= LOCK_AT else "R1b"
+            return deny(rule, f"{comp}.\u00aa compactaci\u00f3n: solo Write/Edit/Read del handoff y la memoria; "
+                              f"{'pide /clear a A' if rule == 'R1' else 'escribe el handoff YA'}.")
+        if st["direct"] != "off":
+            return None
+        cmd = str(ti.get("command") or "") if tool == "Bash" else ""
+        if len(cmd) > MAX_PARSE or lines_of(cmd) > BASH_LINES:
+            return deny("X2", f"comando Bash de {lines_of(cmd)} l\u00edneas / {len(cmd) // 1024} KB: eso es un script; "
+                              "delega en adcm-toolkits:executor con un brief \u2264 40 l\u00edneas.")
+        key = budget_key(tool, path)
+        if key:
+            cap = caps()[key]
+            if st[key] >= cap:
+                return deny("R2", f"presupuesto del hilo principal agotado ({st[key]}/{cap}): {DELEGATE}.")
+            st[key] += 1
+    return None
+
+
+def pre_tool(d):
+    DEADLINE[0] = time.monotonic() + EVAL_SECONDS
+    try:
+        out = evaluate(d)
+        DEADLINE[0] = 0.0
+        return out
+    except GuardTimeout:
+        DEADLINE[0] = 0.0
+        return fallback(d, coarse=True)
+    except Exception as exc:
+        log_error(exc, d)
+        DEADLINE[0] = 0.0
+        if is_sub(d) or not attended():
+            bump_errors(d)
+        return fallback(d)  # MUTATION-KEY: fallback
 
 
 # ---------------------------------------------------------------- UserPromptSubmit
@@ -923,19 +1260,26 @@ def prompt_submit(d):
     prompt = str(d.get("prompt") or "")
     owner = not NOT_OWNER_RE.match(prompt)  # MUTATION-KEY: handback
     notes, system = [], None
-    with session_state(d.get("session_id")) as st:
+    with session_state(d.get("session_id"), d.get("transcript_path")) as st:
         st["status"], st["status_calls"] = False, 0
+        mode, status = st["direct"], False
         if owner:
-            mode = next_direct(st["direct"], prompt)
-            if mode != st["direct"]:
-                st["direct"] = mode
-                system = MODE_TEXT[mode]
-                notes.append(system)
-            if is_status(prompt):
-                st["status"] = True
-                notes.append(STATUS_NOTE)
+            try:
+                fault("prompt")
+                mode, status = next_direct(st["direct"], prompt), is_status(prompt)
+            except Exception as exc:
+                log_error(exc, d)
+                st["errors"] += 1
+                mode, status = st["direct"], False
+        if mode != st["direct"]:
+            st["direct"] = mode
+            system = MODE_TEXT[mode]
+            notes.append(system)
+        if status:
+            st["status"] = True
+            notes.append(STATUS_NOTE)
         c = caps()
-        near = st["compactions"] >= 1 or any(c[k] and st[k] >= 0.8 * c[k] for k in ("bash", "read"))
+        near = st["compactions"] >= 1 or st["errors"] > 0 or (st["recovered"] and not st["recovered_told"]) or any(c[k] and st[k] >= 0.8 * c[k] for k in ("bash", "read"))
         if owner or near:
             notes.append(counter_line(st))
     return inject("UserPromptSubmit", notes, system)
@@ -954,7 +1298,7 @@ def count_boundaries(path):
                 buf = tail + chunk
                 total += buf.count(NEEDLE)
                 tail = buf[-(len(NEEDLE) - 1):]
-    except OSError:
+    except (OSError, ValueError):
         return 0
     return total
 
@@ -962,10 +1306,12 @@ def count_boundaries(path):
 def pre_compact(d):
     if is_sub(d):
         return None
-    with session_state(d.get("session_id")) as st:
+    with session_state(d.get("session_id"), d.get("transcript_path")) as st:
         st["compactions"] += 1
-        st["compact_log"] = (st["compact_log"] + [{"trigger": str(d.get("trigger") or ""), "time": int(time.time())}])[-20:]
-        n, target = st["compactions"], handoff_target(d, st)
+        st["compact_log"] = (st["compact_log"] + [{"trigger": str(d.get("trigger") or "")[:40], "time": int(time.time())}])[-20:]
+        n, known = st["compactions"], dict(st)
+    fault("compact")
+    target = handoff_target(d, known)
     if n >= 2:
         return (f"[adcm-guard] compactación {n}/{LOCK_AT}: conserva en el resumen la ruta del handoff ({target}), la "
                 "ola y la fase en curso y los ids de los agentes vivos.")
@@ -990,14 +1336,15 @@ def session_start(d):
     if is_sub(d):
         return None
     sid = str(d.get("session_id") or "")
-    prune(safe(sid))
     source = d.get("source")
     notes = []
     if source in ("compact", "resume"):
         seen = count_boundaries(str(d.get("transcript_path") or ""))  # MUTATION-KEY: transcript
-        with session_state(sid) as st:
+        with session_state(sid, d.get("transcript_path")) as st:
             st["compactions"] = max(st["compactions"], seen)
-            n, target = st["compactions"], handoff_target(d, st)
+            n, known = st["compactions"], dict(st)
+        fault("start")
+        target = handoff_target(d, known)
         if n == 1:
             notes.append("[adcm-guard] compactación 1/3: a la 2.ª se exige el handoff y a la 3.ª el hilo "
                          "principal se bloquea; delega desde ya.")
@@ -1012,6 +1359,7 @@ def session_start(d):
         if last.get("path") and time.time() - float(last.get("time") or 0) < PENDING_SECONDS:
             notes.append(f"[adcm-guard] HANDOFF pendiente: {last['path']}")
         notes.append(memory_check(d))
+    prune(safe(sid))
     return inject("SessionStart", notes)
 
 
@@ -1044,21 +1392,25 @@ def post_tool(d):
     if d.get("tool_name") not in ("Write", "Edit", "MultiEdit"):
         return None
     path = target_of(tool_input(d), str(d.get("cwd") or ""))
-    if not is_handoff(path) or not os.path.isfile(path):
+    if not is_handoff(path) or not fs(os.path.isfile, path):
         return None
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        size = len(fh.read())
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            size = len(fh.read())
+    except (OSError, ValueError):
+        return None
     opens = size >= HANDOFF_MIN  # MUTATION-KEY: handoff_size
     real = real_handoff(path, d)
     if not opens and not real:
         return None
     sid = str(d.get("session_id") or "")
-    with session_state(sid) as st:
+    with session_state(sid, d.get("transcript_path")) as st:
         if opens:
             st["handoff_written"] = True
         st["handoff_path"] = path
         line = (f"- **Main thread:** {st['bash']} Bash · {st['read']} Read · {st['compactions']} compactions "
                 f"(session {sid[:8]})")
+    fault("post")
     if real:
         write_json(index_path(d), {"path": path, "time": time.time(), "session": sid})
         stamp(path, line)
@@ -1069,21 +1421,30 @@ HANDLERS = {"PreToolUse": pre_tool, "UserPromptSubmit": prompt_submit, "PreCompa
             "SessionStart": session_start, "PostToolUse": post_tool}
 
 
+INPUT = {}
+
+
+def emit(out):
+    if out:
+        text = json.dumps(out, ensure_ascii=False) if isinstance(out, dict) else str(out)
+        sys.stdout.buffer.write((text + "\n").encode("utf-8", "replace"))
+        sys.stdout.flush()
+
+
 def main():
     data = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))
     if not isinstance(data, dict):
         raise ValueError("hook input is not an object")
+    INPUT.update(data)
     handler = HANDLERS.get(data.get("hook_event_name"))
-    out = handler(data) if handler else None
-    if out:
-        text = json.dumps(out, ensure_ascii=False) if isinstance(out, dict) else str(out)
-        sys.stdout.buffer.write((text + "\n").encode("utf-8"))
-        sys.stdout.flush()
+    emit(handler(data) if handler else None)
 
 
 if __name__ == "__main__":
     try:
         main()
     except BaseException as exc:  # fail open: never break a tool call
-        log_error(exc)
+        log_error(exc, INPUT)
+        if INPUT.get("session_id") and not INPUT.get("agent_id"):
+            bump_errors(INPUT)
     sys.exit(0)

@@ -176,6 +176,28 @@ def boundary_record():
                       separators=(",", ":"))
 
 
+def tu(i, name, inp, side=False, cwd="/srv"):
+    return json.dumps({"type": "assistant", "isSidechain": side, "cwd": cwd,
+                       "message": {"role": "assistant", "content": [{"type": "tool_use", "id": f"t{i}", "name": name, "input": inp}]}})
+
+
+def denied_result(i):
+    return json.dumps({"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": f"t{i}", "is_error": True,
+         "content": "PreToolUse:Bash hook error: ⛔ main-thread-guard [R2]: presupuesto agotado"}]}})
+
+
+def ok_result(i):
+    return json.dumps({"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": f"t{i}", "is_error": False,
+         "content": [{"type": "text", "text": "README: \u26d4 main-thread-guard [R2]: example of a deny line"}]}]}})
+
+
+def transcript(c, lines):
+    with open(c.transcript, "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
 def mutate(source, key):
     lines = source.split("\n")
     hits = [i for i, l in enumerate(lines) if l.rstrip().endswith(f"{MARK} {key}")]
@@ -327,6 +349,14 @@ def cases():
         o = c.start("resume")
         return first(None if c.state_of().get("compactions") == 2 else f"state {c.state_of()}",
                      has(o.context, "COMPACTACIÓN 2/3"))
+
+    @add("max_with_transcript_when_state_exists")
+    def _(c):
+        c.precompact(1)
+        with open(c.transcript, "w") as fh:
+            fh.write("\n".join([boundary_record()] * 3) + "\n")
+        c.start("resume")
+        return None if c.state_of().get("compactions") == 3 else f"state {c.state_of()}"
 
     @add("max_keeps_state_when_transcript_lower")
     def _(c):
@@ -608,6 +638,93 @@ def cases():
         h = handoff_file(c)
         return allowed(c.tool("MultiEdit", {"file_path": h, "edits": [{"old_string": "body", "new_string": "b2"}]}))
 
+    @add("recovery_after_state_dir_deleted")
+    def _(c):
+        env = {"ADCM_GUARD_BASH_CAP": "5"}
+        c.bash("echo 1", env=env)
+        transcript(c, [tu(i, "Bash", {"command": f"echo {i}"}) for i in range(4)])
+        shutil.rmtree(c.state)
+        first_after = allowed(c.bash("echo 5", env=env))
+        st = c.state_of()
+        return first(first_after, denied(c.bash("echo 6", env=env), "R2", "(5/5)"),
+                     None if st.get("recovered") and st.get("recoveries") == 1 else f"state {st}")
+
+    @add("recovery_keeps_compactions_lock_and_gate")
+    def _(c):
+        transcript(c, [boundary_record()] * 3)
+        lock = denied(c.bash("echo x"), "R1")
+        new = "99999999-0000-4000-8000-000000000004"
+        c.transcript = os.path.join(c.proj, new + ".jsonl")
+        h = c.write("brain/handoffs/W1-01-a.md", "x" * 300)
+        transcript(c, [boundary_record(), boundary_record(), tu(1, "Write", {"file_path": h, "content": "x"})])
+        return first(lock, allowed(c.bash("echo y", sid=new)))
+
+    @add("recovery_short_handoff_keeps_gate")
+    def _(c):
+        h = c.write("brain/handoffs/W1-01-a.md", "x" * 10)
+        gone = c.path("brain", "handoffs", "W1-02-a.md")
+        transcript(c, [boundary_record(), boundary_record(), tu(1, "Write", {"file_path": h, "content": "x"}),
+                       tu(2, "Write", {"file_path": gone, "content": "x" * 400})])
+        return denied(c.bash("echo y"), "R1b")
+
+    @add("recovery_marker_in_output_still_counts")
+    def _(c):
+        transcript(c, [tu(i, "Bash", {"command": "grep x README.md"}) for i in range(3)] + [ok_result(0), ok_result(1), denied_result(2)])
+        c.bash("echo z")
+        return None if c.state_of().get("bash") == 3 else f"state {c.state_of()}"
+
+    @add("recovery_predating_session_real_counts")
+    def _(c):
+        h = c.path("brain", "handoffs", "W1-01-a.md")
+        transcript(c, [tu(i, "Read", {"file_path": f"/srv/f{i}.py"}) for i in range(8)] + [tu(9, "Read", {"file_path": h})])
+        return denied(c.tool("Read", {"file_path": c.write("work/a.py", "x")}), "R2", "(8/8)")
+
+    @add("recovery_skips_denied_and_sidechain")
+    def _(c):
+        transcript(c, [tu(i, "Bash", {"command": "x"}) for i in range(3)] + [denied_result(0), denied_result(1)]
+                   + [tu(10 + i, "Bash", {"command": "y"}, side=True) for i in range(2)] + ["not json", "{}"])
+        c.bash("echo z")
+        return None if c.state_of().get("bash") == 2 else f"state {c.state_of()}"
+
+    @add("recovery_clear_starts_at_zero")
+    def _(c):
+        transcript(c, [tu(i, "Bash", {"command": "x"}) for i in range(9)])
+        new = "99999999-0000-4000-8000-000000000005"
+        c.transcript = os.path.join(c.proj, new + ".jsonl")
+        open(c.transcript, "w").close()
+        ctx = c.prompt("hola", sid=new).context
+        return first(has(ctx, "0/25 Bash"), None if "reconstruido" not in ctx else "fresh session announced as recovered")
+
+    @add("recovery_announced_once")
+    def _(c):
+        transcript(c, [tu(i, "Bash", {"command": "x"}) for i in range(3)])
+        one, two = c.prompt("hola").context, c.prompt("sigue").context
+        return first(has(one, "3/25 Bash", "estado reconstruido del transcript"),
+                     None if "reconstruido" not in two else "recovery announced twice")
+
+    @add("recovery_parallel_first_calls_scan_once")
+    def _(c):
+        import concurrent.futures as cf
+        transcript(c, [tu(i, "Bash", {"command": "x"}) for i in range(3)])
+        data = json.dumps(c.event("PreToolUse", tool_name="Bash", tool_input={"command": "echo x"}))
+        go = lambda _: subprocess.run([sys.executable, "-B", c.guard], input=data, capture_output=True, text=True,
+                                      env=c.env, timeout=60).returncode
+        with cf.ThreadPoolExecutor(30) as ex:
+            list(ex.map(go, range(30)))
+        st = c.state_of()
+        return None if st.get("recoveries") == 1 and st.get("bash") == 25 else f"recoveries {st.get('recoveries')} bash {st.get('bash')}"
+
+    @add("recovery_overrun_starts_at_zero_and_logs_once")
+    def _(c):
+        c.expect_errors = True
+        transcript(c, [tu(i, "Bash", {"command": "x"}) for i in range(5)])
+        env = {"ADCM_GUARD_RECOVERY_SECONDS": "0"}
+        c.bash("echo a", env=env)
+        c.bash("echo b", env=env)
+        log = open(os.path.join(c.state, "errors.log")).read().splitlines()
+        return first(None if c.state_of().get("bash") == 2 else f"state {c.state_of()}",
+                     None if len(log) == 1 and "recovery" in log[0] else f"log {log}")
+
     @add("post_non_handoff_ignored")
     def _(c):
         p = c.write("work/notes.md", HEADER)
@@ -617,7 +734,7 @@ def cases():
     return out
 
 
-MUTANTS = ["lock", "gate", "transcript", "discriminator", "handoff", "real_handoff", "handoff_size"]
+MUTANTS = ["lock", "gate", "transcript", "discriminator", "handoff", "real_handoff", "handoff_size", "recovery", "recovered_handoff"]
 
 if __name__ == "__main__":
     sys.exit(suite_main(cases(), MUTANTS))

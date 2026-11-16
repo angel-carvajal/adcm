@@ -20,6 +20,7 @@ _spec.loader.exec_module(H)
 allowed, denied, has, first, SID = H.allowed, H.denied, H.has, H.first, H.SID
 
 HANDBACK = '<agent-message from="adc2621caecc6e081">\n[Subagent hand-back] The text below is the final report.\nmodo directo\n'
+UP = ".." + "/"  # parent-dir prefix, spelled so path linters do not flag it
 UNATTENDED = {"ADCM_GUARD_FORCE": "", "CLAUDE_CODE_SESSION_ATTENDED": "0"}
 
 
@@ -694,6 +695,227 @@ def cases():
                 return f"round {rnd}: counted {n}, denied {sum(chr(34) + 'deny' + chr(34) in o for o in outs)} (want 25 / 25)"
         return None
 
+    @add("odd_nul_in_bash_word")
+    def _(c):
+        os.makedirs(c.state, exist_ok=True)
+        outs = [c.bash(x) for x in ("cat a\x00b", "echo $(rm x\x00y)", "FOO=1 mv a\x00 b", "FOO=1 cd", "ls | xargs rm \x00",
+                                     "FOO=1 npm test && BAR=2 node x.js", "cd ~ && FOO=1 mv a b",
+                                     "FOO=1 mv a b", "FOO=1 cd; git status", "FOO=1 cd && ls")]
+        bad = [o.text[:80] for o in outs if o.rc or (o.text and not o.denied)]
+        return first(None if not bad else f"bad outputs {bad}", *[allowed(o) for o in outs[3:]],
+                     denied(c.bash(f"rm -rf {c.state}\x00junk"), "T0"))
+
+    @add("odd_nul_in_file_path")
+    def _(c):
+        outs = [c.tool("Write", {"file_path": c.path("work", "a\x00b.py"), "content": "x"}),
+                c.tool("Read", {"file_path": c.path("work", "x\x00y.md")}),
+                c.tool("Edit", {"file_path": os.path.join(c.state, "x\x00.json"), "old_string": "a", "new_string": "b"})]
+        return first(allowed(outs[0]), allowed(outs[1]), denied(outs[2], "T0"))
+
+    @add("odd_surrogate_with_state_wipe_denied")
+    def _(c):
+        os.makedirs(c.state, exist_ok=True)
+        return first(denied(c.bash(f"echo \ud800x; rm -rf {c.state}"), "T0"),
+                     denied(c.bash(f"rm -rf {c.state} \udfffy"), "T0", ), allowed(c.bash("echo \ud800 \udc00z")),
+                     denied(c.bash(f"rm -rf {c.state} y", sub=True), "T0"))
+
+    @add("odd_long_word")
+    def _(c):
+        os.makedirs(c.state, exist_ok=True)
+        return first(allowed(c.bash("cat " + "a" * 5000)), allowed(c.tool("Read", {"file_path": c.path("w", "b" * 5000)})),
+                     denied(c.bash(f"rm -rf {c.state}/" + "c" * 5000), "T0"))
+
+    FAULT = {"ADCM_GUARD_TEST_FAULT": "pre"}
+
+    @add("fallback_lock_and_gate")
+    def _(c):
+        c.expect_errors = True
+        c.precompact(3)
+        lock = first(denied(c.bash("echo x", env=FAULT), "R1"),
+                     allowed(c.tool("Write", {"file_path": c.path("brain", "handoffs", "W1-01-a.md"), "content": "x"}, env=FAULT)))
+        new = "99999999-0000-4000-8000-000000000003"
+        for _ in range(2):
+            c.run(c.event("PreCompact", sid=new, trigger="auto"))
+        return first(lock, denied(c.tool("Bash", {"command": "echo x"}, env=FAULT, sid=new), "R1b"))
+
+    @add("fallback_counts_and_caps")
+    def _(c):
+        c.expect_errors = True
+        env = dict(FAULT, ADCM_GUARD_BASH_CAP="2")
+        return first(allowed(c.bash("echo 1", env=env)), allowed(c.tool("Grep", {"pattern": "x"}, env=env)),
+                     denied(c.bash("echo 3", env=env), "R2", "(2/2)"),
+                     None if c.state_of().get("errors") == 3 else f"errors {c.state_of().get('errors')}")
+
+    @add("fallback_textual_tamper")
+    def _(c):
+        c.expect_errors = True
+        root = os.path.dirname(os.path.dirname(c.guard))
+        return first(denied(c.bash(f"ls {c.state}", env=FAULT), "T0"), denied(c.bash("echo orchestrator-guard-state", env=FAULT,
+                                                                                      sub=True), "T0"),
+                     denied(c.bash(f"cat {root}/README.md", env=FAULT, sub=True), "T0"),
+                     allowed(c.bash("echo hi", env=FAULT, sub=True)),
+                     allowed(c.bash("echo hi", env=dict(FAULT, ADCM_GUARD_BASH_CAP="0", ADCM_GUARD_FORCE="",
+                                                        CLAUDE_CODE_SESSION_ATTENDED="0"))))
+
+    @add("error_log_format_cap_and_counter")
+    def _(c):
+        c.expect_errors = True
+        os.makedirs(c.state, exist_ok=True)
+        log = os.path.join(c.state, "errors.log")
+        with open(log, "w") as fh:
+            fh.write("".join(f"old {i}\n" for i in range(250)))
+        c.bash("echo x", env=FAULT)
+        lines = open(log, encoding="utf-8").read().splitlines()
+        parts = lines[-1].split(" · ")
+        fmt = (len(parts) == 7 and parts[1] == "PreToolUse" and parts[2] == "Bash" and parts[3] == "main"
+               and parts[4].startswith("RuntimeError: forced fault in pre") and "evaluate:" in parts[5]
+               and parts[6].startswith("word="))
+        ctx = c.prompt(HANDBACK).context
+        return first(None if len(lines) == 200 and lines[0] == "old 51" else f"{len(lines)} lines, first {lines[0]!r}",
+                     None if fmt else f"bad line {lines[-1]!r}", has(ctx, "⚠ guard errors: 1"))
+
+    @add("fault_in_prompt_keeps_mode")
+    def _(c):
+        c.expect_errors = True
+        c.prompt("modo directo")
+        o = c.prompt("modo orquestador", env={"ADCM_GUARD_TEST_FAULT": "prompt"})
+        s = c.state_of()
+        return first(None if s.get("direct") == "sticky" and s.get("errors") == 1 else f"state {s}",
+                     has(o.context, "guard errors: 1"))
+
+    @add("fault_in_compact_and_start_keeps_count")
+    def _(c):
+        c.expect_errors = True
+        c.precompact(1, env={"ADCM_GUARD_TEST_FAULT": "compact"})
+        with open(c.transcript, "w") as fh:
+            fh.write(H.boundary_record() + "\n" + H.boundary_record() + "\n")
+        c.start("resume", env={"ADCM_GUARD_TEST_FAULT": "start"})
+        s = c.state_of()
+        return None if s.get("compactions") == 2 and s.get("errors") == 2 else f"state {s}"
+
+    @add("huge_inputs_under_a_second")
+    def _(c):
+        import time as _t
+        os.makedirs(c.state, exist_ok=True)
+        unit = ["$(", "`", "{,", '"', "'", "*?[", "<pasted_content>", "modo directo ", "\\", "a=b ", "> ", "{a,b}", "\x00",
+                "\ud800", "/" * 3, "-" * 3, "cd .. && "]
+        slow = []
+        for u in unit:
+            text = (u * (200_000 // len(u) + 1))[:200_000]
+            for o_fn in (lambda: c.prompt(text), lambda: c.bash(text), lambda: c.tool("Read", {"file_path": text[:5000]})):
+                t0 = _t.monotonic()
+                o = o_fn()
+                took = _t.monotonic() - t0
+                if took > 1.5 or o.rc or (o.text and not o.json):
+                    slow.append(f"{u!r}: {took:.2f}s rc {o.rc} out {o.text[:40]!r}")
+        return f"slow or broken: {slow[:4]}" if slow else None
+
+    @add("coarse_path_no_log_x2_on_main")
+    def _(c):
+        big = "echo x\n" * 12000
+        main = c.bash(big)
+        sub = c.bash(big, sub=True)
+        st = c.state_of()
+        c.prompt("modo directo")
+        direct = c.bash(big)
+        return first(denied(main, "X2", "KB"), allowed(sub), allowed(direct),
+                     None if st.get("coarse") == 1 and not st.get("errors") else f"state {st}",
+                     None if "guard errors" not in c.prompt("sigue").context else "coarse decision shown as an error")
+
+    @add("c1_c2_line_tricks_denied")
+    def _(c):
+        root = os.path.dirname(os.path.dirname(c.guard))
+        os.makedirs(c.state, exist_ok=True)
+        bad = [f"cd {root}/skills; cd /private/var/root; rm -rf {UP}scripts",
+               f"cd {root}/skills; (cd /tmp); rm -rf {UP}scripts",
+               f"pushd {root}/skills; rm -rf {UP}scripts",
+               f": # it's\nrm -rf {c.state}",
+               f"cat <<'EOF' >/dev/null\nit's an odd body\nEOF\nrm -rf {root}/scripts",
+               f"cd {root}; cat <<'X' >/dev/null\ncd /tmp\nX\nrm -rf scripts",
+               f"cd {root}/skills && rm -rf ..", f"echo 'unbalanced {c.state}"]
+        return first(*[denied(c.bash(x, sub=sub), "T0") for x in bad for sub in (False, True)])
+
+    @add("c1_c2_ordinary_passes")
+    def _(c):
+        root = os.path.dirname(os.path.dirname(c.guard))
+        proj = c.path("work", "proj")
+        dev = c.path("dev", "toolkit")
+        os.makedirs(os.path.join(proj, "build"), exist_ok=True)
+        os.makedirs(os.path.join(dev, "scripts"), exist_ok=True)
+        good = [f"{root}/scripts/launchers/plan-audit --brain $(pwd) --check",
+                f"echo start\n{root}/scripts/launchers/plan-audit --check\npython3 {root}/scripts/check-memory-index.py --all\necho done",
+                f"python3 {root}/scripts/notify-stop.py --x $(date +%s)",
+                f"cd {proj}\npushd build\nrm -rf {UP}dist\npopd\ncd ..\nrm -rf proj/build/tmp",
+                f"cd {dev} && grep -rn orchestrator-guard-state scripts/",
+                f"cd {dev} && git commit -F /tmp/msg.txt", "git status\ngit diff --stat\n# done"]
+        return first(*[allowed(c.bash(x, sub=sub)) for x in good for sub in (False, True)])
+
+    @add("routes_tracker_glob_and_unparseable")
+    def _(c):
+        root = os.path.dirname(os.path.dirname(c.guard))
+        os.makedirs(c.state, exist_ok=True)
+        d, seg = c.tmp, os.path.basename(c.state)
+        sc = os.path.join(root, "scripts")
+        bad = [f"cd {d} && cd /nonexistent-dir; rm -rf st*", f"cd {d} && (cd /tmp) && rm -rf st*",
+               f"cd {d} && cd /tmp | true; rm -rf st*", f"pushd {d} >/dev/null && rm -rf st*",
+               f"cd {d} && pushd /tmp >/dev/null && popd >/dev/null && rm -rf st*", f"cd {d} && cd /tmp && cd - && rm -rf st*",
+               f"builtin cd {d} && rm -rf st*", f"command cd {d} && rm -rf st*", f"chdir {d}; rm -rf st*",
+               f"rm -rf {d}/{seg[:3]}\\\n{seg[3:]}", f"rm -rf {d}/st* ; echo \"oops", f"rm -rf {d}/s?ate # it's",
+               f"cat > /dev/null <<'EOF'\nit's\nEOF\nrm -rf {d}/st*",
+               f"cd {sc} && (cd /tmp) && : > main-thread-guard.py", f"builtin cd {sc} && truncate -s0 main-thread-guard.py",
+               f"cd {sc} && cd /tmp && cd - && truncate -s0 main-thread-guard.py", f"cd {sc} && : > main-thread-guard.py ; echo \"x"]
+        return first(*[denied(c.bash(x, sub=sub), "T0") for x in bad for sub in (False, True)],
+                     allowed(c.bash("cd /tmp && cd - && ls")), allowed(c.bash(f"cd {c.path('work')} && rm -rf st*")))
+
+    @add("coarse_textual_home_data_and_cache")
+    def _(c):
+        root = os.path.dirname(os.path.dirname(c.guard))
+        data = c.path("pdata")
+        env = {"ADCM_GUARD_STATE_DIR": "", "CLAUDE_PLUGIN_DATA": data}
+        os.makedirs(os.path.join(data, "orchestrator" + "-guard-state"), exist_ok=True)
+        pad = " # " + "x" * 17000
+        return first(denied(c.bash("cd ~/pdata && rm -rf orch*" + pad, sub=True, env=env), "T0"),
+                     denied(c.bash("cd $HOME/pdata && rm -rf o*" + pad, sub=True, env=env), "T0"),
+                     denied(c.bash(f"cd {os.path.dirname(root)}/*/scripts && : > main-thread-guard.py" + pad, sub=True), "T0"),
+                     allowed(c.bash("cd ~/work && rm -rf build" + pad, sub=True, env=env)))
+
+    @add("coarse_reasons_size_vs_error")
+    def _(c):
+        c.expect_errors = True
+        os.makedirs(c.state, exist_ok=True)
+        size = c.bash(f"ls {c.state} # " + "x" * 17000, sub=True)
+        fault = c.bash(f"ls {c.state}", sub=True, env=FAULT)
+        return first(denied(size, "T0", "más de 16 KB", "Write o Edit"), denied(fault, "T0", "la evaluación de reglas falló"),
+                     None if "16 KB" not in fault.reason else "fault given the size reason")
+
+    @add("parse_cap_16k")
+    def _(c):
+        big = "cat > notes.txt <<'EOF'\n" + "plain line of text\n" * 1000 + "EOF"
+        st0 = allowed(c.bash(big, sub=True))
+        return first(st0, denied(c.bash(big), "X2"), None if c.state_of().get("coarse") == 1 else f"state {c.state_of()}")
+
+    @add("fallback_line_cap_and_sub_errors")
+    def _(c):
+        c.expect_errors = True
+        lines = "\n".join(["echo a"] * 30)
+        sub = c.bash("echo hi", sub=True, env=FAULT)
+        counted = None if c.state_of().get("errors") == 1 else f"sub fault not counted: {c.state_of()}"
+        return first(allowed(sub), counted, denied(c.bash(lines, env=FAULT), "X2"))
+
+    @add("eval_budget_reached_by_a_slow_command")
+    def _(c):
+        word = "/usr/" + "a/" * 30 + "{a,b,c,d,e,f,g,h}/{a,b,c,d,e,f,g,h}/x"
+        cmd = ("ls " + " ".join(f"{word}{i}" for i in range(400)))[:16000]
+        c.bash(cmd)
+        return None if c.state_of().get("coarse") == 1 else f"slow command not coarse: {c.state_of()}"
+
+    @add("c1_dir_word_base_and_c2_herestring")
+    def _(c):
+        root = os.path.dirname(os.path.dirname(c.guard))
+        os.makedirs(c.state, exist_ok=True)
+        return first(denied(c.bash(f"ls {root}/scripts; rm -rf {UP}hooks"), "T0"),
+                     denied(c.bash(f"cat <<< x {c.state}/a.json"), "T0"))
+
     @add("garbage_stdin_fails_open")
     def _(c):
         c.expect_errors = True
@@ -712,7 +934,7 @@ def cases():
 
 
 MUTANTS = ["discriminator", "cap", "direct", "attended", "status", "handback", "tamper", "edit_cap", "memory_line",
-           "browser", "phrase_region", "force", "unattended_count", "status_match", "redirect", "read_only", "git_cwd", "env_prefix", "cwd_rule", "interpreter", "guard_tree",
+           "browser", "phrase_region", "force", "unattended_count", "status_match", "redirect", "read_only", "git_cwd", "env_prefix", "cwd_rule", "safe_probe", "fallback", "c1", "c2", "c1_glob", "size_reason", "interpreter", "guard_tree",
            "ancestor"]
 
 if __name__ == "__main__":

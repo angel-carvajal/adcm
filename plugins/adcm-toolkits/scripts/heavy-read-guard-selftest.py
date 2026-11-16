@@ -170,10 +170,17 @@ def cases():
     def _(c):
         return allowed(c.bash("cat " + c.path("work", "nope.md")))
 
-    @add("bash_unparseable_allowed")
+    @add("bash_unparseable_still_judged")
     def _(c):
         big = c.write("work/big.md", size=50 * KB)
-        return allowed(c.bash(f"cat {big} 'unterminated"))
+        small = c.write("work/small.md", "x\n")
+        return first(denied(c.bash(f"cat {big} 'unterminated"), "R3"), allowed(c.bash(f"cat {small} 'unterminated")))
+
+    @add("read_limit_not_finite_is_whole")
+    def _(c):
+        p = c.write("work/big.md", LINE * 1000)
+        return first(*[denied(read(c, p, limit=v), "R3") for v in (float("inf"), float("-inf"), float("nan"))],
+                     allowed(read(c, p, limit=10, offset=float("inf"))))
 
     @add("bash_transcripts")
     def _(c):

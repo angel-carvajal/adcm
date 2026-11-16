@@ -1,5 +1,33 @@
 # Changelog — adcm-toolkits
 
+## 0.22.1 — 2026-11-16
+
+- **Fixed: guard let calls through.** For a command with an environment-variable prefix followed by a path-taking verb (`mv`, `cd`),
+  the guard resolved an internal marker as a path, raised an internal error and let the call through unchecked and uncounted. Found in
+  live use one day after 0.22.0 through the guard's own error log. A line with unbalanced quotes also skipped the tamper rule.
+- **Changed: an internal error no longer means "allow".** A parse-free fallback keeps the compaction lock and handoff gate, the Bash / Read
+  budget, the Bash size caps and a textual tamper check. Filesystem probes never raise. State is updated before fragile work. Commands over
+  16 KB, or evaluation over 0.6 s, take that coarse path without word-by-word parsing; on the attended main thread outside direct mode a command over 16 KB is denied (edit cap). A command over 16 KB that names the guard's state or installation is denied with its own reason.
+- **Added: visible errors.** Internal errors show as `⚠ guard errors: n` in the counter line; `errors.log` lines carry event, tool, thread,
+  frames and the offending word, and the file is capped at 200 lines.
+- **Added: stricter tamper rule.** A relative word is resolved against every directory the line names; a line that touches the guard's own
+  paths must be one plain read-only line (no heredoc, command substitution, comment or unbalanced quote).
+- **Added: state recovery.** When a session's state is missing or unreadable, the guard rebuilds it from the session transcript (Bash and
+  Read counts, compactions, handoff written) instead of starting at zero. Deleting the state resets nothing, and a session that predates
+  the install starts with its real counts. A handoff counts on recovery only when the file on disk holds at least 300 characters. A new session after `/clear` still starts at zero.
+- **Changed: tamper and Read details.** `pushd` and the builtin or command forms of `cd` are tracked, relative words and globs are
+  resolved against every directory the line names, and a line the tokenizer cannot read is still judged line by line. Non-finite Read
+  limits count as whole-file reads.
+- **Selftests.** 22 suites, 938 checks, 0 failures. Guard suites: `main-thread-budget` (110), `compaction-breaker`
+  (54), `heavy-read-guard` (27), `guard-fuzz` (3; fixed seed, 5000 structured inputs per run). `--mutation` kills all
+  53 mutants over 9 suites (main-thread-budget 28, compaction-breaker 9, heavy-read-guard 5, docsync-apply 3,
+  plan-audit 3, memory-index-check 2, status-digest 1, artifact-guard 1, guard-fuzz 1).
+- **Version constants.** `plugin.json`, the `execute.md.tmpl` Protocol line and the version strings of `courier_preflight.py`,
+  `renovate_check.py`, `status_digest.py` and the renovate selftest read 0.22.1.
+
+Notes: run `claude plugin marketplace update adcm` and `claude plugin update adcm-toolkits@adcm`, then restart sessions or reload plugins.
+Nothing to copy: the artifact-guard template is unchanged since 0.22.0.
+
 ## 0.22.0 — 2026-11-14
 
 - **main-thread-guard.** New plugin hook `scripts/main-thread-guard.py` (SessionStart, UserPromptSubmit, PreCompact,

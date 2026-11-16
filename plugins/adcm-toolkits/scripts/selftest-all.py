@@ -17,7 +17,7 @@ import time
 sys.stdout.reconfigure(line_buffering=True)
 
 PLUGIN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LAST = ("compaction-breaker", "main-thread-budget", "heavy-read-guard")
+LAST = ("guard-fuzz", "compaction-breaker", "main-thread-budget", "heavy-read-guard")
 
 
 def discover():
