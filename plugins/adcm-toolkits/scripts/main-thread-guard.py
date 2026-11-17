@@ -36,7 +36,8 @@ MAX_WORD, MAX_PARSE, EVAL_SECONDS, WALK_LEVELS, LOG_LINES = 4096, 16 * 1024, 0.6
 RECOVERY_SECONDS = 5.0
 HOOK_DENY_RE = re.compile(r"PreToolUse:\S* hook error: \W{0,3}main-thread-guard \[")
 DENY_MARK = b"main-thread-guard ["
-DEADLINE, PROBE = [0.0], {"word": ""}
+DEADLINE, WALL, PROBE = [0.0], [0.0], {"word": ""}
+WALL_SECONDS = 3.0
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".bmp", ".tif", ".tiff", ".heic", ".avif"}
 PROTECTED = {"task.md", "execute.md", "plan-detallado.md", "detailed-plan.md", "plans.html", "prompts.html"}
 DUMPERS = {"cat", "bat", "less", "more", "nl", "tac"}
@@ -46,6 +47,9 @@ READ_ONLY = {"cd", "ls", "cat", "head", "tail", "wc", "nl", "stat", "file", "gre
              "shasum", "sha1sum", "sha256sum", "test", "[", "realpath", "readlink", "du", "pwd"}
 ASSIGNERS = {"export", "declare", "typeset", "readonly", "local"}
 CHDIRS = {"cd", "pushd", "chdir"}
+BRACE_LEXICAL = 4096
+PATH_VERBS = {"rm", "mv", "cp", "ln", "chmod", "chown", "truncate", "shred", "install", "rsync", "rmdir", "unlink", "touch",
+              "mkdir", "tee", "dd"}
 GLOB_CHARS = "*?["
 WIPERS = {"rm", "mv", "find", "rsync", "git", "chmod", "chown", "rmdir"}
 INTERPRETERS = {"python", "node", "ruby", "perl", "php", "deno", "bun", "osascript"}
@@ -143,7 +147,15 @@ def absolute(path, cwd):
 
 
 class GuardTimeout(Exception):
-    """Rule evaluation ran over its time budget; PreToolUse falls back to the parse-free decision."""
+    """Rule evaluation ran over its time budget (CPU or wall safety net)."""
+
+
+class GuardStall(GuardTimeout):
+    """The wall-clock safety net tripped with the CPU budget intact: the machine stalled, not the command."""
+
+
+class GuardOversize(GuardTimeout):
+    """The command is over the parse cap; it goes to the parse-free decision without tokenizing."""
 
 
 def probeable(s):
@@ -153,8 +165,10 @@ def probeable(s):
 
 def tick(word=""):
     PROBE["word"] = word
-    if DEADLINE[0] and time.monotonic() > DEADLINE[0]:
-        raise GuardTimeout("evaluation over its time budget")
+    if DEADLINE[0] and time.process_time() > DEADLINE[0]:  # MUTATION-KEY: cpu_budget
+        raise GuardTimeout("evaluation over its CPU budget")
+    if WALL[0] and time.monotonic() > WALL[0]:  # MUTATION-KEY: wall_net
+        raise GuardStall("evaluation over its wall-clock safety net")
 
 
 def fs(fn, *args, default=False):
@@ -388,14 +402,15 @@ def session_state(sid, transcript=None):
         data = read_json(path)
         rebuilt = not data and transcript is not None
         if rebuilt:  # MUTATION-KEY: recovery
-            began = time.monotonic()
+            began, began_cpu = time.monotonic(), time.process_time()
             try:
                 data = recover(transcript)
             except Exception as exc:
                 log_error(exc, {"hook_event_name": "recovery"})
                 data = {}
             if DEADLINE[0]:
-                DEADLINE[0] += time.monotonic() - began
+                DEADLINE[0] += time.process_time() - began_cpu
+                WALL[0] += time.monotonic() - began
             data["recoveries"] = 1
             data["recovered"] = any(data.get(k) for k in ("compactions", "bash", "read", "handoff_written"))
         st = dict(DEFAULTS, **data)
@@ -542,7 +557,7 @@ def commands(cmd, cwd, depth=0):
     """(argv, cwd) per simple command, tracking `cd`; one level into $(...), backticks and `sh -c`."""
     import shlex
     if len(cmd) > MAX_PARSE:
-        raise GuardTimeout(f"command of {len(cmd)} chars is over the parse budget")
+        raise GuardOversize(f"command of {len(cmd)} chars is over the parse budget")
     cmd = cmd.replace("\\\n", "")  # the shell drops backslash-newline before anything else
     inner = [m.group(1) if m.group(1) is not None else m.group(2) for m in SUBST_RE.finditer(cmd)] if depth == 0 else []
     text = SUBST_RE.sub(" _subst_ ", cmd)
@@ -721,6 +736,29 @@ def sources_of_mv(argv, args):
     return args[:-1]
 
 
+def lexical_hit(word, here, roots, guard_paths, wiper):
+    """A brace alternative judged without system calls: the state dir, a guard file or folder, or (for a wiper) above them."""
+    home = os.path.expanduser("~")
+    word = re.sub(r"\$(?:HOME\b|\{HOME\})", lambda _: home, word.split("\x00", 1)[0])
+    word = home + word[1:] if word == "~" or word.startswith("~/") else word
+    pc = os.path.normpath(word if os.path.isabs(word) else os.path.join(here or os.sep, word)).casefold()
+    state = [r.casefold() for r in roots]
+    exact = {g.casefold() for g in guard_paths} | {os.path.dirname(g).casefold() for g in guard_paths} | {
+        os.path.dirname(os.path.dirname(g)).casefold() for g in guard_paths}
+    if any(pc == r or pc.startswith(r + os.sep) for r in state) or pc in exact:
+        return True
+    return wiper and any(p.startswith(pc.rstrip(os.sep) + os.sep) for p in state + [g.casefold() for g in guard_paths])
+
+
+def find_roots(argv):
+    roots = []
+    for a in argv[1:]:
+        if a.startswith(("-", "(", "!")):
+            break
+        roots.append(a)
+    return roots
+
+
 def wipes_ancestor(prog, argv, args, here, hit):
     """A destructive command aimed AT a folder above the protected set."""
     short = [a for a in argv[1:] if a.startswith("-") and not a.startswith("--")]
@@ -788,6 +826,15 @@ def tamper(tool, ti, cwd):
     for argv, here in parsed:
         prog = os.path.basename(argv[0])
         args, writes = split_redirects(argv)
+        paths = find_roots(argv) if prog == "find" else (args if prog in PATH_VERBS else [])
+        alt_lists = [braces(w, BRACE_LEXICAL + 1) for w in paths + writes]
+        if any(len(alts) > BRACE_LEXICAL for alts in alt_lists):
+            return "una lista entre llaves de m\u00e1s de 4096 alternativas no se puede comprobar: divide el comando de rutas."
+        if any(len(alt) > MAX_WORD for alts in alt_lists for alt in alts):  # MUTATION-KEY: long_word
+            return "una ruta de m\u00e1s de 4096 caracteres no se puede comprobar: ese comando de rutas se niega; acorta la ruta."
+        late = [alt for alts in alt_lists for alt in alts[64:]]  # the first 64 are probed by the structured rules below
+        if any(lexical_hit(alt, here, roots, guard_paths, prog in WIPERS) for alt in late):  # MUTATION-KEY: brace_lexical
+            return state_msg
         named = [t for t in operands(argv) if t not in (XARGS, ENV_PREFIX)] + (feeders if XARGS in argv else [])
         if prog == "git":  # MUTATION-KEY: git_cwd
             named.append(here)
@@ -1166,7 +1213,11 @@ def fallback(d, coarse=False):
     texts = {SEGMENT} | {p.casefold() for p in forms(state_dir()) | forms(PLUGIN_ROOT) | forms(os.path.dirname(PLUGIN_ROOT))}
     if not os.environ.get("ADCM_GUARD_STATE_DIR"):
         texts |= {p.casefold() for p in forms(os.path.dirname(state_dir()))}
-    if any(t in raw for t in texts):
+    norm = re.sub(r"`[^`]*`|\$\([^()]*\)", "", raw)  # a substitution may print nothing: drop it
+    norm = re.sub(r"[\"'`\\]", "", norm)
+    norm = re.sub(r"~(?=/|\s|$|;|&|\))", lambda _: home, norm)
+    norm = norm.replace("${home}", home).replace("$home", home)
+    if any(t in raw for t in texts) or any(t in norm for t in texts):  # MUTATION-KEY: coarse_norm
         if tool == "Bash" and len(str(ti.get("command") or "")) > MAX_PARSE:  # MUTATION-KEY: size_reason
             return deny("T0", "comando de m\u00e1s de 16 KB que nombra el estado o la instalaci\u00f3n del guard: escribe ese "
                               "archivo con Write o Edit, o divide el comando.")
@@ -1202,18 +1253,33 @@ def fallback(d, coarse=False):
     return None
 
 
+def too_costly(d):
+    """Past the CPU budget or the wall safety net: the attended main thread outside direct mode is denied."""
+    if is_sub(d) or not attended():
+        return None
+    with session_state(d.get("session_id"), d.get("transcript_path")) as st:
+        if st["direct"] != "off":  # MUTATION-KEY: costly_direct
+            return None
+        st["coarse"] += 1
+    return deny("X3", "el comando es demasiado costoso de evaluar: simplif\u00edcalo o del\u00e9galo en adcm-toolkits:executor.")
+
+
 def pre_tool(d):
-    DEADLINE[0] = time.monotonic() + EVAL_SECONDS
+    DEADLINE[0], WALL[0] = time.process_time() + EVAL_SECONDS, time.monotonic() + WALL_SECONDS
     try:
         out = evaluate(d)
-        DEADLINE[0] = 0.0
+        DEADLINE[0] = WALL[0] = 0.0
         return out
-    except GuardTimeout:
-        DEADLINE[0] = 0.0
+    except GuardOversize:
+        DEADLINE[0] = WALL[0] = 0.0
         return fallback(d, coarse=True)
+    except GuardTimeout as exc:
+        DEADLINE[0] = WALL[0] = 0.0
+        stalled = isinstance(exc, GuardStall)  # MUTATION-KEY: stall_coarse
+        return (None if stalled else too_costly(d)) or fallback(d, coarse=True)
     except Exception as exc:
         log_error(exc, d)
-        DEADLINE[0] = 0.0
+        DEADLINE[0] = WALL[0] = 0.0
         if is_sub(d) or not attended():
             bump_errors(d)
         return fallback(d)  # MUTATION-KEY: fallback

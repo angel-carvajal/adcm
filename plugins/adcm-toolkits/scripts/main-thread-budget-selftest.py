@@ -916,6 +916,135 @@ def cases():
         return first(denied(c.bash(f"ls {root}/scripts; rm -rf {UP}hooks"), "T0"),
                      denied(c.bash(f"cat <<< x {c.state}/a.json"), "T0"))
 
+    @add("coarse_normalised_split_paths")
+    def _(c):
+        root = os.path.dirname(os.path.dirname(c.guard))
+        cache = os.path.dirname(root)
+        env = {"ADCM_GUARD_STATE_DIR": "", "CLAUDE_PLUGIN_DATA": c.path("pdata")}
+        pad = "\n" + "plain filler line\n" * 1100
+        bad = ['cd ~/pd"at"a && rm -rf orch*', "cd ~/pd\\ata && rm -rf orch*", "cd $HOME/'pd'ata && rm -rf o*",
+               f'cd {cache[:-4]}"{cache[-4:]}"/x && : > y', f"cd {cache[:-4]}\\{cache[-4:]}/x && : > y",
+               f"cd {cache[:-4]}`echo`{cache[-4:]}/x && : > y", f"cd {cache[:-4]}$(printf '')" + f"{cache[-4:]}/x && : > y"]
+        heredocs = ["cat > notes.md <<'EOF'\n" + "a line of an ordinary brief with ./paths and 'quotes'\n" * n + "EOF"
+                    for n in (400, 1300)]
+        return first(*[denied(c.bash(x + pad, sub=True, env=env), "T0") for x in bad],
+                     *[allowed(c.bash(h, sub=True, env=env)) for h in heredocs])
+
+    @add("costly_command_main_denied_elsewhere_coarse")
+    def _(c):
+        word = "/usr/" + "a/" * 30 + "{a,b,c,d,e,f,g,h}/{a,b,c,d,e,f,g,h}/x"
+        cmd = ("ls " + " ".join(f"{word}{i}" for i in range(400)))[:16000]
+        main = c.bash(cmd)
+        sub = c.bash(cmd, sub=True)
+        c.prompt("modo directo")
+        direct = c.bash(cmd)
+        return first(denied(main, "X3", "demasiado costoso"), allowed(sub), allowed(direct),
+                     None if c.state_of().get("coarse") == 2 else f"state {c.state_of()}")
+
+    @add("slow_wall_low_cpu_not_tripped")
+    def _(c):
+        import importlib.util
+        import time as real_time
+        saved = dict(os.environ)
+        os.environ.update(c.env)
+        try:
+            spec = importlib.util.spec_from_file_location("guard_wall", c.guard)
+            g = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(g)
+
+            class SlowWall:
+                calls = 0
+
+                def __getattr__(self, name):
+                    return getattr(real_time, name)
+
+                def monotonic(self):
+                    SlowWall.calls += 1
+                    return real_time.monotonic() + (0.0 if SlowWall.calls == 1 else 2.0)
+            g.time = SlowWall()
+            out = g.pre_tool(c.event("PreToolUse", tool_name="Bash", tool_input={"command": "ls /tmp /usr && git status"}))
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+        st = c.state_of()
+        return None if out is None and not st.get("coarse") else f"tripped: {out} {st}"
+
+    @add("stalled_wall_takes_coarse_path")
+    def _(c):
+        import importlib.util
+        import time as real_time
+        os.makedirs(c.state, exist_ok=True)
+        saved = dict(os.environ)
+        os.environ.update(c.env)
+        outs = []
+        try:
+            spec = importlib.util.spec_from_file_location("guard_stall", c.guard)
+            g = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(g)
+
+            class Stalled:
+                calls = 0
+
+                def __getattr__(self, name):
+                    return getattr(real_time, name)
+
+                def monotonic(self):
+                    Stalled.calls += 1
+                    return real_time.monotonic() + (0.0 if Stalled.calls == 1 else 5.0)
+            g.time = Stalled()
+            for cmd in ("ls /tmp /usr", f"ls {c.state}"):
+                Stalled.calls = 0
+                outs.append(g.pre_tool(c.event("PreToolUse", tool_name="Bash", tool_input={"command": cmd})))
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+        st = c.state_of()
+        named = (outs[1] or {}).get("hookSpecificOutput", {})
+        return first(None if outs[0] is None else f"stall denied an ordinary command: {outs[0]}",
+                     None if st.get("coarse") == 1 and st.get("bash") == 1 else f"state {st}",
+                     None if named.get("permissionDecision") == "deny" and "[T0]" in named.get("permissionDecisionReason", "")
+                     else f"stall with guard paths not denied: {outs[1]}")
+
+    @add("coarse_quote_split_tilde")
+    def _(c):
+        env = {"ADCM_GUARD_STATE_DIR": "", "CLAUDE_PLUGIN_DATA": c.path("pdata")}
+        pad = "\n" + "plain filler line\n" * 1100
+        return first(denied(c.bash('cd ~"/pdata" && rm -rf orch*' + pad, sub=True, env=env), "T0"),
+                     allowed(c.bash('cd ~"/work" && rm -rf build' + pad, sub=True, env=env)))
+
+    @add("long_brace_word_judged_per_alternative")
+    def _(c):
+        os.makedirs(c.state, exist_ok=True)
+        alts = [c.path("work", "build", f"dir{i:02d}" + "q" * 60) for i in range(60)]
+        ordinary = "{" + ",".join(alts) + "}"
+        naming = "{" + ",".join(alts[:30] + [c.state] + alts[30:59]) + "}"
+        return first(None if len(ordinary) > 4096 and max(map(len, alts)) < 4096 else "fixture too short",
+                     *[allowed(c.bash(f"rm -rf {ordinary}", sub=sub)) for sub in (False, True)],
+                     *[denied(c.bash(f"rm -rf {naming}", sub=sub), "T0") for sub in (False, True)])
+
+    @add("brace_lists_lexical_beyond_64")
+    def _(c):
+        os.makedirs(c.state, exist_ok=True)
+        files = [f"/tmp/w/file{i:03d}" for i in range(200)]
+        hidden = "{" + ",".join(files[:149] + [c.state] + files[150:]) + "}"
+        ordinary = ["touch f{1..500}", "mkdir -p shard{001..128}", "rm -f part-{0..99}.tmp", "rm -f {" + ",".join(files) + "}"]
+        huge = "rm -f /tmp/{" + ",".join(["x"] * 5000) + "}"
+        return first(*[allowed(c.bash(x, sub=sub)) for x in ordinary for sub in (False, True)],
+                     *[denied(c.bash(f"rm -rf {hidden}", sub=sub), "T0") for sub in (False, True)],
+                     *[denied(c.bash(huge, sub=sub), "T0", "4096") for sub in (False, True)])
+
+    @add("long_words_under_path_verbs")
+    def _(c):
+        root = os.path.dirname(os.path.dirname(c.guard))
+        os.makedirs(c.state, exist_ok=True)
+        long = "z" * 5000
+        bad = [f"rm -rf {root}/{{scripts,{long}}}", f"rm -rf {c.state}/{{a,{long}}}", f"rm -rf /tmp/x/{{a,{long}}}",
+               f"mkdir -p /tmp/{long}", f"echo x > /tmp/{long}", f"find /tmp/{long} -name y", f"cp a /tmp/{{b,{long}}}"]
+        good = [f"python3 -c 'print(\"{long}\")'", f"jq '.{long}' data.json", f"psql -c 'select {long}'",
+                f"curl -d '{long}' https://example.test/api", f"git commit -m '{long}'", f"echo {long}"]
+        return first(*[denied(c.bash(x, sub=sub), "T0") for x in bad for sub in (False, True)],
+                     *[allowed(c.bash(x, sub=sub)) for x in good for sub in (False, True)])
+
     @add("garbage_stdin_fails_open")
     def _(c):
         c.expect_errors = True
@@ -934,7 +1063,7 @@ def cases():
 
 
 MUTANTS = ["discriminator", "cap", "direct", "attended", "status", "handback", "tamper", "edit_cap", "memory_line",
-           "browser", "phrase_region", "force", "unattended_count", "status_match", "redirect", "read_only", "git_cwd", "env_prefix", "cwd_rule", "safe_probe", "fallback", "c1", "c2", "c1_glob", "size_reason", "interpreter", "guard_tree",
+           "browser", "phrase_region", "force", "unattended_count", "status_match", "redirect", "read_only", "git_cwd", "env_prefix", "cwd_rule", "safe_probe", "fallback", "c1", "c2", "c1_glob", "size_reason", "coarse_norm", "cpu_budget", "costly_direct", "long_word", "wall_net", "stall_coarse", "brace_lexical", "interpreter", "guard_tree",
            "ancestor"]
 
 if __name__ == "__main__":

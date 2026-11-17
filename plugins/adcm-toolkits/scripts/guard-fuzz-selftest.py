@@ -25,7 +25,8 @@ ATOMS = ["\x00", "\ud800", "\udfff", "'", '"', "$(", ")", "`", "{", "}", ",", "*
          " ", "a", "Z", "9", "é", "modo directo", "sin tanto lío", "modo orquestador", "status", "<agent-message>",
          "<pasted_content>", "```", "«", "»", "handoff", "MEMORY.md", "task.md", ".png", ".jsonl", "x" * 300,
          "\n", "#", " # it's", "pushd ", "popd", "..", ".." + "/", ".." + "/scripts", ".." + "/..", "scripts", "hooks", "<<'X'",
-         "\\\n", "builtin cd ", "cd - ", "chdir ", "orch*", "s?ate", "\"oops"]
+         "\\\n", "builtin cd ", "cd - ", "chdir ", "orch*", "s?ate", "\"oops",
+         "{a," + "b" * 5000 + "}", "~/pd\"at\"a", "pd\\ata", "'sc'ripts", "{scripts,hooks}"]
 VERBS = ["cat", "rm -rf", "mv", "cp", "ls", "grep", "git status", "git -C", "find", "sed -i", "python3 -c", "bash -c",
          "eval", "env A=1", "B=2", "export C=3;", "xargs rm", "cd", "tee", "dd of=", "chmod -R", "rsync --delete", "head", "pushd", "cat <<'X'"]
 TOOLS = ["Bash", "Read", "Write", "Edit", "MultiEdit", "NotebookEdit", "Grep", "Glob", "LS", "Artifact", "ToolSearch",

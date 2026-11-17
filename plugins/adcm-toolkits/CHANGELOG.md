@@ -1,5 +1,33 @@
 # Changelog — adcm-toolkits
 
+## 0.22.2 — 2026-11-16
+
+- **Hardened: coarse path.** The textual tamper check also runs on a normalised copy of the input (quotes and backslashes removed, home
+  shorthand expanded), so a path split by quoting no longer slips past it.
+- **Hardened: time budget.** Measured in CPU time (0.6 s) with a 3 s wall-clock safety net, so a loaded machine cannot trip it. On the
+  attended main thread outside direct mode a command too costly to evaluate is denied instead of falling back to the coarse rules.
+  Sub-agents, direct mode and unattended runs keep the coarse path.
+- **Hardened: words too long to probe.** Brace lists are expanded before the length test; a path-changing command (`rm`, `mv`, `cp`,
+  `chmod` and the like) or a redirection whose target is still too long to probe is denied on every thread. Long arguments to
+  interpreters, filters, SQL or commit messages are unaffected.
+- **Added: rule X3.** On the attended main thread outside direct mode a command whose evaluation exceeds the CPU budget (0.6 s) is denied
+  as too costly; when only the 3 s wall-clock net trips (a stalled machine) the coarse rules apply instead. Brace lists: every
+  alternative is judged on its own (the first 64 against the filesystem, all of them lexically up to 4096); ranges are not expanded;
+  a path-changing command or redirection with an operand too long to probe, or with more than 4096 alternatives, is denied on every
+  thread. On the coarse path the normalised copy also drops command-substitution spans.
+- **Not changed on purpose.** Commands over 16 KB from sub-agents are still allowed unless they name the guard's paths, because writing
+  files through large heredocs is normal sub-agent work.
+- **Selftests.** 22 suites, 946 checks, 0 failures (full run of the untouched suites from the 0.22.1 run, plus this
+  refresh of the guard, notify-stop and version-constant suites). Guard suites: `main-thread-budget` (118),
+  `compaction-breaker` (54), `heavy-read-guard` (27), `guard-fuzz` (3). `--mutation` kills all 60 mutants over 9
+  suites (main-thread-budget 35, compaction-breaker 9, heavy-read-guard 5, docsync-apply 3, plan-audit 3,
+  memory-index-check 2, status-digest 1, artifact-guard 1, guard-fuzz 1).
+- **Version constants.** `plugin.json`, the `execute.md.tmpl` Protocol line and the version strings of `courier_preflight.py`,
+  `renovate_check.py`, `status_digest.py` and the renovate selftest read 0.22.2.
+
+Notes: run `claude plugin marketplace update adcm` and `claude plugin update adcm-toolkits@adcm`, then reload plugins or restart sessions.
+Nothing to copy: the artifact-guard template is unchanged since 0.22.0.
+
 ## 0.22.1 — 2026-11-16
 
 - **Fixed: guard let calls through.** For a command with an environment-variable prefix followed by a path-taking verb (`mv`, `cd`),
