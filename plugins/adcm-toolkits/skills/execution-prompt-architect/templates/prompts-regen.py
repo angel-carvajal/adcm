@@ -165,11 +165,13 @@ def parse_s7(exec_text):
         # fence may be bare (legacy), later ones must be ```text; every other fence (```bash, a bare one after
         # the first prompt, 4+ backticks) is skipped opener-to-closer, so its closing ``` never opens a prompt
         # and a `## ` / `### ` line inside it never ends the wave.
-        bodies, heading, j = [], None, i + 1
+        bodies, heading, launch, j = [], None, None, i + 1
         while j < len(lines) and not lines[j].startswith('### '):
             line = lines[j]
             fence = re.match(r'^(`{3,})(.*)$', line)
-            if line.startswith('## '):
+            if line.startswith('LAUNCH:'):
+                launch = line[len('LAUNCH:'):].strip()  # the line between a phase heading and its fence
+            elif line.startswith('## '):
                 if not re.match(r'^##\s+(?:Entrega|Delivery)\b', line):
                     break
                 heading = line[2:].strip()
@@ -180,7 +182,8 @@ def parse_s7(exec_text):
                     k += 1
                 text = '\n'.join(lines[j + 1:k])
                 if text:
-                    bodies.append({'heading': heading, 'text': text})
+                    bodies.append({'heading': heading, 'text': text, 'launch': launch})
+                    launch = None
                 j = k
             elif fence:
                 closer = re.compile(r'^`{%d,}\s*$' % len(fence.group(1)))
@@ -304,6 +307,8 @@ def render_prompts(wid, bodies, L):
             h = md_inline(b['heading'] or f'{L["delivery"]} {n}')
             parts.append(f'<header class="card-h"><div><h3>{h}</h3></div>\n'
                          f'<button class="copy" data-target="{pre_id}">{L["copy_btn"]}</button></header>\n')
+        if b.get('launch'):
+            parts.append(f'<p class="launch" style="margin:0;padding:8px 24px"><code>LAUNCH: {html.escape(b["launch"], quote=False)}</code></p>\n')
         parts.append(f'<pre id="{pre_id}"><code>{html.escape(b["text"], quote=False)}</code></pre>\n')
     return btn, ''.join(parts)
 

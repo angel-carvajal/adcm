@@ -14,6 +14,8 @@ they carry the executable bit, no manifest key. Where that hook does not run (cl
 
 `plan-audit` and `docsync-apply` run `plan_audit.py` (the contradiction-audit seal and check of a brain's plan before prompts are rendered) and `docsync_apply.py` (the two-phase doc-sync sheet: `--check`, then `--write`) of `skills/execution-prompt-architect/templates/`.
 
+`spend-report` runs `spend_report.py` of `skills/execution-prompt-architect/templates/` (read-only, stdout only, at most 10 lines: handoff line, one row per model family, one `ALARM` line per alarm; `--session`, `--project`, `--until`, `--phase`, `--selftest`).
+
 `explainer-record` is a Node launcher: it runs `skills/explainer-video/scripts/record.mjs` with `node` instead of `python3`.
 Recording needs Node 20+, so it puts the newest nvm 2x install (version order) first on PATH and falls back to the `node` already there;
 its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, voice).

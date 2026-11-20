@@ -70,7 +70,7 @@ def main(argv):
         print(json.dumps({"files": res, "ok": not bad}, indent=1))
     elif brief:
         for r in bad:
-            print("MEMORY.md demasiado grande (%s): %d líneas, %d tokens est., línea más larga %d; resume cada línea del índice y mueve el detalle a su archivo."
+            print("MEMORY.md demasiado grande (%s): %d líneas, %d tokens est., línea más larga %d. Tarea lateral: no la hagas ahora; anótala y, al cerrar la fase, resume cada línea del índice y mueve el detalle a su archivo."
                   % (r["file"], r["lines"], r["est_tokens"], r["longest_line"]))
     else:
         for r in res:

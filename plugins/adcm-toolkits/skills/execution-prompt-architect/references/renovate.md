@@ -38,7 +38,8 @@ For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES:
   Since 0.16.0 `lacks` can name `reviewer-line`, `merge-rule`, `links-once` or the retired merge policy (`auto-` + `merge`, in §3 only).
   Since 0.22.0 `lacks` can name `phase-sessions`, `handoff-token`, `docsync-check`, `plan-audit-check` or `main-thread`: the executor
   copies the matching sentences from the current `execute.md.tmpl` (brief line PHASES) into pending waves' prompts and §1/§2b/§4;
-  executed waves are never re-split or re-audited; once the execute block is ok, run SKILL.md Step 6b once for the pending waves. `--copy-scripts` also brings `plan_audit.py` and `docsync_apply.py` (twelve SCRIPTS files: also the handoff template and the two briefs).
+  executed waves are never re-split or re-audited; once the execute block is ok, run SKILL.md Step 6b once for the pending waves. `--copy-scripts` also brings `plan_audit.py`, `docsync_apply.py` and (0.23.0) `spend_report.py` (thirteen SCRIPTS files: also the handoff template and the two briefs).
+  Since 0.23.0 `lacks` can name `spend-report` (no `spend-report --phase` in the phase prompts) or `launch-line` (no `LAUNCH: /model` line): the executor copies them from the current `execute.md.tmpl`/phase prompts.
   Since 0.19.0 `lacks` can name `map-step` (no `map-refresh` call in §2b): the executor writes the template's §1 principle 9
   map sentences, the §2b step 1 **map** field, the step 6 `map-refresh` call and the step 7 wording.
   The executor writes the template's text: the `> **Reviewer:** <handle> (<forge>) · **Merge policy:** wait` line under the Protocol line,
@@ -75,7 +76,7 @@ ONE `Agent(subagent_type: "adcm-toolkits:auditor")` (read-only), brief ≤40 lin
 - `map-refresh --brain <docs_dir> --check` → exit 0 for every dir with a map (root and each module's `--brain`); in the
   diff, `map/` holds only new files or regenerated blocks, plus the brain README's `map/` row;
 - `renovate-check --brain <docs_dir> --all-modules` → `RENOVATE: up-to-date`; a public brain also gets the privacy grep.
-Findings go back to the SAME executor (`SendMessage`, cost 0).
+Findings go back to the SAME executor only under the 5-minute rule (`SendMessage`, < 5 min idle), else to a new executor with a relay file of ≤ 40 lines.
 
 ## 4. Close
 - Doc-sync in the brain's own repo is ONE sonnet executor (`templates/docsync-brief.md`, two phases): the logbook entry

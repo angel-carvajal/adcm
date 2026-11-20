@@ -17,6 +17,7 @@ import time
 sys.stdout.reconfigure(line_buffering=True)
 
 PLUGIN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SELF = (os.path.join("skills", "execution-prompt-architect", "templates", "spend_report.py"),)  # selftest runs as `--selftest`
 LAST = ("guard-fuzz", "compaction-breaker", "main-thread-budget", "heavy-read-guard")
 
 
@@ -25,6 +26,7 @@ def discover():
     for root, dirs, files in os.walk(PLUGIN):
         dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", "node_modules")]
         found += [os.path.join(root, f) for f in files if f.endswith("-selftest.py")]
+    found += [os.path.join(PLUGIN, r) for r in SELF if os.path.isfile(os.path.join(PLUGIN, r))]
     key = lambda p: (any(n in os.path.basename(p) for n in LAST), os.path.relpath(p, PLUGIN))
     return sorted(found, key=key)
 
@@ -88,7 +90,7 @@ def main(argv):
     failed, ok_n, all_n = [], 0, 0
     for s in suites:
         rel = os.path.relpath(s, PLUGIN)
-        cmd = [sys.executable, "-B", s] + (["--mutation"] if mutation else [])
+        cmd = [sys.executable, "-B", s] + (["--selftest"] if s.endswith(SELF) else ["--mutation"] if mutation else [])
         t0 = time.time()
         try:
             p = subprocess.run(cmd, cwd=os.path.dirname(s), env=env, capture_output=True, text=True, timeout=timeout)

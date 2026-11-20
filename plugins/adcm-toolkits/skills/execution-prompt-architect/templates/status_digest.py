@@ -17,7 +17,8 @@ Usage
   --mrs          add `MRS:` (open MRs/PRs via glab, else gh; 8 s timeout, <= 5 lines); a missing CLI or
                  an error prints `MRS: unavailable (<why>)` and never changes the exit code
   --prompt [W:P] print ONLY the fenced section 7 prompt of the pending phase (newest handoff's
-                 `Next phase`, else phase a of the first 🔄/ready wave) or of the named WAVE[:PHASE];
+                 `Next phase`, else phase a of the first 🔄/ready wave) or of the named WAVE[:PHASE], preceded by the
+                 `LAUNCH:` line (model and effort) its heading carries outside the fence, when there is one;
                  legacy brains (`### Wave W — title`) give their single prompt; message on stderr and
                  exit 1 when there is none, when `Next phase: none`, or when PLAN-AUDIT withholds it
   --json         same data as one JSON object; its "text" key holds the plain lines
@@ -44,12 +45,14 @@ Layout (fixed order; a line is left out when its data does not exist)
   NEXT ☐ ready: <ids> | none ready (waiting on <ids>)
   LAST LOG <date>[ (sfx)] · <wave>[ · PARTIAL][ · STOP] · @L<a>-<b>[ · order ...], heading,
     main/next/blocked/agents, 2 `prev:` lines  |  LAST LOG none yet[ · k undated headings]
+      traps: / spend: from the logbook entry's `**Traps:**` and `**Spend:**` bullets (alias Trampas, Gasto), cut
       main: [<phase> ]<n>B/<n>R/<n>c[ · ...][ ⚠]  from the `**Main thread:**` bullet (aliases Principal,
       Hilo principal); ⚠ = any triple with compactions >= 2 or Bash > 25
   PHASE <wave> · closed a b · next <a-e|none> · handoffs/<file>[ · main <triple>][ ⚠][ · paste: --prompt |
       · prompt withheld (plan-audit)]   when handoffs/ files exist, or section 7 has phase headings (then next a of
       the first 🔄/ready wave); active wave = first in wave-map order with an unfinished handoff chain (never by
       mtime); `next b (retry)` when a fail/partial handoff points at its own phase; after `Next phase: none` it moves on to the next ready wave, phase a
+  SPEND <latest handoff's `Spend:` label, cut at 110 chars> · handoffs/<file>   only when that handoff carries one (not n/a)
   PLAN-AUDIT: ok | BLOCKED · <reason> | stale (<waves>) | unavailable (<why>)   only when plan_audit.py sits
       next to this script and execute.md declares protocol >= 0.22.0 (script missing = BLOCKED; blocked, or stale on the pending wave,
       withholds the prompt)
@@ -73,7 +76,7 @@ import sys
 import time
 import unicodedata
 
-__version__ = "0.22.2"
+__version__ = "0.23.0"
 
 KNOWN = "✅⛔⏸🔄☐🔀🔬"  # keep in sync with plans-regen.py GL ('✅⛔⏸🔄☐'), which this set extends
 GLYPH_ORDER = KNOWN[0] + KNOWN[3] + KNOWN[1:3] + KNOWN[4:]  # display order: done, doing, blocked, paused, ...
@@ -96,6 +99,9 @@ LABELS = (  # normalised label prefix -> entry field
     ("closed", ("tasks closed", "tareas cerradas", "tasks cerradas")),
     ("branch", ("branch/mr", "branch", "rama")),
     ("main", ("main thread", "principal", "hilo principal")),
+    ("dod_recipe", ("dod recipe", "receta dod")),
+    ("traps", ("traps", "trampas")),
+    ("spend", ("spend", "gasto")),
 )
 ENTRY = re.compile(r"###\s+(\d{4}-\d{2}-\d{2})(?:\s*\((\d{1,3}|[a-z])\))?\s*[—–-]?\s*(.*)$")
 BULLET = re.compile(r"\s*[-*]\s+\*\*(.+?)\*\*\s*:?\s*(.*)$")
@@ -416,7 +422,8 @@ def parse_bullets(body):
             cur[1] = (cur[1] + ' ' + re.sub(r'^[-*]\s+', '', ln.strip())).strip()
         else:
             cur = None
-    out = {'next': [], 'blocked': [], 'closed': [], 'branch': None, 'agents': None, 'main': None}
+    out = {'next': [], 'blocked': [], 'closed': [], 'branch': None, 'agents': None, 'main': None,
+           'dod_recipe': [], 'traps': [], 'spend': []}
     for label, value in items:
         parts = INLINE.split(value)
         for lab, val in [(label, parts[0])] + list(zip(parts[1::2], parts[2::2])):
@@ -433,7 +440,7 @@ def parse_bullets(body):
                 out['main'] = out['main'] or parse_main(val)
             elif field == 'branch':
                 out['branch'] = out['branch'] or val or None
-            elif field and val and not (field == 'blocked' and EMPTYISH.match(val)):
+            elif field and val and not (field in ('blocked', 'traps') and EMPTYISH.match(val)):
                 out[field].append(val)
     return out
 
@@ -699,7 +706,8 @@ def read_handoffs(tdir, brain, order):
             return mm.group(1) if mm else dflt
         items.append({'file': 'handoffs/' + n, 'wave': m.group(1), 'nn': int(m.group(2)), 'mtime': mt,
                       'phase': pick('phase closed', m.group(3)), 'next': pick('next phase', None),
-                      'result': f.get('result') or None, 'main': parse_main(f.get('main thread', ''))})
+                      'result': f.get('result') or None, 'main': parse_main(f.get('main thread', '')),
+                      'spend': spend_of(f.get('spend', ''))})
     if not items:
         return None
     newest = {}
@@ -715,9 +723,15 @@ def read_handoffs(tdir, brain, order):
     latest = max(items, key=lambda it: it['mtime'])
     return {'wave': top['wave'], 'closed': sorted({it['phase'] for it in mine}), 'next': top['next'],
             'newest': top['file'], 'main': top['main'], 'warn': any(it['main'] and it['main']['warn'] for it in mine),
-            'latest': latest['file'], 'date': time.strftime('%Y-%m-%d', time.localtime(latest['mtime'])),
+            'latest': latest['file'], 'spend': latest['spend'], 'date': time.strftime('%Y-%m-%d', time.localtime(latest['mtime'])),
             'retry': (top['result'] or '').lower().startswith(('fail', 'partial')) and top['next'] == top['phase'],
             'withheld': False, 'items': [{k: it[k] for k in ('file', 'phase', 'result', 'next', 'main')} for it in mine]}
+
+
+def spend_of(val):
+    """The handoff `Spend:` value (the spend-report line 1 without its `Spend: ` prefix), or None when it is empty or n/a."""
+    val = re.sub(r'^spend:\s*', '', val.strip(), flags=re.I)
+    return None if not val or PLACEHOLDER.fullmatch(val) or EMPTYISH.fullmatch(val) else val
 
 
 def execute_md(tdir, brain):
@@ -779,7 +793,8 @@ def phased_exec(tdir, brain):
 
 
 def prompts_of(path):
-    """[(wave, phase|None, [lines])]: the fenced block under every `### <Wave>[ · <phase>] — title` of section 7."""
+    """[(wave, phase|None, [lines], launch|None)]: the fenced block under every `### <Wave>[ · <phase>] — title` of section 7,
+    and the `LAUNCH:` line between the heading and the fence (model and effort live outside the block)."""
     with open(path, encoding='utf-8', errors='replace') as fh:
         lines = fh.read().split('\n')
     lo, hi, fz = -1, len(lines), None  # section 7 = from `## 7` to the next `## ` heading OUTSIDE a code fence
@@ -806,7 +821,8 @@ def prompts_of(path):
                 mark, k = FENCE.match(lines[j].strip()).group(1), j + 1
                 while k < len(lines) and fence_next(lines[k], mark) is not None:
                     k += 1
-                out.append((m.group(1), m.group(2), lines[j + 1:k]))
+                launch = next((x.strip() for x in lines[i + 1:j] if x.strip().startswith('LAUNCH:')), None)
+                out.append((m.group(1), m.group(2), lines[j + 1:k], launch))
                 j = k
             i = j
         i += 1
@@ -841,6 +857,8 @@ def prompt_cmd(args, brain, module, tdir, R, h):
     if audit_withholds(pa, wave):
         return fail('PLAN-AUDIT %s%s: prompt for %s withheld; fix the plan audit first' % (
             pa['state'], ' (' + ', '.join(pa['stale']) + ')' if pa['stale'] else '', wave))
+    if hit[3]:
+        print(hit[3])
     print('\n'.join(hit[2]))
     return 0
 
@@ -992,6 +1010,10 @@ def log_lines(R, width, trim):
         segs.append('next: ' + clip(' / '.join(last['next'][:2]), 70))
     if last['blocked']:
         segs.append('blocked: ' + clip(' / '.join(last['blocked'][:2]), 55))
+    if last['traps']:
+        segs.append('traps: ' + clip(' / '.join(last['traps'][:2]), 55))
+    if last['spend']:
+        segs.append('spend: ' + clip(last['spend'][0], 60))
     if last['agents']:
         a = last['agents']
         segs.append('agents: %d/%d%s' % (a['used'], a['budget'], ' (opus %d · sonnet %d)' % (
@@ -1024,6 +1046,8 @@ def phase_lines(R):
             ph['wave'], ' '.join(h['closed']) if same else '-', ph['phase'], ' (retry)' if same and h['retry'] else '',
             ' · ' + h['newest'] if same else ' · after %s closed at %s' % (h['wave'], h['newest']) if h else '',
             ' · main ' + main_text(m).replace(' ⚠', '') if m else '', ' ⚠' if same and h['warn'] else '', paste))
+    if h and h.get('spend') and (not ph or ph['wave'] == h['wave']):
+        out.append('SPEND ' + clip(h['spend'], 110) + ' · ' + h['latest'])
     if pa:
         out.append({'ok': 'PLAN-AUDIT: ok', 'missing': 'PLAN-AUDIT: BLOCKED (plan_audit.py missing — renovate the brain)', 'blocked': 'PLAN-AUDIT: BLOCKED' + (' · ' + pa['reason'] if pa['reason'] else ''),
                     'stale': 'PLAN-AUDIT: stale (%s)' % ', '.join(pa['stale']),

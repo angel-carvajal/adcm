@@ -7,7 +7,11 @@ Which phases a wave gets: ⚠gate or advisory → a b c d e; NO-gate plain → a
 close when it deploys, else the mini merge close; d always ends with `Next phase: e`, e with `none`. A gate PASS skips c;
 c always goes back to b (advisory gate: c → d, no re-gate). Every prompt is SELF-CONTAINED: it opens with the §7 first line and the 3-line MAIN-THREAD
 GUARD note, carries only what its phase needs and ends with the PHASE CLOSE lines; a phase never continues
-into the next one in the same session.
+into the next one in the same session. The line right under each PHASE marker is that phase's launch line: a pasted first line
+starting with `/` runs as a command, so model and effort go OUTSIDE the fence. The generator copies it between the `### ` heading
+and the ```text fence; `status-digest --prompt` prints it before the block. Never put the deep-reasoning keyword or
+`CLAUDE_CODE_EFFORT_LEVEL` in a prompt. Every phase prompt keeps `PHASE <letter>` as the first phase word of its first line
+(spend-report detects the phase from it).
 Rules when instantiating:
 - Every {{placeholder}} filled with REAL data from the analysis: exact task IDs, exact commands that exist in
   that repo, exact paths. Never invent.
@@ -17,7 +21,7 @@ Rules when instantiating:
   ROLES, then one `## Executor brief` per task pre-filled from SCOPE (FILES, DOD-SLICE, FORBIDDEN) with
   placeholders for what the orchestrator completes in session (DELIVERABLE, DESIGN DECISIONS, STOP IF), closed
   by the single `## Simplifier brief` (pre-filled, ≤20 lines). Never emit a WORKFLOW where the main session
-  implements first, where an executor self-approves, where the diff is audited by the executor's own tier,
+  implements first, where an executor self-approves, where the orchestrator audits or verifies a diff in its own context,
   or whose agents add up to more than 20 in ONE phase session.
 - Tiers: executors are `adcm-toolkits:executor` (`sonnet`) on NO-gate waves and `executor` + `model: opus` on
   ⚠gate waves; `adcm-toolkits:executor-frontend` replaces `executor` on UI and frontend-code waves (the wave
@@ -41,10 +45,11 @@ Rules when instantiating:
 - Budget per prompt: a ≤170 lines, b–e ≤90 lines each, before the SCOPE and checklist content is inlined.
 - `{{MAINTHREAD}}` `{{MAP}}` `{{SKILLSYNC}}` `{{SMOKE}}` `{{POSTPROD}}` are doc-sync markers (docsync-brief.md): copy them
   literally, never fill them here.
-- Write for Fable at high effort: dense, precise, zero ambiguity, no filler. Must still run on any model.
+- Write for the orchestrator at high effort: dense, precise, zero ambiguity, no filler. Must still run on any model.
 - Generate in the user's language; keep ALL section names in English (incl. VISUAL CHECK, PHASE CLOSE).
 -->
 <!-- PHASE a — heading `### {{Wx}} · a — Implement + DoD` -->
+LAUNCH: /model fable · /effort high
 Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE a (implement + DoD)
 MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
 and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
@@ -103,9 +108,9 @@ brief → execute (sub-agent) → verify (YOU run the DoD-slice) → fix → rep
 rounds. The executor's 2nd failure of the SAME DoD line moves the task one tier up as a NEW agent with the attempt log
 ({{sonnet → opus → you | opus → you on ⚠gate waves}}); 3 attempts on the SAME failure without converging → stop and report
 (never degrade tests, never mark done what isn't). The simplify pass consumes no round: a FULL DoD-auto failure after it
-gets ONE fix round to the SAME simplifier (SendMessage), a second one reverts to the checkpoint, logged. A `RULE-OF-TWO`
+gets ONE fix round by a NEW executor (`model: opus`, relay file ≤ 40 lines, counted against the 20), a second one reverts to the checkpoint, logged. A `RULE-OF-TWO`
 line naming only files of this SCOPE → amend the briefs and extract in-wave (helper first, consumers after, serialized);
-any file outside → handoff `Reuse:` follow-up. Never improvise. {{Wave-specific failure policy: flaky checks, early stop.}}
+any file outside → handoff `Reuse:` follow-up. Never improvise. The orchestrator never raises a STOP IF mid-run: it adopts the verifier's minimal fix unless it cites evidence, and logs each override as `override: <reason + evidence>`. {{Wave-specific failure policy: flaky checks, early stop.}}
 
 # VISUAL CHECK (mandatory if the wave touches UI: .pug/.html/.scss/.css/components)
 grep + build prove the code is THERE, not that it LOOKS right. Before marking a UI task completed, DELEGATE capture AND
@@ -120,29 +125,28 @@ screenshots is always a sub-agent's job (capture researcher, executor-frontend V
 # WORKFLOW (fan-out)
 AGENT BUDGET & ROLES: max 20 sub-agents in THIS phase session, one counter from zero. YOU ORCHESTRATE: decide design and
 scope, audit what investigators DELIVER (solution · files · considerations · open questions — never code), write one
-executor brief per task, run every DoD-slice and the full DoD-auto yourself, integrate. You never implement first and
-never audit a diff with your own tier. `opus`: investigate (`adcm-toolkits:researcher` + `model: opus`), regression review
+executor brief per task, run every DoD-slice and the full DoD-auto yourself, integrate. You never implement first and never audit or verify a diff in your own context:
+every audit goes to a fresh agent at the tier named here, whatever your model (an Opus auditor under an Opus main is fine); the simplify pass runs `model: opus` in a fresh context. `opus`: investigate (`adcm-toolkits:researcher` + `model: opus`), regression review
 (`adcm-toolkits:auditor`), quota 10 with 1 reserved for the simplify pass; the ⚠gate executor is `adcm-toolkits:executor` +
-`model: opus` (serial). `sonnet` ({{`adcm-toolkits:executor` | `adcm-toolkits:executor-frontend`}}) implements NO-gate tasks
+`model: opus` (serial); both and `researcher` + `model: opus` calls pass `effort: high`. `sonnet` ({{`adcm-toolkits:executor` | `adcm-toolkits:executor-frontend`}}) implements NO-gate tasks
 — ≤4 in parallel, EXCLUSIVE disjoint files, own worktrees; a shared helper is NOT a disjoint file, so its task closes
-before its consumers start. ONE `code-simplifier:code-simplifier` pass, `model: {{opus | the auditor tier when the main
-session is not Fable}}`, 1 of the 20 and 1 of the quota. The gate verifier is NOT here (phase b, a fresh session). No
-plugin → `Agent(subagent_type: "general-purpose", model: "<tier>")`, same brief. SendMessage costs 0; the 21st agent is a
-protocol violation — stop and ask. Ultracode: Workflow per stage, ≤20 agent() calls, `isolation: 'worktree'` on parallel
+before its consumers start. ONE `code-simplifier:code-simplifier` pass, `model: opus`, 1 of the 20 and 1 of the quota. The gate verifier is NOT here (phase b, a fresh session). No
+plugin → `Agent(subagent_type: "general-purpose", model: "<tier>")`, same brief. SendMessage adds 0 to the agent counter but re-reads the agent's whole context: resume only the same task with < 5 min idle; otherwise a NEW executor with a relay file of ≤ 40 lines, counted against the 20 (exempt: courier retry and doc-sync phase B); the 21st agent is a
+protocol violation — stop and ask. Workflows, if used: ≤20 agent() calls, `isolation: 'worktree'` on parallel
 executors. Pure orchestrator (`references/orchestrator-rule.md`): only ≤~20-line logged fixes and verbatim RETURN saves;
 `sin tanto lío` (that task) / `modo directo` (until `modo orquestador`) switch it off.
 {{ALWAYS spell out the cycle with real IDs and scopes, e.g.:
 1. Investigate: {{k}} `adcm-toolkits:researcher` (`model: opus`) IN PARALLEL, one per {{scope}}: solution · files (why) ·
    considerations · open questions — NOT code; they never run {{expensive_global_check}}.
-2. Audit the deliverables against SCOPE (consumers covered? inviolable decisions?); SendMessage rounds, ≤5.
+2. Audit the deliverables against SCOPE (consumers covered? inviolable decisions?); doubts go back to the SAME researcher only under the 5-minute rule (else a new one), ≤5 rounds.
 3. Brief: complete the `## Executor brief` blocks (DELIVERABLE · DESIGN DECISIONS · STOP IF).
 4. Execute: {{k ≤ 4}} executors IN PARALLEL, disjoint files ({{A: scope}}, {{B: scope}}), own worktrees. {{An extraction
    runs ALONE and FIRST.}}
-5. Verify each DOD-SLICE yourself; a failure goes back to the SAME executor; the 2nd escalates. Integrate the worktrees.
+5. Verify each DOD-SLICE yourself; a failure goes back to the SAME executor only under the 5-minute rule (else a new one with a relay file); the 2nd escalates. Integrate the worktrees.
 6. Review: {{r}} `adcm-toolkits:auditor` over the integrated diff + named flows; findings go back to their executor.
 7. Simplify: checkpoint commit, then ONE simplifier with the brief below (FILES = `git diff {{base_branch}}...HEAD
    --name-only`, code only); it edits the branch in place; commit its diff and run the FULL DoD-auto. Fail → ONE fix round
-   (SendMessage); fail again → `git reset --hard {{checkpoint_sha}}` (unpushed) or `git revert` (pushed), logged.}}
+   by a NEW executor (`model: opus`, relay file); fail again → `git reset --hard {{checkpoint_sha}}` (unpushed) or `git revert` (pushed), logged.}}
 
 ## Executor brief — {{ID}} ({{one block per task; ≤40 lines each}})
 - TASK: {{ID}} — {{title}} · executor: {{adcm-toolkits:executor | adcm-toolkits:executor-frontend}} · model: {{sonnet | opus (⚠gate)}}
@@ -163,7 +167,7 @@ executors. Pure orchestrator (`references/orchestrator-rule.md`): only ≤~20-li
 
 ## Simplifier brief ({{one per wave; ≤20 lines}})
 - AGENT: `code-simplifier:code-simplifier` (not installed → ONE `adcm-toolkits:executor`, same brief; the auditor has no
-  Edit) · `model: {{opus | the auditor tier when the main session is not Fable}}` · ONE pass after the review findings are
+  Edit) · `model: opus` · ONE pass after the review findings are
   fixed · edits the wave branch in place.
 - FILES: `git diff {{base_branch}}...HEAD --name-only` in {{repo}}, code files only (not markdown, not `{{docs_dir}}`).
 - CONVENTIONS: `{{project_context_skill}}` + detailed-plan §0 OVERRIDE your defaults (imports, arrow functions, return
@@ -176,11 +180,11 @@ executors. Pure orchestrator (`references/orchestrator-rule.md`): only ≤~20-li
 
 # GUARDRAILS & PHASE CLOSE
 Touch nothing outside {{IDs}} ({{explicit allowed paths}}); the SCOPE manifest IS the scope. No secrets in code, commits
-or logs. {{Wave-specific hard limits and the master-plan §8 inviolable decisions this wave could violate.}}
+or logs. Side tasks that surface mid-run (a memory-index warning, a stray cleanup) are queued in the handoff Notes and done at the close, never mid-run. {{Wave-specific hard limits and the master-plan §8 inviolable decisions this wave could violate.}}
 When the simplify pass ran and the FULL DoD-auto is green AFTER it: push `{{branch_name}}`, open the MR (pipeline green),
-leave it UNASSIGNED (phase d assigns it to `{{reviewer_handle}}`) and NEVER merge it. Then write the handoff
+leave it UNASSIGNED (phase d assigns it to `{{reviewer_handle}}`) and NEVER merge it. Run `spend-report --phase a` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase a`) and copy its line 1 (after `Spend: `) into the handoff's `Spend:` label. Then write the handoff
 `{{docs_dir}}/handoffs/{{Wx}}-<nn>-a.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` (nn = next free number): Result,
-`Next phase: {{b | d (NO-gate plain)}}`, branch/MR, DoD sha, checkpoint sha, Open, every agent line, the logbook notes
+`Next phase: {{b | d (NO-gate plain)}}`, branch/MR, DoD sha, checkpoint sha, Open, every agent line, the `DoD recipe:` and `Traps:` labels, the logbook notes
 (files, drift, reuse with the `born` entries of the `REUSED` lines, simplifier, fixes, escalations), the screenshot paths.
 A session that cannot finish (STOP IF, the 2nd compaction) writes it anyway with `Result: partial` and `Next phase: a`.
 Before the final message: send the media (unsent paths only, by path), then one `PushNotification` (`status: "proactive"`;
@@ -190,6 +194,7 @@ HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-a.md
 Run /clear and paste the §7 prompt `{{Wx}} · {{b | d}}` (or `status-digest --brain {{docs_dir}} --prompt`).
 
 <!-- PHASE b — heading `### {{Wx}} · b — Gate`; only on ⚠gate and advisory waves -->
+LAUNCH: /model opus · /effort high
 Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE b (gate)
 MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
 and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
@@ -208,13 +213,13 @@ AGENT BUDGET: max 20 in this session (normally 1). The verifier is the reserved 
    with the diff, the DoD-auto and the ADVISORY CHECKLIST below and the same REPORT PATH rule. Its findings are fixed in
    phase c but do not block the delivery policy; there is no re-gate after c."}}
 4. Save the RETURN's `REPORT:` verbatim to its path (a mechanical save, not an edit). You never soften, merge or re-rank
-   findings; a doubt about one goes back to the SAME auditor by SendMessage (cost 0).
+   findings; a doubt about one goes back to the SAME auditor only under the 5-minute rule (< 5 min idle), else to a new auditor with a relay file of ≤ 40 lines.
 DoD-auto (what the auditor re-runs):
 - [ ] {{copied from phase a}}
 ATTACK CHECKLIST ({{Wx}}, from execute.md §6): {{inlined, concrete, actionable — tenant escapes, data loss, regressions in
 named flows, injection, broken invariants, leftover duplication, comment noise}}
 Verdict: PASS with no open finding → `Next phase: d` (a PASS skips c) · FAIL or any open finding → `Next phase: c`.
-PHASE CLOSE: write `{{docs_dir}}/handoffs/{{Wx}}-<nn>-b.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` — Result `done`
+PHASE CLOSE: run `spend-report --phase b` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase b`), then write `{{docs_dir}}/handoffs/{{Wx}}-<nn>-b.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` (line 1 of the spend report → `Spend:`; fill `DoD recipe:` and `Traps:`) — Result `done`
 (PASS) or `fail` (FAIL), State = report path + the GATE line, Open = the finding ids, the agent line ending `gate report:
 <path>`. Then one `PushNotification` (`status: "proactive"`; absent → skip): `Claude finished in <folder>` on PASS,
 `Claude needs you in <folder>` on FAIL. Final message: the GATE line and the report path, then as its LAST two lines:
@@ -222,6 +227,7 @@ HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-b.md
 Run /clear and paste the §7 prompt `{{Wx}} · {{d | c}}` (or `status-digest --brain {{docs_dir}} --prompt`).
 
 <!-- PHASE c — heading `### {{Wx}} · c — Gate fixes`; only on ⚠gate and advisory waves -->
+LAUNCH: /model fable · /effort high
 Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE c (gate fixes)
 MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
 and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
@@ -233,7 +239,7 @@ ONE round per session: fix every open finding once, then hand back to phase b ({
 into a re-gate here, never weaken a test, never close a finding by editing the report.
 AGENT BUDGET: max 20 in this session. {{⚠gate: ONE `adcm-toolkits:executor` + `model: opus`, serial over the findings; ladder
 opus → you | advisory: `adcm-toolkits:executor` (`sonnet`) per disjoint group of findings, ≤4 in parallel, own worktrees;
-ladder sonnet → opus → you}}. No new simplify pass: these are targeted fixes over a simplified diff.
+ladder sonnet → opus → you}}. No new simplify pass: these are targeted fixes over a simplified diff. No Workflow, no auditor, no verification in this phase: adopt the gate's minimal fix for each finding unless you cite evidence against it (log `override: <reason + evidence>`), and DoD green on round 1 → `Next phase: b`, where verification lives (advisory: `Next phase: d`, its check is the scripted DoD).
 ## Fix brief — {{Wx}} round <r>
 - TASK: fix findings <ids> of `<report path>` — reproduce each one first, then fix it at its root.
 - FILES: the files the findings name, inside phase a's SCOPE ({{explicit allowed paths}}); anything else → STOP IF.
@@ -247,7 +253,7 @@ DoD-auto (YOU run it in full after the fixes are integrated):
 - [ ] {{copied from phase a}}
 Then commit (`fix({{scope}}): … Refs: <IDs>`), push, pipeline green. A finding left unfixed → `Result: partial` with it
 under Open; a finding the executor disputes → Open with its reason, for the next auditor to judge.
-PHASE CLOSE: write `{{docs_dir}}/handoffs/{{Wx}}-<nn>-c.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` — Result, `Next phase:
+PHASE CLOSE: run `spend-report --phase c` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase c`), then write `{{docs_dir}}/handoffs/{{Wx}}-<nn>-c.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` (line 1 of the spend report → `Spend:`; fill `DoD recipe:` and `Traps:`) — Result, `Next phase:
 {{b | d (advisory)}}`, State = fix commit sha + DoD green, Open, the agent and escalation lines. Then one `PushNotification`
 (`status: "proactive"`; absent → skip): `Claude finished in <folder>`, or `Claude needs you in <folder>` on a partial.
 Final message: findings fixed / open, commit hash, then as its LAST two lines:
@@ -255,6 +261,7 @@ HANDOFF: {{docs_dir}}/handoffs/{{Wx}}-<nn>-c.md
 Run /clear and paste the §7 prompt `{{Wx}} · {{b | d}}` (or `status-digest --brain {{docs_dir}} --prompt`).
 
 <!-- PHASE d — heading `### {{Wx}} · d — Doc-sync + delivery close` -->
+LAUNCH: /model opus · /effort high
 Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE d (doc-sync + courier close)
 MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
 and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
@@ -271,10 +278,10 @@ AGENT BUDGET: max 20 in this session (normally 3): the doc-sync executor, {{the 
    row), markers `{{MAINTHREAD}}` `{{MAP}}`{{ `{{SKILLSYNC}}`}}. It RETURNs `READY`, the `DOCSYNC:` line and its doubts.
 {{4. In parallel: ONE `adcm-toolkits:executor` (`sonnet`) delta-refreshes `{{project_context_skill}}` for the files touched
    (`scan_project.py --update <paths>`), commits and pushes its repo, and returns one line — the SKILLSYNC value.}}
-5. Write this phase's handoff `{{docs_dir}}/handoffs/{{Wx}}-<nn>-d.md` NOW, before doc-sync B (`Next phase: e`).
+5. Run `spend-report --phase d` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase d`), then write this phase's handoff `{{docs_dir}}/handoffs/{{Wx}}-<nn>-d.md` NOW, before doc-sync B (`Next phase: e`; line 1 of the spend report → `Spend:`; fill `DoD recipe:` and `Traps:`).
    Hooks stamp its `**Main thread:**` line; `grep -H '\*\*Main thread:\*\*' {{docs_dir}}/handoffs/{{Wx}}-*` gives every phase's
    line, prefixed by its handoff: MAINTHREAD = `<phase> <n> Bash · <n> Read · <n> compactions` per handoff, joined by `; `.
-6. Doc-sync phase B: SendMessage to the SAME executor with MAINTHREAD{{, SKILLSYNC}} and the answers to its doubts. It
+6. Doc-sync phase B: SendMessage (exempt from the 5-minute rule) to the SAME executor with MAINTHREAD{{, SKILLSYNC}} and the answers to its doubts. It
    pulls, runs map-refresh, `docsync-apply --check`, `--write`, status-digest (`DIGEST: ok`), `git add` by explicit path
    (handoffs included), commits and pushes; it RETURNs the hash, the DIGEST line and the plan-audit line. A failed B →
    SendMessage once, then stop.
@@ -292,7 +299,7 @@ AGENT BUDGET: max 20 in this session (normally 3): the doc-sync executor, {{the 
    or `mapped` → `Tailnet: <url>`, `lan-only` → `Tailnet: none`, any other word → `Preview: none` and `Tailnet: none`, say
    why}}, the screenshot paths from phase a's handoff in order, a GIF when the feature spans several screens. It runs each
    row's `regen`, republishes or re-issues stale artifacts, stamps and commits `artifacts.json`, `curl`s localhost and the
-   LAN IP and returns its table, `MEDIA:` and `=== LINKS ===`. `ERRORS` → ONE SendMessage to the SAME courier; its new
+   LAN IP and returns its table, `MEDIA:` and `=== LINKS ===`. `ERRORS` → ONE SendMessage (exempt from the 5-minute rule) to the SAME courier; its new
    RETURN supersedes the block. You never open HTML, call the Artifact tool or assemble links.
 8. Media: sub-agents return `MEDIA: unsent: <paths>` (they cannot send). The main session sends unsent paths with
    SendUserFile by path WITHOUT opening them (load the tool with ToolSearch `select:SendUserFile`). Judging screenshots is
@@ -311,6 +318,7 @@ block (the `artifact-guard` Stop hook rejects text after the last link and a clo
 links block appears exactly once per delivery close; progress turns and 'Para ti' notes carry no links.
 
 <!-- PHASE e — heading `### {{Wx}} · e — {{Production close | Merge close}}`; EVERY wave has it -->
+LAUNCH: /model opus · /effort high
 Start a clean session in EXECUTION mode — {{project_name}} · Wave {{Wx}} · PHASE e ({{production close | merge close}})
 MAIN-THREAD GUARD — hooks cap this session at 25 Bash and 8 Read calls, deny heavy reads (whole docs, long ranges, images)
 and edits over 20 lines, force the handoff at the 2nd compaction and lock the session at the 3rd. Delegate from the FIRST
@@ -331,9 +339,9 @@ one courier per batch when needed.
 {{5. ⚠gate waves: ONE `adcm-toolkits:auditor` (`model: opus`) runs the post-prod checks {{post-prod checklist: what must
    hold in production}}, with `REPORT PATH: {{docs_dir}}/qa/gate-{{wx}}-postprod.md` (wave id in lowercase); save its
    `REPORT:` verbatim. Its first line is the POSTPROD value; FAIL → `Result: fail`, and the doc-sync marks the wave ⛔.}}
-6. Write this phase's handoff `{{docs_dir}}/handoffs/{{Wx}}-<nn>-e.md` NOW (`Next phase: none`); MAINTHREAD = the stamped
+6. Run `spend-report --phase e` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase e`), then write this phase's handoff `{{docs_dir}}/handoffs/{{Wx}}-<nn>-e.md` NOW (`Next phase: none`; line 1 of the spend report → `Spend:`; fill `DoD recipe:` and `Traps:`); MAINTHREAD = the stamped
    `**Main thread:**` lines of this wave's handoffs (`grep -H '\*\*Main thread:\*\*' {{docs_dir}}/handoffs/{{Wx}}-*`).
-7. Doc-sync phase B: SendMessage to the SAME executor with MAINTHREAD{{, SMOKE, POSTPROD, SKILLSYNC}} and the answers;
+7. Doc-sync phase B: SendMessage (exempt from the 5-minute rule) to the SAME executor with MAINTHREAD{{, SMOKE, POSTPROD, SKILLSYNC}} and the answers;
    it pulls, `docsync-apply --check`, `--write`, `DIGEST: ok`, explicit-path add, commit, push; RETURN hash + DIGEST line
    + plan-audit line. Merge close: steps 3 and 7 are ONE message (docsync-brief one-message variant).
 7b. PLAN-AUDIT after the doc-sync (its edits change sealed text): `plan-audit --brain {{docs_dir}} --check` (B's RETURN carries

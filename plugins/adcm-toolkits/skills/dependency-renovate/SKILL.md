@@ -69,7 +69,7 @@ Modes: **dry run** (`dry run`, `sin push`): phases 0-6 with no push and no MR, b
 | Context executor | `adcm-toolkits:executor` | sonnet | `dependencies.md`, index line, plugin patch bump, docs-repo commit and push | the code repo |
 | Gate | `adcm-toolkits:auditor` | opus | the gate before handover | edits |
 
-Budget per run: 3 + k agents (k = majors this run, cap 3), Opus = k + 1. A fix loop uses `SendMessage` (0 agents); when `SendMessage`
+Budget per run: 3 + k agents (k = majors this run, cap 3), Opus = k + 1. A fix loop uses `SendMessage` (0 agents, but it re-reads the whole context: resume only the same task with < 5 min idle, else a new executor with a ≤ 40-line relay); when `SendMessage`
 cannot resume a finished executor, a NEW executor takes the fix (3 + k + 1). No `adcm-toolkits:*` types in the session:
 `Agent(subagent_type: "general-purpose", model: "<tier>")` with the same brief.
 

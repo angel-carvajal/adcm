@@ -5,7 +5,7 @@ Usage:
   python3 renovate-selftest.py [--checker PATH] [--only NAME] [--keep]
 
 Builds one throwaway `tempfile` tree per case (brains holding execute.md, task.md,
-artifacts.json, scripts/ and a fake skill dir `skilltpl/templates/` whose twelve template files
+artifacts.json, scripts/ and a fake skill dir `skilltpl/templates/` whose thirteen template files
 have known content), runs the checker as a subprocess (`--brain <dir> --skill-dir <tmp>/skilltpl
 [flags]`, PYTHONDONTWRITEBYTECODE=1, HOME=<tmp>) and prints `PASS|FAIL|SKIP <case> [- why]`.
 Exit code 1 when any case FAILs.
@@ -34,11 +34,11 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RELEASE = "0.22.2"  # what plugin.json, the template Protocol line and __version__ must all say
+RELEASE = "0.23.0"  # what plugin.json, the template Protocol line and __version__ must all say
 VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py", "plan_audit.py", "docsync_apply.py",
-         "handoff.md.tmpl", "docsync-brief.md", "plan-audit-brief.md")
+         "handoff.md.tmpl", "docsync-brief.md", "plan-audit-brief.md", "spend_report.py")
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
 MAP_FILES = ("utilities.md", "patterns.md", "where-to-look.md")
 BLOCKS = ("scripts", "artifacts", "execute", "task", "rules", "map", "context", "modules")
@@ -68,7 +68,9 @@ PHASE_LINES = {"phases": "One clean session per phase: a phase never continues i
                "handoff": "Last line of a phase session: HANDOFF: <path>, then /clear and paste the next prompt.",
                "docsync": "Doc-sync phase A leaves `docsync-apply --check` clean before phase B writes.",
                "planaudit": "Phase a step 0: `plan-audit --check` must exit 0 before any code.",
-               "mainthread": "- **Main thread:** 12 Bash · 3 Read · 0 compactions (stamped by the hook)."}
+               "mainthread": "- **Main thread:** 12 Bash · 3 Read · 0 compactions (stamped by the hook).",
+               "spend": "Phase close: run `spend-report --phase a` and copy its line 1 into the handoff.",
+               "launch": "LAUNCH: /model opus · /effort high"}
 LINKS_ONCE = "The courier's links block is pasted exactly once per delivery close, as the last lines of the final message."
 GUARD_TPL = "# fake template artifact-guard.py (selftest v1)\n"
 MERGE_GUARD = "# merge-guard hook (selftest)\n"
@@ -306,7 +308,7 @@ EXEC_DEFAULTS = dict(protocol=VERSION, types=TYPES, digest=True, last_log="s4", 
                      rule=True, skills=(), ctx="business-init-acme", prose=(), es=False, trap=False, sim=False,
                      wrap=False, hdrs={}, outside=(), appendix=(),
                      reviewer=True, merge_rule=True, links_once=True, automerge=False, s7text={}, map_step=True, notify=True,
-                     phases=True, handoff=True, docsync=True, planaudit=True, mainthread=True)
+                     phases=True, handoff=True, docsync=True, planaudit=True, mainthread=True, spend=True, launch=True)
 
 
 def exec_doc(waves, **o):
@@ -442,7 +444,7 @@ def fresh(ctx, name, waves=W3, ex=None, tk=None, rows=None, under="", **kw):
 
 LEGACY_FLAGS = dict(protocol=None, types=(), digest=False, last_log=None, nxt=None, blk=None, rule=False,
                     reviewer=False, merge_rule=False, links_once=False, map_step=False, notify=False,
-                    phases=False, handoff=False, docsync=False, planaudit=False, mainthread=False)
+                    phases=False, handoff=False, docsync=False, planaudit=False, mainthread=False, spend=False, launch=False)
 
 
 def legacy_08(ctx, name, under="", scripts="none"):
@@ -481,7 +483,8 @@ def count_h2(text):
 MARKERS_ON = {"digest_line": True, "last_log_s4": True, "next_label": True, "blocked_label": True,
               "model_rule": True, "protocol_line": True, "reviewer_line": True, "merge_rule": True, "links_once": True,
               "map_step": True, "notify_rule": True, "phase_sessions": True, "handoff_token": True,
-              "docsync_check": True, "plan_audit_check": True, "main_thread": True}
+              "docsync_check": True, "plan_audit_check": True, "main_thread": True,
+              "spend_report": True, "launch_line": True}
 
 
 def markers_check(t, d, **want):
@@ -534,7 +537,7 @@ def case_legacy_08(ctx, t):
     t.eq(dig(d, "protocol", "found"), None, "protocol.found (prose 'adcm-toolkits 0.8.0' is not a Protocol line)")
     t.eq(dig(d, "protocol", "inferred"), "0.8", "protocol.inferred")
     t.eq(blk(d, "scripts", "state"), "missing", "scripts.state")
-    t.eq(sorted(blk(d, "scripts", "missing") or []), sorted(FILES), "scripts.missing lists the twelve files")
+    t.eq(sorted(blk(d, "scripts", "missing") or []), sorted(FILES), "scripts.missing lists the thirteen files")
     t.eq([blk(d, "scripts", "outdated"), blk(d, "scripts", "copied")], [[], []], "scripts outdated/copied")
     t.eq([blk(d, "artifacts", "state"), blk(d, "artifacts", "total")], ["missing", 2], "artifacts state/total")
     rows = [{"file": "plans.html", "suggest": plans_cmd("en")},
@@ -565,7 +568,8 @@ def case_legacy_011(ctx, t):
         t.eq(blk(d, "scripts", "outdated"), ["prompts-regen.py"], "scripts.outdated (same file name, different sha256)")
         t.eq(sorted(blk(d, "scripts", "missing") or []),
              sorted(["status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl", "courier_preflight.py",
-                     "plan_audit.py", "docsync_apply.py", "handoff.md.tmpl", "docsync-brief.md", "plan-audit-brief.md"]),
+                     "plan_audit.py", "docsync_apply.py", "handoff.md.tmpl", "docsync-brief.md", "plan-audit-brief.md",
+                     "spend_report.py"]),
              "scripts.missing")
         t.eq(blk(d, "scripts", "state"), "missing", "scripts.state (missing wins; outdated is informational)")
         t.eq([blk(d, "artifacts", "state"), blk(d, "artifacts", "total")], ["missing", 2], "artifacts state/total")
@@ -601,7 +605,8 @@ def case_legacy_011(ctx, t):
         markers_check(t, d, types={k: False for k in TYPES}, next_label=False, blocked_label=False,
                       model_rule=False, protocol_line=False, reviewer_line=False, merge_rule=False, links_once=False,
                       map_step=False, notify_rule=False, phase_sessions=False, handoff_token=False,
-                      docsync_check=False, plan_audit_check=False, main_thread=False)
+                      docsync_check=False, plan_audit_check=False, main_thread=False,
+                      spend_report=False, launch_line=False)
         t.eq(d.get("needed"), ["execute"], "needed")
 
 
@@ -726,11 +731,13 @@ def case_merge_markers(ctx, t):
 
 
 def case_phase_markers(ctx, t):
-    """0.22.0: the five phase-protocol literals of execute.md, each detected alone; a 0.21 protocol lacks all five."""
+    """0.22.0: the phase-protocol literals of execute.md (five from 0.22.0, spend-report and LAUNCH from 0.23.0), each detected alone; a 0.21 protocol lacks all."""
     names = {"phase_sessions": "phase-sessions", "handoff_token": "handoff-token", "docsync_check": "docsync-check",
-             "plan_audit_check": "plan-audit-check", "main_thread": "main-thread"}
+             "plan_audit_check": "plan-audit-check", "main_thread": "main-thread",
+             "spend_report": "spend-report", "launch_line": "launch-line"}
     option = {"phase_sessions": "phases", "handoff_token": "handoff", "docsync_check": "docsync",
-              "plan_audit_check": "planaudit", "main_thread": "mainthread"}
+              "plan_audit_check": "planaudit", "main_thread": "mainthread",
+              "spend_report": "spend", "launch_line": "launch"}
     for key, name in names.items():
         t.tag = f"({key} off) "
         d = both(ctx, t, fresh(ctx, "p-" + key, W3, ex={option[key]: False}), rc=1)
@@ -741,12 +748,12 @@ def case_phase_markers(ctx, t):
             line = exec_line(d)
             t.ok(name in line, f"EXECUTE line names {name}, got {line!r}")
             t.ok(not [n for k, n in names.items() if k != key and n in line], f"EXECUTE line names only {name}, got {line!r}")
-    t.tag = "(all five off: a 0.21 protocol) "
+    t.tag = "(all off: a 0.21 protocol) "
     d = both(ctx, t, fresh(ctx, "p-all", W3, ex={o: False for o in option.values()}), rc=1)
     if d:
         t.eq(d.get("needed"), ["execute"], "needed")
         markers_check(t, d, **{k: False for k in names})
-        t.ok(all(n in exec_line(d) for n in names.values()), f"EXECUTE line names all five, got {exec_line(d)!r}")
+        t.ok(all(n in exec_line(d) for n in names.values()), f"EXECUTE line names all, got {exec_line(d)!r}")
     t.tag = "(literals in a comment only) "
     comment = "<!-- One clean session per phase · HANDOFF: <path> · docsync-apply --check · plan-audit --check · **Main thread:** -->"
     d = both(ctx, t, fresh(ctx, "p-comment", W3, ex={**{o: False for o in option.values()}, "prose": [comment]}), rc=1)
@@ -809,8 +816,8 @@ def case_copy_scripts(ctx, t):
     a, b = legacy_08(ctx, "brain", under="a"), legacy_08(ctx, "brain", under="b")
     d = both(ctx, t, a, "--copy-scripts", rc=1, twin=b, ro=False)
     if d:
-        t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(FILES), "scripts.copied lists the twelve files")
-        t.ok(files_ok(b) and files_ok(a), "the twelve files appear with the template content")
+        t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(FILES), "scripts.copied lists the thirteen files")
+        t.ok(files_ok(b) and files_ok(a), "the thirteen files appear with the template content")
         t.eq(d.get("needed"), ["artifacts", "execute", "task"], "needed after the copy")
     d = both(ctx, t, b, rc=1)
     if d:
@@ -858,8 +865,8 @@ def case_copy_scripts(ctx, t):
         d = both(ctx, t, a, "--skill-dir", sd, "--copy-scripts", rc=1, twin=b, ro=False)
         if d:
             t.eq(sorted(blk(d, "scripts", "copied") or []), sorted(FILES),
-                 "scripts.copied lists all twelve files (courier_preflight.py from ../artifact-courier or ../../artifact-courier)")
-            t.ok(files_ok(a) and files_ok(b), "the twelve files appear with the template content")
+                 "scripts.copied lists all thirteen files (courier_preflight.py from ../artifact-courier or ../../artifact-courier)")
+            t.ok(files_ok(a) and files_ok(b), "the thirteen files appear with the template content")
         d = both(ctx, t, b, "--skill-dir", sd, rc=1)
         if d:
             t.eq([blk(d, "scripts", "state"), blk(d, "scripts", "missing")], ["ok", []], "second run: scripts ok")

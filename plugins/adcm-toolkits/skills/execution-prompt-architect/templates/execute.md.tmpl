@@ -11,7 +11,7 @@ of the container's chosen set (project-structure.md rule 9); `execute.md` and
 unknown → the whole value is `_pending — owner sets it_` (no forge) and the final message's "Para ti" lists it.
 -->
 # {{project_name}} — Execution protocol ({{initiative_title}})
-> **Protocol:** adcm-toolkits 0.22.2
+> **Protocol:** adcm-toolkits 0.23.0
 > **Reviewer:** {{reviewer_handle}} ({{forge}}) · **Merge policy:** wait
 
 > **What this is.** The operating manual of the build. It defines HOW the catalog in
@@ -22,7 +22,7 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
 > diff before the final DoD run**, and **mandatory adversarial verification at
 > ⚠gates**. The
 > copy-paste prompts per phase are at the end (§7). Keep in sync with `task.md`
-> (state) and `master-plan.md` (rationale). Prompts are tuned for Fable at high
+> (state) and `master-plan.md` (rationale). Prompts are tuned for the orchestrator at high
 > effort but run on any model.
 
 ## 1. Principles
@@ -54,11 +54,11 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
 5. **Inviolable decisions** (no session may contradict them — from
    `master-plan.md` §8): {{list_them_inline}}.
 6. **No hardcoded dates**: the logbook uses the date of the day of execution.
-7. **Agent budget 20 with fixed roles.** The main session (Fable) ORCHESTRATES:
+7. **Agent budget 20 with fixed roles.** The main session (the orchestrator) ORCHESTRATES:
    it decides design and scope, audits the deliverables `opus` investigators return
    (solution · files · considerations · open questions), writes one executor brief
    per task, runs every DoD-slice and the full DoD-auto itself, and integrates —
-   it never implements first and never spawns its own tier. `opus` agents
+   it never implements first and never audits or verifies a diff in its own context: every audit goes to a fresh agent at the tier named here, whatever the main model (an Opus auditor under an Opus main is fine); the simplify pass runs `model: opus` in a fresh context. `opus` agents
    investigate (`adcm-toolkits:researcher`, called with `model: opus`), review regression
    and verify (`adcm-toolkits:auditor`) (quota 10 per phase session; reserved — the
    simplify pass in phase a, the ⚠gate verifier in phase b; audits pass to `sonnet` once
@@ -67,17 +67,14 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
    parallel with disjoint files in their own worktrees (a shared helper is not a
    disjoint file: the task that extracts it closes before its consumers start), and
    never self-approve. ONE packaged `code-simplifier:code-simplifier` pass per wave,
-   called with an explicit `model: opus` (one tier down with the roles when the main
-   session is not Fable), costs 1 of the 20 and 1 of the Opus quota and is verified by
+   called with an explicit `model: opus` in a fresh context, costs 1 of the 20 and 1 of the Opus quota and is verified by
    the orchestrator, never by itself. One delivery `adcm-toolkits:courier` per batch (normally 1; each
-   extra batch = 1 more of the 20, 0 Opus quota) — `sonnet` ALWAYS, even when the main
-   session is not Fable — costs 1 of the 20 (the first is reserved, like the gate
+   extra batch = 1 more of the 20, 0 Opus quota) — `sonnet` ALWAYS — costs 1 of the 20 (the first is reserved, like the gate
    verifier) and 0 Opus quota (§2b step 7).
    **Escalation ladder** Sonnet → Opus → orchestrator: the 2nd failure of the SAME
    DoD line moves the task one tier up as a new agent carrying the attempt log.
    One counter per phase session, `model` explicit on every call or an `adcm-toolkits:*` type
-   (a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the main session is one tier down; types fix the TOOL SET, the tier rules still set the model), `SendMessage` to a live agent costs 0. Ultracode changes the orchestration (Workflow per stage + adversarial
-   cross-check), never roles or count. Exceeding 20 is a protocol violation; the
+   (a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent; types fix the TOOL SET, the tier rules still set the model; ⚠gate `executor` and `researcher` + `model: opus` calls pass `effort: high`), `SendMessage` adds 0 to the agent counter but re-reads the agent's whole context: resume only the same task with < 5 min idle; otherwise a NEW executor with a relay file of ≤ 40 lines, counted against the 20 (exempt: courier retry and doc-sync phase B). Workflows, if used, change the orchestration (Workflow per stage), never roles or count. The orchestrator never raises a STOP IF mid-run: it adopts the verifier's minimal fix unless it cites evidence, and logs each override as `override: <reason + evidence>`. Exceeding 20 is a protocol violation; the
    logbook records `agents used: n/20 (opus a · sonnet b)` with each agent's role
    (investigate / execute / review / simplify / verify / capture / courier) and every escalation.
    Other packaged agents still name their `model`: the plugin's frontmatter is
@@ -159,8 +156,8 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
     returns a diff summary per file and what it skipped). It costs 1 of the 20 and 1 of
     the Opus quota, never self-approves, and on ⚠gate waves runs BEFORE the reserved
     verifier. Cap: ONE pass, edits applied in ONE round, never a simplify → verify
-    loop. If the FULL DoD-auto fails after it: ONE fix round to the SAME simplifier
-    (`SendMessage`, cost 0 — if it cannot be reached, skip straight to the revert); a
+    loop. If the FULL DoD-auto fails after it: ONE fix round by a NEW
+    `adcm-toolkits:executor` (`model: opus`, relay file ≤ 40 lines, counted against the 20); a
     second failure goes back to the checkpoint commit (`git reset --hard` while the
     branch is unpushed, `git revert` of the simplify commit if already pushed) and the
     wave closes on the pre-simplify diff, recorded in the logbook. That retry consumes
@@ -168,7 +165,7 @@ unknown → the whole value is `_pending — owner sets it_` (no forge) and the 
     place; the orchestrator commits its diff. The brief is the contract and the packaged
     agent only its default carrier: where `code-simplifier:code-simplifier` is not
     installed, the same `## Simplifier brief` goes to ONE `adcm-toolkits:executor` with
-    `model: <auditor tier>` (the auditor type has no Edit) — same model, cost, cap and RETURN — and the logbook `Simplifier:` field records which
+    `model: opus` (the auditor type has no Edit) — same model, cost, cap and RETURN — and the logbook `Simplifier:` field records which
     carrier ran.
 12. **Claude never merges.** A wave ends with its MR open, pipeline green and simplify
     pass done, assigned to the Reviewer (`> **Reviewer:**` above); the merge is a
@@ -180,6 +177,8 @@ One self-contained prompt per phase (§4, §7); `wave-prompt.tmpl` holds the ful
 §7 first line and the 3-line MAIN-THREAD GUARD note and ends with the PHASE CLOSE lines (§4).
 
 **Phase a — implement + DoD**
+
+LAUNCH: /model fable · /effort high
 
 ```text
 Start a clean session in EXECUTION mode — <project> · Wave <Wx> · PHASE a (implement + DoD)
@@ -260,10 +259,9 @@ pass per wave with an explicit `model: opus` (1 of the 20, 1 of the quota, never
 self-approving). The doc-sync executor and the delivery `adcm-toolkits:courier` belong to phase d.
 Ladder sonnet → opus → you. Pure orchestrator, `references/orchestrator-rule.md`:
 `sin tanto lío` / `modo directo` switch it off.
-Explicit `model` on every call or an `adcm-toolkits:*` type (a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the main session is one tier down; types fix the TOOL SET, the tier rules still set the model); no plugin in
+Explicit `model` on every call or an `adcm-toolkits:*` type (a per-call `model` overrides the type's default: `researcher` + `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent; types fix the TOOL SET, the tier rules still set the model); no plugin in
 this session → `Agent(subagent_type: "general-purpose", model: "<tier>")` with the same
-brief; SendMessage follow-ups cost 0. In ultracode: Workflow per
-stage, ≤20 agent() calls in total, isolation: 'worktree' on parallel executors.
+brief; SendMessage adds 0 to the agent counter but re-reads the agent's whole context: resume only the same task with < 5 min idle; otherwise a NEW executor with a relay file of ≤ 40 lines, counted against the 20 (exempt: courier retry and doc-sync phase B). Workflows, if used: ≤20 agent() calls in total, isolation: 'worktree' on parallel executors.
 <the per-task cycle with real IDs: investigate → audit deliverable → brief →
 execute → verify/escalate → integrate the worktrees → regression review → checkpoint
 commit + simplify pass → run the FULL DoD-auto; on ⚠gates: `executor` + `model: opus`; the adversarial
@@ -297,6 +295,8 @@ Run /clear and paste the §7 prompt `<Wx> · b` (or `status-digest --brain {{doc
 
 **Phase b — gate** (⚠gate and advisory waves)
 
+LAUNCH: /model opus · /effort high
+
 ```text
 Start a clean session in EXECUTION mode — <project> · Wave <Wx> · PHASE b (gate)
 <MAIN-THREAD GUARD note, the same 3 lines as phase a>
@@ -311,6 +311,8 @@ then the PHASE CLOSE lines (`HANDOFF: <path>` + the /clear sentence).
 
 **Phase c — gate fixes** (one round per session, then back to b; advisory: then d)
 
+LAUNCH: /model fable · /effort high
+
 ```text
 Start a clean session in EXECUTION mode — <project> · Wave <Wx> · PHASE c (gate fixes)
 <MAIN-THREAD GUARD note, the same 3 lines as phase a>
@@ -318,10 +320,13 @@ status-digest → read ONLY the newest handoff (phase b, `Next phase: c`); pass 
 read it whole. ⚠gate: ONE `executor` + `model: opus`, serial; advisory: `sonnet` executors on disjoint findings. Fix brief
 per round (TASK: findings <ids> · FILES inside phase a's SCOPE · DOD-SLICE: each finding's repro now passes + the DoD-auto
 · STOP IF · FORBIDDEN: editing the report, weakening tests · RETURN: root cause + diff per finding). YOU run the FULL
-DoD-auto, commit, push, pipeline green; no second simplify pass. Handoff (`Next phase: b`), PushNotification, PHASE CLOSE.
+DoD-auto, commit, push, pipeline green; no second simplify pass, no Workflow, no auditor, no verification: DoD green on round 1 → `Next phase: b`, where
+verification lives (advisory: `d`). Adopt the gate's minimal fix unless you cite evidence (log `override: <reason + evidence>`). Handoff, PushNotification, PHASE CLOSE.
 ```
 
 **Phase d — doc-sync + courier close**
+
+LAUNCH: /model opus · /effort high
 
 ```text
 Start a clean session in EXECUTION mode — <project> · Wave <Wx> · PHASE d (doc-sync + courier close)
@@ -329,12 +334,14 @@ Start a clean session in EXECUTION mode — <project> · Wave <Wx> · PHASE d (d
 status-digest → read ONLY the newest handoff (`Next phase: d`). Assign the MR to the Reviewer, never merge it.
 Doc-sync phase A by ONE `sonnet` executor from `{{docs_dir}}/scripts/docsync-brief.md` (§2b){{; a sibling `sonnet`
 skill-sync executor for the context-skill delta}} → write this phase's handoff BEFORE doc-sync B and copy the stamped
-`**Main thread:**` lines of the wave's handoffs into the MAINTHREAD marker → doc-sync phase B by SendMessage (hash +
+`**Main thread:**` lines of the wave's handoffs into the MAINTHREAD marker → doc-sync phase B by SendMessage (exempt from the 5-minute rule; hash +
 `DIGEST: ok`) → ONE courier per batch (§2b step 7) → media by path → PushNotification → final message: narrative, `Para
 ti` (MR !N → review and merge), the PHASE CLOSE lines, and LAST the links block of the last courier RETURN (§2b step 5).
 ```
 
 **Phase e — production close / merge close** (EVERY wave; d always ends with `Next phase: e`)
+
+LAUNCH: /model opus · /effort high
 
 ```text
 Start a clean session in EXECUTION mode — <project> · Wave <Wx> · PHASE e (production close | merge close)
@@ -359,7 +366,7 @@ a sheet or a doc:
   `docsync-apply --check` clean (`docsync-apply --sheet <scratch>/sheet.json --markers <scratch>/markers.json --root {{docs_dir}} --check`:
   `DOCSYNC: <n> ok · 0 failed · <m> open placeholders`, open = only the markers phase B fills), writes no doc, and
   RETURNs that summary line, its doubts and the markers it still needs.
-- **B** — by SendMessage to the SAME agent carrying the marker values (e.g. `MAINTHREAD`, `SKILLSYNC`, `SMOKE`,
+- **B** — by SendMessage (exempt from the 5-minute rule) to the SAME agent carrying the marker values (e.g. `MAINTHREAD`, `SKILLSYNC`, `SMOKE`,
   `POSTPROD`) and the answers to its doubts: `git pull --ff-only`, map-refresh (step 6, its `MAP:` line fills `MAP`),
   the same `--check` (0 failed, 0 open), `--write`, `status-digest` → `DIGEST: ok`, `git add` by explicit path, commit,
   push (step 9); after `--write` it also runs `plan-audit --brain {{docs_dir}} --check` and RETURNs its result line with
@@ -476,7 +483,7 @@ What the sheet covers:
    the shared link stale (lesson learned: a wave closed with the published plan still
    showing "pending"). New artifact ⇒ new row in `artifacts.json` (without `url`) in
    the same session: the courier publishes it. If the courier's RETURN carries
-   `ERRORS`, send ONE `SendMessage` to the SAME courier (cost 0) and report — its new
+   `ERRORS`, send ONE `SendMessage` to the SAME courier (exempt from the 5-minute rule) and report — its new
    RETURN supersedes the earlier block; never publish yourself. The `artifact-guard` Stop hook blocks the close while a registered
    artifact is stale — it trusts the courier's stamps.
 8. {{If this plan family coexists with an INCUMBENT protocol (the project already
@@ -536,11 +543,11 @@ BEFORE they are rendered or handed to {{owner}} (skill Step 6b).
 **Handoff file.** `{{docs_dir}}/handoffs/<Wave>-<nn>-<phase>.md` (nn = 01, 02 … within the wave), written by the main
 session from `{{docs_dir}}/scripts/handoff.md.tmpl`. Header bullets, labels exact: `- **Wave:**` · `- **Phase closed:**` ·
 `- **Result:**` (done | partial | fail) · `- **Next phase:**` (a | b | c | d | e | none) · `- **Branch/MR:**` · `- **State:**`
-· `- **Open:**` · `- **Agents used:**` · `- **Main thread:**` (stamped by the hook; the template leaves it empty) ·
+· `- **Open:**` · `- **Agents used:**` · `- **DoD recipe:**` · `- **Traps:**` · `- **Spend:**` · `- **Main thread:**` (stamped by the hook; the template leaves it empty) ·
 `- **Next prompt:**` (first line of the next phase prompt); then the logbook notes the doc-sync sheet needs. The next phase
 reads ONLY the newest handoff (status-digest names it on its PHASE line); doc-sync B commits the wave's handoffs.
 
-**Phase close.** The last lines of every phase session are the exact token `HANDOFF: <path>` and one sentence telling
+**Phase close.** Every phase close runs `spend-report --phase <letter>` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase <letter>`) and copies its line 1 (after `Spend: `) into the handoff's `Spend:` label. Side tasks that surface mid-phase (a memory-index warning, a stray cleanup) are queued in the handoff Notes and done at the close, never mid-run. The last lines of every phase session are the exact token `HANDOFF: <path>` and one sentence telling
 {{owner}} to run /clear and paste the §7 prompt `<Wave> · <next>` (or to run `status-digest --brain {{docs_dir}} --prompt`).
 In phases d and e the links block of the last courier RETURN still closes the message, right after those two lines (§2b
 step 5: the `artifact-guard` Stop hook rejects text after the last link).

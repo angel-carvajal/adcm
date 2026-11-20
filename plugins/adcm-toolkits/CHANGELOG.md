@@ -1,5 +1,41 @@
 # Changelog — adcm-toolkits
 
+## 0.23.0 — 2026-11-19
+
+- **Effort.** The planning skill stops recommending the multi-agent effort mode and drops its explanation: `/effort max` is for the
+  planning run only. Every phase of `wave-prompt.tmpl` (and the phase shells of `execute.md.tmpl`) gets one launch line OUTSIDE its fenced
+  block, because a pasted first line starting with `/` runs as a command: `LAUNCH: /model fable · /effort high` for phases a and c,
+  `LAUNCH: /model opus · /effort high` for b, d and e. `status-digest --prompt` prints that line before the block. The deep-reasoning keyword is typed by
+  the user for one design turn and is never baked into a prompt; `CLAUDE_CODE_EFFORT_LEVEL` is never suggested (it overrides
+  sub-agent effort). `executor`, `executor-frontend` and `researcher` default to `effort: medium`; ⚠gate executor calls and
+  `researcher` + `model: opus` calls pass `effort: high` per call.
+- **Phase c is one round.** No Workflows, auditors or verifications: DoD green on round 1 goes to `Next phase: b`, where verification
+  lives. Advisory waves keep c → d, also without Workflows or auditors; their check is the scripted DoD.
+- **SendMessage is not free.** It adds 0 to the agent counter but re-reads the agent's whole context: resume only the same task with
+  < 5 min idle; otherwise a new executor with a relay file of ≤ 40 lines, counted against the 20. Exempt: courier retry and doc-sync
+  phase B. Doubts to a researcher or auditor follow the 5-minute rule; the simplify fix round is a new executor.
+- **No mid-run STOP IF from the orchestrator.** It adopts the verifier's minimal fix unless it cites evidence and logs each override as
+  `override: <reason + evidence>`.
+- **Handoff labels.** `handoff.md.tmpl` gains `DoD recipe:`, `Traps:` and `Spend:` (≤ 40 lines). `status_digest.py` reads them as logbook
+  labels (`traps:` / `spend:` on the LAST LOG block) and prints a `SPEND` line from the latest handoff, truncated, inside its 40-line cap.
+  Side tasks that surface mid-phase are queued for the close: the memory-index warning (`check-memory-index.py --brief`) now says so.
+- **Spend report.** `spend-report` (`spend_report.py`, launcher) joins the plugin; every phase close runs
+  `spend-report --phase <letter>` and copies its line 1 into the handoff `Spend:` label.
+- **Tiers.** One rule replaces every own-tier rule: the orchestrator never implements first and never audits or verifies a diff in its own
+  context; every audit goes to a fresh agent at the tier the table names, whatever the main model; the simplify pass runs `model: opus`
+  in a fresh context. The tier-down when the main model is not the top one is gone; Haiku is for inventories only. Where the text named
+  the main thread as Fable it now says "the orchestrator".
+- **Selftests.** `status-digest-selftest.py` covers the launch line, the spend line, the new labels and asserts that `--prompt` output,
+  `wave-prompt.tmpl` and `SKILL.md` carry no effort-mode keyword.
+- **Renovation and sibling skills.** `renovate_check.py` copies `spend_report.py` (thirteen SCRIPTS) and flags brains that lack the
+  `spend-report` close or the `launch-line`; `prompts-regen` carries each LAUNCH line into its prompts.html card; the own-tier and
+  SendMessage wording of `business-context-generator`, `dependency-renovate` and `design-direction-architect` follows the rules above.
+- **Version constants.** `plugin.json`, the `execute.md.tmpl` Protocol line and the version strings of
+  `courier_preflight.py`, `renovate_check.py`, `status_digest.py` and the renovate selftest read 0.23.0.
+
+Notes: run `claude plugin marketplace update adcm` and `claude plugin update adcm-toolkits@adcm`, then reload plugins or restart sessions.
+Existing brains adopt the new phase prompts only through the renovation phrase.
+
 ## 0.22.2 — 2026-11-16
 
 - **Hardened: coarse path.** The textual tamper check also runs on a normalised copy of the input (quotes and backslashes removed, home
@@ -547,7 +583,7 @@ Lessons from the first three real renovations.
 
 ## 0.7.0 — 2026-09-02
 
-- Hard cap of 5 sub-agents per phase and per wave session (ultracode included).
+- Hard cap of 5 sub-agents per phase and per wave session (the multi-agent effort mode included).
 
 ## 0.6.6 — 2026-09-02
 

@@ -2,6 +2,7 @@
 name: researcher
 description: "Delegate investigations here: code mapping, web research, competitor or reference browsing. Returns sourced findings in tables and never edits or publishes. Sonnet; the orchestrator passes model: opus per call when a deeper pass is needed."
 model: sonnet
+effort: medium
 disallowedTools: Edit, Write, NotebookEdit
 maxTurns: 60
 color: blue

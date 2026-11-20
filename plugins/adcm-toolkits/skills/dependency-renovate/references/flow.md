@@ -185,7 +185,7 @@ against the baseline · `changed` and `resized` smoke routes judged from the PNG
 → ok · commit identity · Draft MRs assigned, labelled and stacked on the right branch · `deps-check status <repo>` with no failed,
 conflicting or pipeline-less (`nopipeline(!n)`) MR · no secrets in diffs, MR bodies, notes or logs. Verdict `ship` or `fix-first`.
 
-- `fix-first`: the findings go to the owning executor through `SendMessage` (0 agents). When `SendMessage` cannot resume it, a NEW executor
+- `fix-first`: the findings go to the owning executor through `SendMessage` (0 agents, but it re-reads the whole context: resume only the same task with < 5 min idle, else a new executor with a ≤ 40-line relay). When `SendMessage` cannot resume it, a NEW executor
   gets the same brief plus the findings (3 + k + 1 agents).
 - A fix in wave N is committed on branch N. Then, for each later wave up to the tip, in stack order: `git switch <branch> && git merge --no-ff <branch N>`,
   reinstall, verify again, `deps-check changelog <repo> --plan <S>/plan.json --wave <wave> --verify build=pass --write` (idempotent), push. This is a
@@ -217,5 +217,5 @@ conflicting or pipeline-less (`nopipeline(!n)`) MR · no secrets in diffs, MR bo
 ## Budget
 
 3 + k agents: the patch+minor executor (Sonnet), k major executors (Opus, k ≤ 3), the context executor (Sonnet) and the auditor (Opus), so
-Opus = k + 1. Fix loops and the re-audit use `SendMessage` (0 agents). A NEW executor, because `SendMessage` cannot resume a finished one,
+Opus = k + 1. Fix loops and the re-audit use `SendMessage` (0 agents, but it re-reads the whole context: resume only the same task with < 5 min idle, else a new executor with a ≤ 40-line relay). A NEW executor, because `SendMessage` cannot resume a finished one,
 counts in the budget (3 + k + 1); an auditor that cannot be resumed is replaced by a new one with the same gate and the fix list.

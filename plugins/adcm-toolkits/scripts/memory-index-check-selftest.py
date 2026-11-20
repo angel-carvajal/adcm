@@ -74,7 +74,7 @@ def cases(script):
     def brief_fail_spanish(tmp):
         rc, o, e = run(script, ["--file", mk(tmp, good_index() + "z" * 400 + "\n"), "--brief"])
         lines = [l for l in o.splitlines() if l.strip()]
-        return (rc == 1 and len(lines) == 1 and "MEMORY" in lines[0] and "línea" in lines[0], repr(o))
+        return (rc == 1 and len(lines) == 1 and "MEMORY" in lines[0] and "línea" in lines[0] and "al cerrar la fase" in lines[0], repr(o))
 
     def usage(tmp):
         rc, _, _ = run(script, ["--bogus"])

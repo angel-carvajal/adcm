@@ -5,7 +5,7 @@ message, and ends that session with the exact line `HANDOFF: <path>`. It is the 
 - Keep the header labels exactly as written: hooks stamp `- **Main thread:**` (leave it empty) and status-digest
   parses the others. Result ∈ done | partial | fail · Next phase ∈ a | b | c | d | e | none.
 - `Next prompt:` is the FIRST line of the next phase's §7 prompt, verbatim (none → `none`).
-- ≤ 40 lines, no file contents, no URLs. The logbook notes feed the doc-sync sheet of phase d (and e).
+- ≤ 40 lines, no file contents, no URLs. Side tasks that surface mid-phase go under Notes and are done at the close. The logbook notes feed the doc-sync sheet of phase d (and e).
 -->
 # Handoff {{Wave}} · {{phase}} — {{one-line outcome}}
 
@@ -17,6 +17,9 @@ message, and ends that session with the exact line `HANDOFF: <path>`. It is the 
 - **State:** {{what is true now: HEAD sha · DoD-auto green at <sha> · simplify ran over <checkpoint>..<sha> · gate report <path> PASS|FAIL · commit pushed}}
 - **Open:** {{none | finding ids, failing DoD lines, pending DoD-human, the step in progress when Result is partial}}
 - **Agents used:** {{n}}/20 of this session (opus {{a}} · sonnet {{b}}) — {{one line per agent: model (type) + role + scope}}
+- **DoD recipe:** {{the exact commands that proved the DoD, so the next phase re-runs them cold | n/a}}
+- **Traps:** {{what bit this phase (flaky check, env quirk, a wrong first guess) | none}}
+- **Spend:** {{line 1 of `spend-report --phase <letter>`, after `Spend: ` | n/a}}
 - **Main thread:**
 - **Next prompt:** {{first line of the next phase's §7 prompt | none}}
 

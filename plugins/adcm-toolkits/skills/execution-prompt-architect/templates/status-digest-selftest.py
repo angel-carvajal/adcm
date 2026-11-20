@@ -1267,11 +1267,11 @@ def case_main_es_aliases(ctx, t):
         t.eq((m.get("warn"), (m.get("segs") or [{}])[0].get("bash")), (True, 30), f"alias {lab!r}")
 
 
-def hand(wave, nn, phase, nxt, result="done", main="12 Bash · 3 Read · 1 compactions (session abcd1234)"):
+def hand(wave, nn, phase, nxt, result="done", main="12 Bash · 3 Read · 1 compactions (session abcd1234)", spend=None):
     return {f"handoffs/{wave}-{nn:02d}-{phase}.md": "\n".join([
         f"# Handoff {wave} · {phase}", "", f"- **Wave:** {wave}", f"- **Phase closed:** {phase}", f"- **Result:** {result}",
         f"- **Next phase:** {nxt}", "- **Branch/MR:** feat/w2 (!14)", "- **State:** green", "- **Open:** none",
-        "- **Agents used:** 3/20", f"- **Main thread:** {main}",
+        "- **Agents used:** 3/20", *([f"- **Spend:** {spend}"] if spend else []), f"- **Main thread:** {main}",
         f"- **Next prompt:** Start a clean session in EXECUTION mode — Acme · Wave {wave} · PHASE {nxt}", "", "body"])}
 
 
@@ -1368,6 +1368,70 @@ def case_prompt_missing(ctx, t):
     r = ctx.run(ctx.brain("pm", simple()), "--no-git", "--prompt")
     t.eq(r.rc, 1, "no execute.md: exit 1")
     t.ok("execute.md" in (r.err + r.out), "the message names execute.md")
+
+
+def wave_prompt_phases():
+    """{phase: (launch line, body)} cut from wave-prompt.tmpl at its PHASE markers."""
+    with open(os.path.join(HERE, "wave-prompt.tmpl"), encoding="utf-8") as fh:
+        wp = fh.read()
+    rx = re.compile(r"^<!-- PHASE ([a-e]) [^\n]*-->\n(LAUNCH: [^\n]*)\n(.*?)(?=^<!-- PHASE |\Z)", re.S | re.M)
+    return {m.group(1): (m.group(2), m.group(3).rstrip("\n")) for m in rx.finditer(wp)}
+
+
+def case_prompt_launch(ctx, t):
+    parts = ["# Acme — Execution protocol\n\n> **Protocol:** adcm-toolkits 0.21.0", "## 7 · Wave prompts"]
+    for ph in "ab":
+        parts.append(f"### W2 · {ph} — title ☐\n\nLAUNCH: /model opus · /effort high\n\n```text\n{prompt_text('W2', ph)}\n```")
+    parts.append(f"### W3 · a — title ☐\n\n```text\n{prompt_text('W3', 'a')}\n```")
+    b = ctx.brain("pl2", simple(), {"execute.md": doc(*parts)})
+    r = ctx.run(b, "--no-git", "--prompt", "W2:b")
+    t.eq((r.rc, r.out), (0, "LAUNCH: /model opus · /effort high\n" + prompt_text("W2", "b") + "\n"), "the LAUNCH line prints before the block")
+    r = ctx.run(b, "--no-git", "--prompt", "W3:a")
+    t.eq((r.rc, r.out), (0, prompt_text("W3", "a") + "\n"), "no LAUNCH line: the block alone")
+
+
+def case_prompt_real_launch_and_keywords(ctx, t):
+    kw = re.compile("ultra" + "code|ultra" + "think", re.I)
+    ph = wave_prompt_phases()
+    t.eq(sorted(ph), list("abcde"), "wave-prompt.tmpl: one LAUNCH line under each PHASE marker")
+    with open(os.path.join(HERE, "wave-prompt.tmpl"), encoding="utf-8") as fh:
+        wp = fh.read()
+    t.eq(len(re.findall(r"^LAUNCH:", wp, re.M)), 5, "exactly five LAUNCH lines")
+    t.eq({k: v[0] for k, v in ph.items()}, {"a": "LAUNCH: /model fable · /effort high", "b": "LAUNCH: /model opus · /effort high",
+         "c": "LAUNCH: /model fable · /effort high", "d": "LAUNCH: /model opus · /effort high", "e": "LAUNCH: /model opus · /effort high"}, "launch line per phase")
+    parts = ["# Acme — Execution protocol\n\n> **Protocol:** adcm-toolkits 0.21.0", "## 7 · Wave prompts"]
+    for k, (launch, body) in ph.items():
+        parts.append(f"### W2 · {k} — title ☐\n\n{launch}\n\n```text\n{body}\n```")
+    b = ctx.brain("rk", simple(), {"execute.md": doc(*parts)})
+    for k, (launch, body) in ph.items():
+        r = ctx.run(b, "--no-git", "--prompt", f"W2:{k}")
+        t.eq((r.rc, r.out), (0, launch + "\n" + body + "\n"), f"{k}: LAUNCH line + block")
+        t.ok(not kw.search(r.out), f"{k}: --prompt output has no effort-mode keyword")
+        t.ok(r.out.split("\n", 1)[1].startswith("Start a clean session in EXECUTION mode") and f"PHASE {k}" in body.split("\n", 1)[0],
+             f"{k}: PHASE {k} stays in the first line of the block")
+    t.ok(not kw.search(wp), "wave-prompt.tmpl has no effort-mode keyword")
+    with open(os.path.join(HERE, "..", "SKILL.md"), encoding="utf-8") as fh:
+        t.ok(not kw.search(fh.read()), "SKILL.md has no effort-mode keyword")
+    with open(os.path.join(HERE, "handoff.md.tmpl"), encoding="utf-8") as fh:
+        ho = fh.read()
+    t.ok(len(ho.splitlines()) <= 40, "handoff.md.tmpl <= 40 lines")
+    t.ok(all(f"**{x}:**" in ho for x in ("DoD recipe", "Traps", "Spend")), "handoff.md.tmpl carries DoD recipe, Traps and Spend")
+
+
+def case_spend_and_labels(ctx, t):
+    hs = [hand("W2", 1, "a", "b", spend="plan 120k tok · fable 60% · opus 30% " + "y" * 200)]
+    d = both(ctx, t, phased_brain(ctx, "sp", hs), "--no-git")
+    ln = find(d["text"], "SPEND") or ""
+    t.ok("plan 120k" in ln and "handoffs/W2-01-a.md" in ln and len(ln) <= 160, f"SPEND line, truncated: {ln!r}")
+    t.ok(len(d["text"]) <= 40, "digest stays within 40 lines")
+    hs = [hand("W2", 1, "a", "b", spend="n/a")]
+    d = both(ctx, t, phased_brain(ctx, "sp2", hs), "--no-git")
+    t.ok(find(d["text"], "SPEND") is None, "Spend: n/a prints no SPEND line")
+    log = [entry("2026-01-05 — Wave W2", "- **Next:** go", "- **Traps:** flaky e2e on CI", "- **Spend:** 1.2M tok · opus 40%",
+                 "- **DoD recipe:** `npm test`")]
+    d = both(ctx, t, ctx.brain("lb", simple(log=log)), "--no-git")
+    txt = "\n".join(d["text"])
+    t.ok("traps: flaky e2e on CI" in txt and "spend: 1.2M tok" in txt, f"logbook Traps and Spend reach LAST LOG: {txt!r}")
 
 
 def case_mrs_unavailable(ctx, t):
@@ -1661,6 +1725,9 @@ CASES = [
     ("prompt_named", case_prompt_named),
     ("prompt_legacy", case_prompt_legacy),
     ("prompt_missing", case_prompt_missing),
+    ("prompt_launch", case_prompt_launch),
+    ("prompt_real_launch_and_keywords", case_prompt_real_launch_and_keywords),
+    ("spend_and_labels", case_spend_and_labels),
     ("mrs_unavailable", case_mrs_unavailable),
     ("mrs_listed", case_mrs_listed),
     ("stale", case_stale),

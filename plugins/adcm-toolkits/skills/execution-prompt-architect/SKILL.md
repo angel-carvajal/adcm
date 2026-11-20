@@ -18,15 +18,14 @@ compatibility: >
   Works with any Claude model. In Claude Code the code analysis fans out to
   sub-agents using the model/effort the user picks; in environments without
   sub-agents it degrades to sequential analysis. Sub-agent fan-out is budgeted at
-  20 per session (a planning run, each clean wave session and a renovation count separately) with fixed roles by model tier: the main session (Fable)
+  20 per session (a planning run, each clean wave session and a renovation count separately) with fixed roles by model tier: the main session (the orchestrator)
   orchestrates and runs the DoD, Opus sub-agents investigate and audit (and
   implement ⚠gate waves), Sonnet sub-agents implement from executor briefs, with an
-  escalation ladder Sonnet → Opus → Fable — in every effort level, ultracode
-  included. Every wave adds ONE packaged `code-simplifier:code-simplifier` pass
+  escalation ladder Sonnet → Opus → orchestrator in every effort level. Every wave adds ONE packaged `code-simplifier:code-simplifier` pass
   called with an explicit `model: opus`: it spends 1 of the 20 and 1 of the Opus
   quota, which therefore reserves TWO slots — the ⚠gate verifier and the simplify
   pass. Where that plugin is not installed, the same simplifier brief goes to ONE
-  `adcm-toolkits:executor` with `model: <auditor tier>` — the brief is the contract, the plugin only its carrier. Generated prompts are tuned for Fable at high effort but run on any
+  `adcm-toolkits:executor` with `model: opus` — the brief is the contract, the plugin only its carrier. Generated prompts are tuned for a high-effort orchestrator but run on any
   model.
 ---
 
@@ -70,7 +69,7 @@ the brief format, the tiers and the escape hatch — lives in
 
 | Role | Model | Does | Never does |
 |---|---|---|---|
-| **Orchestrator** | the main session (Fable; ultracode or max by complexity) | Decides design and scope — the reuse verdict included: it audits every deliverable for duplication (does this logic already exist? do two or more components need it? do two or more entities share its SHAPE (pattern family)? should it be extracted?) before a line of code exists. Audits the *deliverables* Opus returns (solution, files, considerations) against the project context. Writes the **executor brief** per task. Runs the DoD-auto itself. Checkpoint-commits and launches the wave's `code-simplifier` pass over the integrated diff, then re-runs the DoD after it. Integrates parallel executors. Last rung of the escalation ladder; tiny fixes (≤~20 lines) when a brief would cost more than the change. Every such direct fix is LOGGED in the `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an unlogged orchestrator edit is a protocol violation, not a shortcut. A pure orchestrator: it never reads bulk files, never edits beyond that ≤20-line shortcut, never renders, publishes or browses — the user's phrases `sin tanto lío` (one task) and `modo directo` (until `modo orquestador`) switch that off (`references/orchestrator-rule.md`). | Implement first. Spawn sub-agents of its own tier (the simplify pass is called at the auditor tier, one below the main session). Review code line by line — it audits deliverables and runs commands. Merge an MR or push code to the default branch. Print links in progress turns. |
+| **Orchestrator** | the main session (the orchestrator; effort `high`, `/effort max` only for the planning run) | Decides design and scope — the reuse verdict included: it audits every deliverable for duplication (does this logic already exist? do two or more components need it? do two or more entities share its SHAPE (pattern family)? should it be extracted?) before a line of code exists. Audits the *deliverables* Opus returns (solution, files, considerations) against the project context. Writes the **executor brief** per task. Runs the DoD-auto itself. Checkpoint-commits and launches the wave's `code-simplifier` pass over the integrated diff, then re-runs the DoD after it. Integrates parallel executors. Last rung of the escalation ladder; tiny fixes (≤~20 lines) when a brief would cost more than the change. Every such direct fix is LOGGED in the `task.md` logbook (`orchestrator fix: <file> — <why a brief cost more>`); an unlogged orchestrator edit is a protocol violation, not a shortcut. A pure orchestrator: it never reads bulk files, never edits beyond that ≤20-line shortcut, never renders, publishes or browses — the user's phrases `sin tanto lío` (one task) and `modo directo` (until `modo orquestador`) switch that off (`references/orchestrator-rule.md`). | Implement first or audit or verify a diff in its own context: every audit goes to a fresh agent at the tier this table names, whatever the main model (an Opus auditor under an Opus main is fine); the simplify pass runs `model: opus` in a fresh context. Raise a STOP IF of its own mid-run: it adopts the verifier's minimal fix unless it cites evidence, and logs each override as `override: <reason + evidence>`. Review code line by line — it audits deliverables and runs commands. Merge an MR or push code to the default branch. Print links in progress turns. |
 | **Investigator / Auditor** | `adcm-toolkits:researcher` + `model: opus` investigates, `adcm-toolkits:auditor` (`opus`) reviews and verifies gates (quota 10 per session; 2 reserved — the ⚠gate verifier and the simplify pass) | Investigation, Scope manifests, deliverables (solution · files to touch with why · considerations · open questions · **reuse census**, read from `map/utilities.md` + `map/patterns.md` FIRST: the helper that already does this and must be consumed, or the logic or shape two or more components need with its target path and every consumer), regression review over the executor's diff, adversarial verification at gates, attack checklists. **Executor on ⚠gate waves** (`adcm-toolkits:executor` + `model: opus`) and 2nd rung of the ladder. | Implement on NO-gate waves except by escalation — the one exception is the per-wave simplify pass, which rewrites the integrated diff without changing behavior, from a brief, and never verifies itself. Decide scope. |
 | **Executor** | `adcm-toolkits:executor` (`sonnet`), or `adcm-toolkits:executor-frontend` on UI and frontend-code waves — when the wave loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload (~3.1k tokens) | Implements NO-gate tasks from an executor brief — up to 4 in parallel with disjoint files, each in its own worktree; a shared helper is never a disjoint file, so the task that extracts it closes BEFORE its consumers start and never runs beside them. Returns a diff summary per file + the DoD-slice commands it ran WITH their output + what it extracted or consumed and which consumers it rewired + open questions / STOPs — never a bare "done". Reads only the map entries its brief's `Map:` line names (plus the ONE `rg` lookup its Reuse rule allows before writing an unnamed helper), and RETURNs `RULE-OF-TWO` — every pair of same logic or shape it saw that the brief does not name (report only, never extract). Relieves Opus on audits once the Opus quota is spent. | Decide scope. Touch files outside its brief (the shared helper and its named consumers ARE in scope when the manifest lists them). Invent a shared abstraction its brief does not name — extraction is decided in planning. Write comments that narrate decisions, rationale or wave/task references. Improvise on a doubt (it stops and reports). Self-approve. Merge an MR or push code to the default branch. Return URLs (only the courier does). |
 | **Courier** | `adcm-toolkits:courier` (`sonnet` ALWAYS; one per batch, 0 Opus quota) | Runs the delivery close (`artifact-courier` skill): republishes stale registry rows, returns `MEDIA: unsent` paths and the links block. | Edit HTML or docs; publish unlisted rows. |
@@ -89,14 +88,14 @@ The types fix each role's `model` and tool set, so the brief does not have to (t
    the shared surfaces? is a file missing? does it contradict an inviolable decision?
    does it duplicate logic that already exists, or logic or a shape a sibling entity shares —
    should it be extracted into a shared helper or generic base both consume?
-   Concrete doubts go back to the SAME agent (`SendMessage` — a new agent would
-   spend budget), at most 5 rounds, until consensus.
+   Concrete doubts go back to the SAME agent only under the 5-minute rule (see Accounting; otherwise a new
+   agent with a relay file), at most 5 rounds, until consensus.
 2. The orchestrator writes the **executor brief** (below) and launches the executor (`adcm-toolkits:executor`; `executor-frontend` on UI and frontend-code waves) —
    `isolation: 'worktree'` / a separate worktree when several run in parallel.
 3. Sonnet implements and returns: diff summary per file, DoD-slice commands run
    with their output, doubts/STOPs.
 4. The orchestrator runs the DoD-slice ITSELF. A failure goes back to the SAME
-   Sonnet (`SendMessage`). The second failure of the SAME DoD line → **escalate**
+   Sonnet only under the 5-minute rule (see Accounting), else to a new executor with a relay file. The second failure of the SAME DoD line → **escalate**
    (ladder below).
 5. `adcm-toolkits:auditor` reviews regression over the integrated diff (named flows + checklist);
    findings go back to the executor currently holding the task.
@@ -111,8 +110,8 @@ The types fix each role's `model` and tool set, so the brief does not have to (t
    summary and what it skipped; the orchestrator commits its diff. It never
    self-approves and never closes the wave.
 7. The orchestrator runs the FULL DoD-auto of the wave AFTER the simplify pass and
-   closes. If the DoD fails after the pass: ONE fix round to the SAME simplifier
-   (`SendMessage`, cost 0 — if it cannot be reached, skip straight to the revert); a
+   closes. If the DoD fails after the pass: ONE fix round by a NEW
+   `adcm-toolkits:executor` (`model: opus`, relay file ≤ 40 lines, counted against the 20); a
    second failure → back to the checkpoint commit (`git reset --hard` while unpushed,
    `git revert` of the simplify commit if already pushed) and close on the pre-simplify
    diff, recorded in the logbook. That retry is its own cap: it consumes neither the 5
@@ -159,28 +158,24 @@ is inherited from `detailed-plan.md` §0 Conventions, never restated at length.
 
 **Accounting.** One counter per session (the planning run, each wave in its own clean
 session and a renovation are separate sessions, 20 each), starting at zero. Every delegated agent (`Agent` tool or Workflow `agent()`) adds 1 whatever
-its model; `SendMessage` to a live agent adds 0. Every call names its `model` OR is an
+its model; `SendMessage` adds 0 to the agent counter but re-reads the agent's whole context: resume only the same task with < 5 min idle; otherwise a NEW executor with a relay file of ≤ 40 lines, counted against the 20 (exempt: courier retry and doc-sync phase B). Every call names its `model` OR is an
 `adcm-toolkits:*` type: a per-call `model` overrides the type's default: `researcher` +
 `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and
-Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the
-main session is one tier down; types fix the TOOL SET, the tier rules still set the model.
-Other packaged agents still name their `model`: the plugin's frontmatter is irrelevant. **Budget: 20.** The close reserves 1 of the 20 for the delivery courier (one courier per batch,
-normally 1), `adcm-toolkits:courier` (fixed `sonnet`) at EVERY tier — it does not follow the "one tier down" rule
-and spends 0 Opus quota; an extra batch, or a retry as a NEW agent, costs 1 each,
-`SendMessage` to the same courier 0. **Opus quota: 10 per session**, 2 of them reserved — 1 for
+Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent; types fix the TOOL SET, the tier rules still set the model.
+Other packaged agents still name their `model`: the plugin's frontmatter is irrelevant. The `executor`, `executor-frontend` and `researcher` types default to `effort: medium`; ⚠gate `executor` calls and `researcher` + `model: opus` calls pass `effort: high` per call. **Budget: 20.** The close reserves 1 of the 20 for the delivery courier (one courier per batch,
+normally 1), `adcm-toolkits:courier` (fixed `sonnet`)
+spends 0 Opus quota; an extra batch, or a retry as a NEW agent, costs 1 each;
+a retry by `SendMessage` to the same courier is exempt from the 5-minute rule. **Opus quota: 10 per session**, 2 of them reserved — 1 for
 the ⚠gate verifier and 1 for the per-wave simplify pass
 (`code-simplifier:code-simplifier` called with `model: opus`: 1 of the 20 and 1 of the
 quota); audits and regression reviews pass to `sonnet` once `opus < OPUS_QUOTA - 2` no
-longer holds, while the gate verifier never downgrades; the simplify pass is always ONE tier below
-the main session and spends that tier's quota. Sonnet
+longer holds, while the gate verifier never downgrades; the simplify pass always runs `model: opus` in a
+fresh context and spends 1 of the quota. Sonnet
 executors do not consume Opus quota but do consume
 budget. Reaching 20 means STOP and ask (AskUserQuestion) whether the user authorizes
-more for THIS run; never exceed it silently. When the main session is not Fable the
-roles hold one tier down (main opus → auditors sonnet → executors haiku) and the
-simplify pass is called at the auditor tier of that session, so the orchestrator never
-spawns its own tier. The brief is the contract and the packaged agent only its default
+more for THIS run; never exceed it silently. The orchestrator never implements first and never audits or verifies a diff in its own context; every audit goes to a fresh agent at the tier the table names, whatever the main model (an Opus auditor under an Opus main is fine); the simplify pass runs `model: opus` in a fresh context. Haiku is for inventories only. The brief is the contract and the packaged agent only its default
 carrier: where `code-simplifier:code-simplifier` is not installed, the same `## Simplifier
-brief` goes to ONE `adcm-toolkits:executor` with `model: <auditor tier>` (the auditor type has no Edit) — same model, cost, cap and RETURN —
+brief` goes to ONE `adcm-toolkits:executor` with `model: opus` (the auditor type has no Edit) — same model, cost, cap and RETURN —
 and the logbook `Simplifier:` field records which carrier ran. In
 environments without sub-agents everything degrades to the orchestrator working
 sequentially.
@@ -220,22 +215,13 @@ Ask the user (one AskUserQuestion call, three questions):
    folder/repo: ask explicitly, offering the inferred name as the suggested option.
 2. **Main session model** — the orchestrator's model: `fable` (recommended),
    `opus`, `sonnet`. Sub-agent models are NOT chosen here: the tiered protocol fixes
-   them (`opus` investigates/audits and runs ⚠gate waves, `sonnet` implements; one
-   tier down if the main session is not Fable — see "Agent roles").
-3. **Effort for the analysis** — ALWAYS list every level: `low`, `medium`, `high`,
-   `max`, `ultracode`. Mark the recommended one for the model they picked:
-   - fable → **max** recommended (ultracode for complex, multi-repo work)
-   - opus → **ultracode** recommended
-   - sonnet → **max** recommended
-
-   The user is free to pick any level. `ultracode` means: orchestrate with Workflow
-   scripts — one per stage (investigate → implement → review), the orchestrator
-   auditing in between — with at most 20 `agent()` calls in total, every call with
-   an explicit `model` by role and `isolation: 'worktree'` on parallel executors,
-   structured outputs and one adversarial cross-check; other levels map to
-   sub-agent thoroughness. **No effort level changes the roles or the 20-agent
-   budget** — ultracode changes HOW the work is orchestrated, never who implements
-   or how many agents it spends.
+   them (`opus` investigates/audits and runs ⚠gate waves, `sonnet` implements — see "Agent roles").
+3. **Effort for the analysis** — list `low`, `medium`, `high`, `max`. Recommend **max** for the planning run only
+   (`/effort max`); the phase sessions it generates run at `high` (each phase prompt has its own launch line, outside
+   its fenced block). The user types the deep-reasoning keyword himself, in ONE design turn when a decision is hard;
+   it is never baked into a prompt. Never suggest `CLAUDE_CODE_EFFORT_LEVEL` (it overrides sub-agent effort).
+   Effort changes how deep the work thinks, never who implements or how many agents it spends: **no effort level
+   changes the roles or the 20-agent budget**.
 
 Then check whether a `code-project-context-*` skill for this project is installed:
 
@@ -289,7 +275,7 @@ may live").
 
 Analyze the project with the effort from Step 1, under the tiered protocol ("Agent
 roles"): the main session consolidates and decides; sub-agents investigate. Always
-fan out when the environment allows it — even outside ultracode — but **within the
+fan out when the environment allows it — at any effort level — but **within the
 agent budget: at most 20 delegated agents for the WHOLE of Step 3 — the planning
 session's 20** (counter starts at zero; agents 1–10 `opus`, 11–20 `sonnet`). The fan-out is bucketed, never
 one-agent-per-item. Indicative split (adapt, never exceed):
@@ -357,11 +343,11 @@ one-agent-per-item. Indicative split (adapt, never exceed):
 - **1 risk agent** (`adcm-toolkits:researcher` + `model: opus`): what can break, what needs an adversarial gate
   (security, money, data isolation, irreversible migrations), plus over-abstraction —
   an extraction that couples two previously independent components, or a base forced
-  onto family members that diverge, is a risk and belongs in master-plan §6. In ultracode this is
+  onto family members that diverge, is a risk and belongs in master-plan §6. This is
   the adversarial cross-check: it receives the consolidated inventory and tries to
   refute it.
 - **The rest of the budget** goes to the deliverable audit loop (follow-ups to the
-  SAME agents via `SendMessage` cost nothing; a fresh verifier costs 1) and, when
+  SAME agents via `SendMessage` follow the 5-minute rule, otherwise a new agent counts 1; a fresh verifier costs 1) and, when
   it fits, a small refuter panel (`adcm-toolkits:auditor`) over the consolidated inventory — `model: opus` while the
   Opus quota (10) lasts, `model: sonnet` after. Nobody implements in Step 3.
 
@@ -370,13 +356,13 @@ agents with no cap of their own are **banned** here — each one multiplies the 
 past the budget. The same cap governs the per-wave simplify pass: ONE pass, its edits
 applied in ONE round, never a simplify → verify → simplify loop. Refuter panels are allowed only when they fit in the 20 and every
 call names its `model`. If a bucket comes back incomplete, ask THAT agent again
-(`SendMessage`) or let the MAIN session fill the gap itself with Read/Grep before
+(`SendMessage`, only under the 5-minute rule) or let the MAIN session fill the gap itself with Read/Grep before
 spending a new agent. Consolidation is always done by the main session, never
 delegated. If the project genuinely does not fit (e.g. more than 20 repos/areas),
 STOP and ask (AskUserQuestion) whether the user authorizes a larger budget for THIS
 run, showing the planned count — never exceed it silently.
 
-Ultracode reference shape (the whole Step 3 is ONE workflow, ≤20 `agent()` calls — the
+Workflow reference shape (optional; the whole Step 3 is ONE workflow, ≤20 `agent()` calls — the
 planning session's 20 — every call with an `adcm-toolkits:*` `agentType` and an explicit `model`):
 
 ```js
@@ -481,7 +467,7 @@ reads to know what an old brain lacks. Every fact in
 the prompts must trace back to the analysis — never invent commands, paths or repo
 names; use the ones found in Step 3.
 
-Also copy `templates/status_digest.py`, `templates/status-brief.md`, `templates/plan_audit.py`, `templates/docsync_apply.py`, `templates/handoff.md.tmpl`, `templates/docsync-brief.md`, `templates/plan-audit-brief.md` and `courier_preflight.py` (from the
+Also copy `templates/status_digest.py`, `templates/status-brief.md`, `templates/plan_audit.py`, `templates/docsync_apply.py`, `templates/handoff.md.tmpl`, `templates/spend_report.py`, `templates/docsync-brief.md`, `templates/plan-audit-brief.md` and `courier_preflight.py` (from the
 `artifact-courier` skill's `scripts/`, so the digest finds it from the brain) to
 `{{docs_dir}}/scripts/` here, and create the empty folders `{{docs_dir}}/handoffs/` and `{{docs_dir}}/qa/` (none of these copied files is part of Step 7, which is
 conditional on the HTML question): sessions without the plugin run
@@ -510,7 +496,7 @@ Legacy brains keep `### <Wave> — <title>`, one prompt per wave. Non-negotiable
    DoD-auto run AFTER the wave's simplify pass: the simplifier is not a checkbox, it
    runs before the last run, so the green DoD is always the DoD of the shipped bytes.
    One Base DoD line makes comment hygiene command-verifiable (detailed-plan §0).
-3. **WORKFLOW is always present**, even if the executing session has no ultracode:
+3. **WORKFLOW is always present**, whatever the effort of the executing session:
    it opens with the **AGENT BUDGET & ROLES** block and spells out the per-task
    cycle from "Agent roles" — `researcher` (`model: opus`) investigates → the orchestrator audits the
    deliverable → executor brief → `adcm-toolkits:executor` (`executor-frontend` on UI and frontend-code waves) agents implement (≤4 in parallel,
@@ -527,19 +513,18 @@ Legacy brains keep `### <Wave> — <title>`, one prompt per wave. Non-negotiable
    {{docs_dir}}/qa/gate-<w>.md` or the brain's existing `qa/<wave>/gate-*.md` layout; it returns the report under `REPORT:` and you save it verbatim). WORKFLOW embeds one
    `## Executor brief` block per task, pre-filled from SCOPE, plus the single
    `## Simplifier brief` block. Never emit a WORKFLOW where the main session
-   implements first, where an executor self-approves, where the diff is audited by
-   the executor's own tier, or whose agents add up to more than 20 (investigators +
+   implements first, where an executor self-approves, where the orchestrator audits or verifies a diff in its own context, or whose agents add up to more than 20 (investigators +
    executors + reviewers + the simplify pass + verifier).
 4. Loop discipline: brief → execute → verify (the orchestrator runs the DoD-slice)
    → fix → repeat, then ONE simplify pass → re-verify. Max 5 rounds; the executor's
    2nd failure of the SAME DoD line escalates the task one tier up (Sonnet → Opus →
    orchestrator) with the attempt log; 3 attempts on the SAME failure at session level
    → stop and report. The simplify pass carries its own cap and consumes neither: a
-   FULL DoD-auto failure after it gets ONE fix round to the SAME simplifier
-   (`SendMessage`, cost 0), and a second failure reverts to the checkpoint commit and
+   FULL DoD-auto failure after it gets ONE fix round by a NEW executor
+   (`model: opus`, relay file ≤ 40 lines), and a second failure reverts to the checkpoint commit and
    closes on the pre-simplify diff, logged. Never
    degrade tests to pass; never mark done what is not done.
-5. Prompts are written for **Fable at high effort** (precise, dense, zero ambiguity)
+5. Prompts are written for **the orchestrator at high effort** (precise, dense, zero ambiguity)
    but must be executable by any model.
 6. Each prompt is self-contained AND declares its mode: its first line is `Start a clean session in EXECUTION mode — <project> ·
    Wave <Wave> · PHASE <phase> (<name>)` — never plan mode, the plan IS the prompt — then it carries the 3-line main-thread
@@ -709,7 +694,7 @@ happen every session is not a note — it is a hook.
   most 20 delegated agents per session — the planning run (Step 3), each executing wave
   session and a renovation are separate sessions, 20 each; the 21st asks the user — under the tiered protocol ("Agent roles"): the main session
   orchestrates, audits deliverables, writes executor briefs and runs the DoD — it
-  never implements first and never spawns its own tier; `opus` investigates,
+  never implements first and never audits or verifies a diff in its own context (every audit goes to a fresh agent at the tier this list names, whatever the main model; the simplify pass runs `model: opus` in a fresh context); `opus` investigates,
   audits, reviews regression, verifies gates and implements ⚠gate waves (quota 10,
   2 reserved: the gate verifier and the per-wave simplify pass; `adcm-toolkits:researcher`
   / `adcm-toolkits:auditor`); `sonnet` (`adcm-toolkits:executor`, `executor-frontend` on UI
@@ -719,8 +704,7 @@ happen every session is not a note — it is a hook.
   one delivery `adcm-toolkits:courier` per batch (normally 1; each extra batch = 1 more of the 20), always `sonnet`, 0 Opus quota;
   escalation Sonnet →
   Opus → orchestrator on the 2nd failure of the same DoD line; every call names
-  its model or is an `adcm-toolkits:*` type. This holds in EVERY effort level — ultracode changes the orchestration
-  (Workflow per stage + adversarial cross-check), never the roles or the count.
+  its model or is an `adcm-toolkits:*` type. This holds in EVERY effort level.
   Exceeding 20 is a protocol violation; it may only be raised by the user's
   explicit authorization for that single run, and the logbook records `agents
   used: n/20 (opus a · sonnet b) · escalations` with `simplify`, `courier` and (UI waves) `capture` among the agent roles. Depth comes from six documents +
@@ -761,7 +745,7 @@ happen every session is not a note — it is a hook.
   R6 status turn capped at 3 calls · R3 no heavy reads, images or PDFs · X1 no browser, no Artifact writes · X2 edits ≤20 lines · R2 25 Bash / 8 Read.
   `merge-guard`: no merge commands. `artifact-guard` (Stop): links block once per close, as the last lines. Install both guards (`templates/`) as hooks.
 - **Session state comes from one digest call** (`status-digest --brain <docs_dir> --mrs`, see Session start), never from `task.md`.
-- **Phase sessions.** One clean session per phase; each ends with `HANDOFF: <path>` and the owner runs /clear and pastes the next phase prompt.
+- **Phase sessions.** One clean session per phase; each ends with `HANDOFF: <path>` and the owner runs /clear and pastes the next phase prompt. Each phase prompt has ONE launch line (`LAUNCH: /model … · /effort …`) outside its fenced block, because a pasted first line starting with `/` runs as a command; `status-digest --prompt` prints it before the block. Every phase close runs `spend-report --phase <letter>` and copies its line 1 (after `Spend: `) into the handoff's `Spend:` label, next to `DoD recipe:` and `Traps:`. Side tasks that surface mid-phase (a memory-index warning, a stray cleanup) are queued in the handoff and done at the close, never mid-run. The orchestrator never raises a STOP IF mid-run: it adopts the verifier's minimal fix unless it cites evidence, and logs each override as `override: <reason + evidence>`.
 - **Doc-sync is a sonnet executor's job**, from `templates/docsync-brief.md`, in two phases. A builds the sheet and markers and leaves `docsync-apply --sheet <scratch>/sheet.json --markers <scratch>/markers.json --root <brain_dir> --check`
   clean (scratch files, never in the repo; the tool runs no git), writing no doc. B (by `SendMessage` with the marker values) runs `--write`, `status-digest`, commits by explicit path and pushes.
   The main session never writes or edits a sheet; the handoff is written before B so the stamped metric can be copied.

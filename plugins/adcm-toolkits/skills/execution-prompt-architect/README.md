@@ -9,17 +9,17 @@ comment policy, and a code-simplifier pass that closes every wave.
 > ⚠ **Deep but bounded, with fixed roles.** This skill spends tokens on depth — a
 > bucketed analysis fan-out across your repos, a dependency-ordered wave plan, six
 > cross-linked documents plus one fully instantiated prompt per wave — under a
-> tiered protocol: **the main session (Fable) orchestrates — audits deliverables,
+> tiered protocol: **the main session orchestrates — audits deliverables,
 > writes executor briefs, runs the DoD itself — and never implements first; Opus
 > agents (`adcm-toolkits:researcher`, `adcm-toolkits:auditor`) investigate, review regression and verify gates, and
 > `adcm-toolkits:executor` + `model: opus` implements ⚠gate waves; Sonnet executors (`adcm-toolkits:executor`,
 > `executor-frontend` on UI and frontend-code waves — when the wave loads design skills OR the task's FILES are frontend app code (components, pages, hooks/composables, client services/stores); cost: the `frontend-design` preload (~3.1k tokens)) implement NO-gate tasks from briefs (up to 4 in
 > parallel, own worktrees); one packaged `code-simplifier` pass (model: opus) closes
 > every wave and one `adcm-toolkits:courier` per batch (normally 1; each 1 of the 20, 0 Opus quota) delivers
-> its artifacts and links; an escalation ladder Sonnet → Opus → Fable kicks in on
+> its artifacts and links; an escalation ladder Sonnet → Opus → orchestrator kicks in on
 > the 2nd failure of the same DoD line; budget 20 sub-agents per session
 > (a planning run, each wave session and a renovation count separately), with the Opus quota of 10 reserving two slots — the gate
-> verifier and the simplify pass — ultracode included.** Every generated wave prompt
+> verifier and the simplify pass.** Every generated wave prompt
 > carries that budget, those roles, one executor brief per task and the wave's
 > simplifier brief as a hard limit, and the logbook records the agents actually used
 > per model, what was reused or extracted, whether the simplifier ran, plus every
@@ -113,19 +113,17 @@ hooks, not by prose: the list lives in `references/orchestrator-rule.md`. Status
 ## Recommended models
 
 - **Running this skill / the analysis**: the main session is the orchestrator —
-  **Fable** recommended (max effort; ultracode for complex multi-repo work), Opus or
+  Fable recommended (`/effort max` only for the planning run; phase sessions run at `high`), Opus or
   Sonnet accepted. Sub-agent models are fixed by the protocol: `opus` investigates,
   audits and runs ⚠gate waves (quota 10 per session), `sonnet` implements from
-  executor briefs (one tier down if the main session is not Fable).
-- **Executing the generated wave prompts**: they are tuned for **Fable at max
-  effort** as orchestrator but run on any model. Every prompt includes a `WORKFLOW
+  executor briefs.
+- **Executing the generated wave prompts**: they are tuned for **the orchestrator at high
+  effort** but run on any model; each phase prompt has a launch line (`/model`, `/effort`) outside its fenced block. Every prompt includes a `WORKFLOW
   (fan-out)` section with the per-task cycle (investigate → audit the deliverable →
   brief → Sonnet executes → the orchestrator verifies, escalates and integrates → Opus
   reviews regression → checkpoint commit + the code-simplifier pass → re-run the full
   DoD), one pre-filled executor brief per task and one simplifier brief per wave.
-  Ultracode changes the orchestration (a Workflow per stage + an adversarial
-  cross-check), not the roles or the count: the 20-agent budget applies in every
-  effort level.
+  No effort level changes the roles or the count: the 20-agent budget applies everywhere.
 
 ## Requirements
 
@@ -136,4 +134,4 @@ sequential analysis.
 Recommended: the official `code-simplifier` plugin (`/plugin install
 code-simplifier@claude-plugins-official`), the default carrier of the per-wave simplify
 pass. Without it, the same `## Simplifier brief` goes to one `adcm-toolkits:executor` with
-`model: <auditor tier>` — the brief is the contract, the plugin only its carrier.
+`model: opus` — the brief is the contract, the plugin only its carrier.

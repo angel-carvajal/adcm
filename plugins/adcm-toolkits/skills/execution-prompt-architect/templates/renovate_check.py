@@ -2,7 +2,7 @@
 """renovate_check.py - what does an existing brain lack against the current execution protocol?
 
 Reads <brain>/execute.md, task.md, artifacts.json, scripts/ and map/ and reports, block by block, whether the
-brain carries the current protocol (adcm-toolkits 0.22.2) or what a renovation has to add. Read-only,
+brain carries the current protocol (adcm-toolkits 0.23.0) or what a renovation has to add. Read-only,
 stdlib only, Python >= 3.8, deterministic (no clock, stable ordering, UTF-8 stdout). The only write is
 --copy-scripts; execute.md, task.md, the registry and any memory/CLAUDE.md note are corrected by an executor
 from this report, never by this script.
@@ -27,7 +27,7 @@ Usage
                     stats, text
 
 Blocks (ok | missing | partial | outdated | n/a)
-  SCRIPTS    the twelve files of scripts/; a file that differs from its template is a project copy
+  SCRIPTS    the thirteen files of scripts/; a file that differs from its template is a project copy
              (`custom`, informational: only a missing file makes the block needed). `cache-dep` (fix):
              a *.py or *.sh directly under scripts/ or .build/ whose text contains the plugin-cache
              path reads a templates copy that a cache purge deletes; JSON `blocks.scripts.cache_dep`
@@ -86,12 +86,12 @@ import shutil
 import sys
 import unicodedata
 
-__version__ = "0.22.2"
+__version__ = "0.23.0"
 TARGET = __version__
 
 SCRIPTS = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
            "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py", "plan_audit.py", "docsync_apply.py",
-           "handoff.md.tmpl", "docsync-brief.md", "plan-audit-brief.md")
+           "handoff.md.tmpl", "docsync-brief.md", "plan-audit-brief.md", "spend_report.py")
 CACHE_MARK = "plugins" + "/cache/"  # built from parts: this file must not trip its own cache-dep check
 CACHE_FIX = "point the script to the local scripts/*.tmpl copies"
 TYPES = ("executor", "auditor", "researcher", "courier", "digester")
@@ -102,10 +102,12 @@ FLAGS = (("digest_line", "digest-line"), ("last_log_s4", "last-log-s4"), ("next_
          ("reviewer_line", "reviewer-line"), ("merge_rule", "merge-rule"), ("links_once", "links-once"),
          ("map_step", "map-step"), ("notify_rule", "notify-rule"),
          ("phase_sessions", "phase-sessions"), ("handoff_token", "handoff-token"), ("docsync_check", "docsync-check"),
-         ("plan_audit_check", "plan-audit-check"), ("main_thread", "main-thread"))
+         ("plan_audit_check", "plan-audit-check"), ("main_thread", "main-thread"),
+         ("spend_report", "spend-report"), ("launch_line", "launch-line"))
 PHASE_LITERALS = (("phase_sessions", "One clean session per phase"), ("handoff_token", "HANDOFF: <path>"),
                   ("docsync_check", "docsync-apply --check"), ("plan_audit_check", "plan-audit --check"),
-                  ("main_thread", "**Main thread:**"))
+                  ("main_thread", "**Main thread:**"), ("spend_report", "spend-report --phase"),
+                  ("launch_line", "LAUNCH: /model"))
 RETIRED = "auto" + "-merge"  # the pre-0.16 policy text, built from parts so grepping for it finds only stale docs
 RETIRED_RX = re.compile(RETIRED.replace("-", "-?"), re.I)
 DOCS_ES = ("propuesta-ejecutiva.md", "plan-maestro.md", "plan-detallado.md")

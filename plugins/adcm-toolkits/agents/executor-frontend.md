@@ -2,6 +2,7 @@
 name: executor-frontend
 description: "Delegate UI and frontend-code work here: pages, components, layouts, styling from a brief, when the wave loads design skills OR the FILES are frontend app code. Same as executor, with the frontend-design skill preloaded. It builds inside the .design/ pack when one exists and takes the visual check when the DoD asks for it."
 model: sonnet
+effort: medium
 skills:
   - frontend-design
 maxTurns: 120

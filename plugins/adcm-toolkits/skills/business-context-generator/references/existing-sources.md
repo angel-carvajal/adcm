@@ -47,7 +47,7 @@ say so in each brief.
   would read next if allowed.
 
 `exhausted: no` plus those 3 files is how a family asks for a second pass: the
-orchestrator decides whether to widen the PATHS via `SendMessage` (cost 0) or to
+orchestrator decides whether to widen the PATHS via `SendMessage` (which adds 0 agents but re-reads the agent's whole context: resume only the same task with < 5 min idle, else a new executor with a ≤ 40-line relay) or to
 send the gap to the interview as an UNKNOWN. Shape:
 
 ```
@@ -94,7 +94,7 @@ Maximum 20 delegated agents; a typical run spends **4–8**: ≤6 miners + 1 ref
 Miners are `adcm-toolkits:researcher` calls with the tier of §1 as their explicit `model`; the refuter is an `adcm-toolkits:auditor`. When presenting the sheet, report
 `agents used: n/20 (opus a · sonnet b)`.
 
-## 6. Ultracode shape
+## 6. Workflow shape
 
 The fan-out is ONE workflow; the interview NEVER runs inside an agent.
 

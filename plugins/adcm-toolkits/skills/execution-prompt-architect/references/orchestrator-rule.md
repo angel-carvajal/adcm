@@ -53,10 +53,10 @@ The plugin's hooks impose these; the reason a denial prints names the way out. D
 
 ## Phase sessions and doc-sync
 
-- A wave runs as phase sessions, one clean session per phase: a implement + DoD · b gate · c gate fixes · d doc-sync + courier close · e merge close (production close when the wave deploys; a no-deploy wave gets the mini e, then `Next phase: none`).
+- A wave runs as phase sessions, one clean session per phase: a implement + DoD · b gate · c gate fixes · d doc-sync + courier close · e merge close (production close when the wave deploys; a no-deploy wave gets the mini e, then `Next phase: none`). Each phase prompt has one launch line outside its fenced block (`/model` and `/effort`); every phase close runs `spend-report --phase <letter>` and copies its line 1 into the handoff `Spend:` label, next to `DoD recipe:` and `Traps:`. Side tasks that surface mid-phase (a memory-index warning) are queued and done at the close, never mid-run.
   A phase never continues into the next one: it ends with `HANDOFF: <path>` and one sentence telling the owner to /clear and paste the next phase prompt.
 - Doc-sync is always a sonnet executor, from `templates/docsync-brief.md`, in two phases. A builds the edit sheet and the markers file and leaves
-  `docsync-apply --check` clean, writing no doc. B (by `SendMessage` with the marker values and the answers) pulls, runs `--check`, `--write`,
+  `docsync-apply --check` clean, writing no doc. B (by `SendMessage` with the marker values and the answers; exempt from the 5-minute rule) pulls, runs `--check`, `--write`,
   `status-digest`, commits by explicit path and pushes. When a doc-sync changes a LATER wave's plan, the closing phase re-audits those waves in
   scoped mode (`plan-audit --check` exit 2, scoped `plan-audit-brief.md`, `--seal`) before it closes; done or started waves are exempt. The main session never writes or edits a sheet; in phase d the handoff comes before B.
 
@@ -85,10 +85,9 @@ it offers to dig deeper and never investigates silently (the guard caps a status
 Every `Agent` and every Workflow `agent()` call either names its `model` or uses an
 `adcm-toolkits:*` type. A per-call `model` overrides the type's default: `researcher` +
 `model: opus` for Opus investigations, `executor` + `model: opus` for ⚠gate waves and
-Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent or when the
-main session is one tier down; types fix the TOOL SET, the tier rules still set the model.
+Opus-written sections, `auditor` + `model: sonnet` once the Opus quota is spent; types fix the TOOL SET, the tier rules still set the model.
 The built-in Plan and Explore types and any other packaged agent still need an explicit
-`model`: a Plan agent called without `model` inherits the main session's model. The role
+`model`: a Plan agent called without `model` inherits the main session's model. The `executor`, `executor-frontend` and `researcher` types default to `effort: medium`; ⚠gate `executor` calls and `researcher` + `model: opus` calls pass `effort: high` per call. The role
 agents load at the next session or on `/reload-plugins`.
 
 ## Tiers
@@ -102,10 +101,8 @@ agents load at the next session or on `/reload-plugins`.
 
 The types fix the tool set; the tier rules above still set the model of each call. When
 the brief's DoD includes the VISUAL CHECK, `executor-frontend` captures it itself — never
-both it and a capture agent. When the main session is not the top tier, every row moves
-one tier down; the courier stays `sonnet` regardless. No plugin in this session →
-`Agent(subagent_type: "general-purpose", model: "<tier>")` with the same brief. Budget 20 agents per session, `SendMessage` to a live agent
-costs 0.
+both it and a capture agent. The orchestrator never implements first and never audits or verifies a diff in its own context; every audit goes to a fresh agent at the tier the table names, whatever the main model (an Opus auditor under an Opus main is fine); the simplify pass runs `model: opus` in a fresh context. The courier is `sonnet`. The orchestrator never raises a STOP IF mid-run: it adopts the verifier's minimal fix unless it cites evidence, and logs each override as `override: <reason + evidence>`. No plugin in this session →
+`Agent(subagent_type: "general-purpose", model: "<tier>")` with the same brief. Budget 20 agents per session. `SendMessage` adds 0 to the agent counter but re-reads the agent's whole context: resume only the same task with < 5 min idle; otherwise a NEW executor with a relay file of ≤ 40 lines, counted against the 20 (exempt: courier retry and doc-sync phase B).
 
 ## Brief format (≤40 lines)
 

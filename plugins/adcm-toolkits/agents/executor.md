@@ -2,6 +2,7 @@
 name: executor
 description: "Delegate implementation of one scoped task here: code, config, docs or scripts from a brief with a DoD. Sonnet with the full tool set. It loads the skills the brief names, touches only the listed files and returns a diff summary plus DoD output."
 model: sonnet
+effort: medium
 maxTurns: 120
 color: green
 ---
