@@ -86,7 +86,7 @@ cannot resume a finished executor, a NEW executor takes the fix (3 + k + 1). No 
 - One run in flight per repo: open `dependencies` MRs block a new run.
 - Verify locally first, then push with `-o ci.skip` and open `glab mr create --draft`: one pipeline per MR at creation. An MR stays
   Draft until the auditor says `ship`.
-- Screenshots and logs stay in `<S>`, never in the MR or the repo. Never print `.npmrc` or `.env` values.
+- The MR evidence block (`## Evidencia`) carries the deps_smoke shots; logs and .npmrc/.env values never. Logs and the scratch dir stay in `<S>`, never in the repo. Never print `.npmrc` or `.env` values. (Canonical rule: `skills/execution-prompt-architect/references/orchestrator-rule.md`, section "MR evidence".)
 - Public examples use Acme, `example.com` and `@reviewer-handle`.
 - Tiers, the explicit `model` on every call and the Brief format of the briefs:
   `${CLAUDE_PLUGIN_ROOT}/skills/execution-prompt-architect/references/orchestrator-rule.md`.

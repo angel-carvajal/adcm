@@ -34,7 +34,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RELEASE = "0.23.0"  # what plugin.json, the template Protocol line and __version__ must all say
+RELEASE = "0.24.0"  # what plugin.json, the template Protocol line and __version__ must all say
 VERSION = RELEASE  # the checker's own __version__ (read in main) drives the fixtures
 FILES = ("status_digest.py", "status-brief.md", "plans-regen.py", "plans-html.tmpl",
          "prompts-regen.py", "prompts-html.tmpl", "courier_preflight.py", "plan_audit.py", "docsync_apply.py",
@@ -70,7 +70,8 @@ PHASE_LINES = {"phases": "One clean session per phase: a phase never continues i
                "planaudit": "Phase a step 0: `plan-audit --check` must exit 0 before any code.",
                "mainthread": "- **Main thread:** 12 Bash · 3 Read · 0 compactions (stamped by the hook).",
                "spend": "Phase close: run `spend-report --phase a` and copy its line 1 into the handoff.",
-               "launch": "LAUNCH: /model opus · /effort high"}
+               "launch": "LAUNCH: /model opus · /effort high",
+               "evidence": "Phase a step 3a: mr-evidence capture decides the VISUAL CHECK evidence."}
 LINKS_ONCE = "The courier's links block is pasted exactly once per delivery close, as the last lines of the final message."
 GUARD_TPL = "# fake template artifact-guard.py (selftest v1)\n"
 MERGE_GUARD = "# merge-guard hook (selftest)\n"
@@ -308,7 +309,7 @@ EXEC_DEFAULTS = dict(protocol=VERSION, types=TYPES, digest=True, last_log="s4", 
                      rule=True, skills=(), ctx="business-init-acme", prose=(), es=False, trap=False, sim=False,
                      wrap=False, hdrs={}, outside=(), appendix=(),
                      reviewer=True, merge_rule=True, links_once=True, automerge=False, s7text={}, map_step=True, notify=True,
-                     phases=True, handoff=True, docsync=True, planaudit=True, mainthread=True, spend=True, launch=True)
+                     phases=True, handoff=True, docsync=True, planaudit=True, mainthread=True, spend=True, launch=True, evidence=True)
 
 
 def exec_doc(waves, **o):
@@ -444,7 +445,7 @@ def fresh(ctx, name, waves=W3, ex=None, tk=None, rows=None, under="", **kw):
 
 LEGACY_FLAGS = dict(protocol=None, types=(), digest=False, last_log=None, nxt=None, blk=None, rule=False,
                     reviewer=False, merge_rule=False, links_once=False, map_step=False, notify=False,
-                    phases=False, handoff=False, docsync=False, planaudit=False, mainthread=False, spend=False, launch=False)
+                    phases=False, handoff=False, docsync=False, planaudit=False, mainthread=False, spend=False, launch=False, evidence=False)
 
 
 def legacy_08(ctx, name, under="", scripts="none"):
@@ -484,7 +485,7 @@ MARKERS_ON = {"digest_line": True, "last_log_s4": True, "next_label": True, "blo
               "model_rule": True, "protocol_line": True, "reviewer_line": True, "merge_rule": True, "links_once": True,
               "map_step": True, "notify_rule": True, "phase_sessions": True, "handoff_token": True,
               "docsync_check": True, "plan_audit_check": True, "main_thread": True,
-              "spend_report": True, "launch_line": True}
+              "spend_report": True, "launch_line": True, "evidence_ask": True}
 
 
 def markers_check(t, d, **want):
@@ -606,7 +607,7 @@ def case_legacy_011(ctx, t):
                       model_rule=False, protocol_line=False, reviewer_line=False, merge_rule=False, links_once=False,
                       map_step=False, notify_rule=False, phase_sessions=False, handoff_token=False,
                       docsync_check=False, plan_audit_check=False, main_thread=False,
-                      spend_report=False, launch_line=False)
+                      spend_report=False, launch_line=False, evidence_ask=False)
         t.eq(d.get("needed"), ["execute"], "needed")
 
 
@@ -731,13 +732,13 @@ def case_merge_markers(ctx, t):
 
 
 def case_phase_markers(ctx, t):
-    """0.22.0: the phase-protocol literals of execute.md (five from 0.22.0, spend-report and LAUNCH from 0.23.0), each detected alone; a 0.21 protocol lacks all."""
+    """0.22.0: the phase-protocol literals of execute.md (five from 0.22.0, spend-report and LAUNCH from 0.23.0, mr-evidence capture from 0.24.0), each detected alone; a 0.21 protocol lacks all."""
     names = {"phase_sessions": "phase-sessions", "handoff_token": "handoff-token", "docsync_check": "docsync-check",
              "plan_audit_check": "plan-audit-check", "main_thread": "main-thread",
-             "spend_report": "spend-report", "launch_line": "launch-line"}
+             "spend_report": "spend-report", "launch_line": "launch-line", "evidence_ask": "evidence-ask"}
     option = {"phase_sessions": "phases", "handoff_token": "handoff", "docsync_check": "docsync",
               "plan_audit_check": "planaudit", "main_thread": "mainthread",
-              "spend_report": "spend", "launch_line": "launch"}
+              "spend_report": "spend", "launch_line": "launch", "evidence_ask": "evidence"}
     for key, name in names.items():
         t.tag = f"({key} off) "
         d = both(ctx, t, fresh(ctx, "p-" + key, W3, ex={option[key]: False}), rc=1)

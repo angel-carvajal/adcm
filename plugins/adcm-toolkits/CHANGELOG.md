@@ -1,5 +1,29 @@
 # Changelog — adcm-toolkits
 
+## 0.24.0 — 2026-11-23
+
+- **MR evidence.** New `mr-evidence` launcher (`skills/explainer-video/scripts/evidence.mjs`, spec and rules in `references/evidence.md`):
+  `doctor`, `check`, `capture`, `attach`, `run` take desktop/mobile screenshots and a silent captioned mp4 of the branch's local dev server
+  and upload them to the GitLab MR (`## Evidencia` between `<!-- evidence:start -->` and `<!-- evidence:end -->`, or an MR note). GitHub
+  repos get an "adjuntar a mano" block. Why: frontend MRs carried no visual evidence; screenshots only reached the phone.
+- **`--mode` is media only.** `--mode screenshots|video|both|none` picks the media; the new boolean `--note` posts an MR note instead of
+  replacing the description region (default placement is the description). `--mode body|note` exits 64 with a hint. The note case of
+  `evidence-selftest.py` covers both. The launcher still rewrites `--env-file` to `--creds-file`.
+- **executor-frontend.** With `EVIDENCE: spec` in its brief it writes `qa/evidence/<Wx>.json` and returns `EVIDENCE-SPEC:`; it never
+  captures or uploads (`docs/agents.md`). The orchestrator's rule lives in `execution-prompt-architect/references/orchestrator-rule.md`, section "MR evidence".
+- **dependency-renovate.** The existing single AskUserQuestion round gains one question: upload the diff/after shots to the MR? (yes | no;
+  no video). On yes, `mr-evidence attach --files <S>/<shots dir> --md-out <S>/mr/evidence.md` runs before `glab mr create` (no new capture)
+  and `deps-check changelog --format mr --evidence <file>` renders it in `{{EVIDENCE_BLOCK}}` after `### Visual smoke`. Logs and
+  `.npmrc`/`.env` values still never go in the MR. Files: `SKILL.md`, `README.md`, `references/flow.md`, `templates/major-brief.md`,
+  `templates/mr-description.md.tmpl`, `scripts/deps_check.py`, `scripts/deps-check-selftest.py`.
+- **execution-prompt-architect.** New phase a step 3a (after the status-digest step, before any executor) asks once for UI waves: MR evidence `screenshots | video | both | none`. The answer is recorded as the handoff/task `Evidence:` label and phase c reuses it. `## Evidencia: pendiente (<reason>)` is written between the `<!-- evidence:start -->` and `<!-- evidence:end -->` markers so a later run replaces it. The `mr-evidence run` Bash call carries `timeout: 600000`. The deterministic `mr-evidence` script is the one stated exception to "the main session never renders". Files: `SKILL.md`, `references/orchestrator-rule.md`, `references/renovate.md`, `templates/wave-prompt.tmpl`, `templates/execute.md.tmpl`, `templates/task.md.tmpl`.
+- **renovate_check.** New `evidence-ask` flag in `lacks` (a template without the `mr-evidence capture` literal); the selftest gains 4 merge-guard cases.
+- **executor-frontend.** Returns `EVIDENCE-SPEC: not asked` when its brief carries no `EVIDENCE:` line.
+- **dependency-renovate patch-minor.** `templates/patch-minor-brief.md` now wires evidence like the major brief: `mr-evidence attach --files {{scratch}}/smoke/diff-patch-minor ... --md-out {{evidence_file}}` before `glab mr create` and `--evidence {{evidence_file}}` on the `--format mr` render. `{{evidence_file}}` (empty = the user said no) is defined in `references/flow.md`; the major brief names its diff dir explicitly (`diff-{{wave_slug}}`).
+- **mr-evidence hardening.** SIGTERM/SIGHUP cleanup of the dev server and temp files, stricter spec validation, and `glab mr note create` for the `--note` placement.
+- **Version constants.** `plugin.json` and the version strings of `courier_preflight.py`, `renovate_check.py`, `status_digest.py` and the
+  renovate selftest read 0.24.0 (the `execute.md.tmpl` Protocol line follows with the template owner's change).
+
 ## 0.23.0 — 2026-11-19
 
 - **Effort.** The planning skill stops recommending the multi-agent effort mode and drops its explanation: `/effort max` is for the

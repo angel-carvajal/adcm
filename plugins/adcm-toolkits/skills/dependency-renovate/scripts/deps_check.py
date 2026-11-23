@@ -16,7 +16,7 @@ Usage
   deps-check plan <repo> [--context PATH] [--offline] [--date YYYY-MM-DD] [--max-majors N]
                   [--prioritize a,b] [--routes auto|none] [--scratch DIR] [--json] [--write]
   deps-check changelog <repo> --plan FILE (--wave patch-minor|major:<family> | --check)
-                  [--verify KEY=VALUE]... [--smoke FILE] [--notes FILE] [--path REL] [--format entry|mr]
+                  [--verify KEY=VALUE]... [--smoke FILE] [--notes FILE] [--evidence FILE] [--path REL] [--format entry|mr]
                   [--offline] [--date D] [--json] [--write]
   deps-check context <repo> [--context PATH] [--plan FILE] [--file NAME] [--if-merged] [--scratch DIR]
                   [--offline] [--date D] [--json] [--write]
@@ -57,6 +57,7 @@ Flags
   --verify KEY=VALUE verification result, repeatable (build=pass, e2e=pass 24/24 (base 24/24), ci:lint=pass)
   --smoke FILE       a deps-smoke diff.json
   --notes FILE       migration notes of a major (first 10 lines)
+  --evidence FILE    --format mr: the `mr-evidence attach --md-out` block, rendered after Visual smoke (empty when absent)
   --path REL         changelog path inside the repo (default: Delivery `Changelog`, else
                      docs/dependencies/CHANGELOG.md)
   --format entry|mr  changelog entry (default) or MR description
@@ -3264,6 +3265,7 @@ def render_mr(plan, wave, locked_now, args, after, problem):
     verify = ["- %s: %s" % tuple(p.split("=", 1)) for p in (args.verify or [])] or ["- not recorded"]
     notes = read_text(args.notes) if args.notes else None
     note_rows = [l for l in (notes or "").splitlines() if l.strip()][:10] or ["- none"]
+    evidence = (read_text(args.evidence) or "").strip() if args.evidence else ""
     path = changelog_path(plan, args)
     values = {"TITLE": title,
               "SUMMARY_LINE": "%s · closes %s · base `%s`" % (
@@ -3271,6 +3273,7 @@ def render_mr(plan, wave, locked_now, args, after, problem):
               "MERGE_ORDER": " → ".join("`%s`" % w["branch"] for w in plan["waves"]),
               "STACKED_ON": "`%s`" % wave["base"], "REVIEWER": reviewer, "CHANGED_ROWS": changed,
               "SECURITY_ROWS": sec_rows, "NOTES": note_rows, "VERIFY_ROWS": verify, "SMOKE_ROWS": smoke_rows,
+              "EVIDENCE_BLOCK": evidence,
               "HELD_ROWS": held_rows(plan, ["- %s %s — planned %s, not applied" % (f["name"], f["from"], f["to"]) for f in dropped]),
               "CHANGELOG_PATH": path, "DATE": plan["date"]}
     return fill(tmpl, values)
@@ -3740,6 +3743,7 @@ def build_parser():
     p.add_argument("--verify", action="append", metavar="KEY=VALUE")
     p.add_argument("--smoke", metavar="FILE")
     p.add_argument("--notes", metavar="FILE")
+    p.add_argument("--evidence", metavar="FILE")
     p.add_argument("--path", metavar="REL")
     p.add_argument("--format", choices=("entry", "mr"), default="entry")
     p.add_argument("--check", action="store_true")

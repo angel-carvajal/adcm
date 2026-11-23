@@ -71,6 +71,9 @@ only re-planning trigger is a diverging census. This prompt is self-contained: n
 3. `status-digest --brain {{docs_dir}}` (no plugin: `python3 {{docs_dir}}/scripts/status_digest.py --brain {{docs_dir}}`): deps
    ✅, no foreign `[PARTIAL]` open, its PHASE line shows no open phase of this wave. Exit 2 → one `adcm-toolkits:digester`
    with `{{docs_dir}}/scripts/status-brief.md`; no Agent tool → stop and report.
+3a. {{UI waves only:}} after step 3 passes and before any executor, AskUserQuestion once: MR evidence `screenshots | video | both | none`
+   (rule: `references/orchestrator-rule.md` "MR evidence"; warn that a dev server on a prod DB cannot be detected). Record `Evidence: <answer>`
+   for the handoff; ≠ none → each executor-frontend brief gets the EVIDENCE line. Never re-ask in phases b-e.
 
 # GOAL — Wave {{Wx}}: {{task_titles}}
 Work EXACTLY the tasks {{IDs}} (specs: `{{docs_dir}}/detailed-plan.md` §{{section}}; the executors read them in full, you
@@ -79,7 +82,7 @@ DoD-auto (the loop's EXIT criterion, all by command; the FULL run happens AFTER 
 - [ ] {{command}} → {{expected_result}}
 - [ ] {{the comment-hygiene command from detailed-plan §0 Base DoD, with this wave's base branch}} → 0
 {{If a task extracts a helper: "- [ ] {{build/test of EVERY rewired consumer}} → exit 0" and "- [ ] {{dup census}} → 1".}}
-{{If the wave touches UI: "- [ ] a sub-agent reviewed the rendered page (see VISUAL CHECK)".}}
+{{If the wave touches UI: "- [ ] a sub-agent reviewed the rendered page (see VISUAL CHECK)" and "- [ ] mr-evidence run exit 0 (UI waves, Evidence ≠ none)".}}
 
 # TASKS
 One task per ID (TaskCreate): {{IDs}}; in_progress on entry, completed when its DoD slice is verified. All work on the
@@ -121,6 +124,9 @@ desktop (≥1280) AND mobile (375), both languages if i18n; it RETURNS findings 
 fonts/colors) plus the PNG paths. Sub-agents return `MEDIA: unsent: <paths>` (they cannot send). The main session sends
 unsent paths with SendUserFile by path WITHOUT opening them (load the tool with ToolSearch `select:SendUserFile`). Judging
 screenshots is always a sub-agent's job (capture researcher, executor-frontend VISUAL CHECK, auditor); the guard denies image reads on the main thread. Keep the paths for the handoff.
+Evidence ≠ none: the executor-frontend only writes `qa/evidence/{{Wx}}.json`; after the simplify pass and the full DoD-auto, push → `glab mr create` → ONE Bash (`timeout: 600000`)
+`mr-evidence run --spec qa/evidence/{{Wx}}.json --mode <answer> --mr <N>` (`mr-evidence run` = `mr-evidence capture` + `attach`). The script renders and prints paths only (the one
+main-thread exception); media still goes to the phone via `MEDIA: unsent`. Failure never blocks the MR (`## Evidencia: pendiente (<reason>)` goes between the `<!-- evidence:start -->`/`<!-- evidence:end -->` markers).
 
 # WORKFLOW (fan-out)
 AGENT BUDGET & ROLES: max 20 sub-agents in THIS phase session, one counter from zero. YOU ORCHESTRATE: decide design and
@@ -162,8 +168,9 @@ executors. Pure orchestrator (`references/orchestrator-rule.md`): only ≤~20-li
 - FORBIDDEN: {{paths outside this task — the named helper and consumers ARE in scope}} · dependency upgrades · secrets ·
   unnamed shared abstractions · hand-written variants of a derivable TS type · edits to `{{docs_dir}}/map/` · comments
   narrating decisions, rationale, wave/task IDs or execution-doc names (detailed-plan §0)
+- {{UI task, Evidence ≠ none: `EVIDENCE: spec qa/evidence/{{Wx}}.json`}}
 - RETURN: diff summary per file · every DOD-SLICE command with output · the `REUSED` line · the `RULE-OF-TWO` line ·
-  `MEDIA:` line when it captured · open questions. Never a bare "done".
+  `MEDIA:` line when it captured · `EVIDENCE-SPEC:` line on UI tasks · open questions. Never a bare "done".
 
 ## Simplifier brief ({{one per wave; ≤20 lines}})
 - AGENT: `code-simplifier:code-simplifier` (not installed → ONE `adcm-toolkits:executor`, same brief; the auditor has no
@@ -181,10 +188,10 @@ executors. Pure orchestrator (`references/orchestrator-rule.md`): only ≤~20-li
 # GUARDRAILS & PHASE CLOSE
 Touch nothing outside {{IDs}} ({{explicit allowed paths}}); the SCOPE manifest IS the scope. No secrets in code, commits
 or logs. Side tasks that surface mid-run (a memory-index warning, a stray cleanup) are queued in the handoff Notes and done at the close, never mid-run. {{Wave-specific hard limits and the master-plan §8 inviolable decisions this wave could violate.}}
-When the simplify pass ran and the FULL DoD-auto is green AFTER it: push `{{branch_name}}`, open the MR (pipeline green),
+When the simplify pass ran and the FULL DoD-auto is green AFTER it: push `{{branch_name}}`, open the MR (pipeline green; UI wave with Evidence ≠ none: description with `## Evidencia`, filled by `mr-evidence run`),
 leave it UNASSIGNED (phase d assigns it to `{{reviewer_handle}}`) and NEVER merge it. Run `spend-report --phase a` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase a`) and copy its line 1 (after `Spend: `) into the handoff's `Spend:` label. Then write the handoff
 `{{docs_dir}}/handoffs/{{Wx}}-<nn>-a.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` (nn = next free number): Result,
-`Next phase: {{b | d (NO-gate plain)}}`, branch/MR, DoD sha, checkpoint sha, Open, every agent line, the `DoD recipe:` and `Traps:` labels, the logbook notes
+`Next phase: {{b | d (NO-gate plain)}}`, branch/MR, DoD sha, checkpoint sha, Open, every agent line, the `DoD recipe:` and `Traps:` labels, the `Evidence:` label, the logbook notes
 (files, drift, reuse with the `born` entries of the `REUSED` lines, simplifier, fixes, escalations), the screenshot paths.
 A session that cannot finish (STOP IF, the 2nd compaction) writes it anyway with `Result: partial` and `Next phase: a`.
 Before the final message: send the media (unsent paths only, by path), then one `PushNotification` (`status: "proactive"`;
@@ -251,7 +258,7 @@ ladder sonnet → opus → you}}. No new simplify pass: these are targeted fixes
 - RETURN: per finding: id · root cause in one line · diff summary · repro before/after · open questions.
 DoD-auto (YOU run it in full after the fixes are integrated):
 - [ ] {{copied from phase a}}
-Then commit (`fix({{scope}}): … Refs: <IDs>`), push, pipeline green. A finding left unfixed → `Result: partial` with it
+Then commit (`fix({{scope}}): … Refs: <IDs>`), push, pipeline green; the fix touches UI and the handoff `Evidence:` ≠ none → `mr-evidence run --spec qa/evidence/{{Wx}}.json --mode <answer> --mr <N> --note` (no re-ask). A finding left unfixed → `Result: partial` with it
 under Open; a finding the executor disputes → Open with its reason, for the next auditor to judge.
 PHASE CLOSE: run `spend-report --phase c` (no plugin: `python3 {{docs_dir}}/scripts/spend_report.py --phase c`), then write `{{docs_dir}}/handoffs/{{Wx}}-<nn>-c.md` from `{{docs_dir}}/scripts/handoff.md.tmpl` (line 1 of the spend report → `Spend:`; fill `DoD recipe:` and `Traps:`) — Result, `Next phase:
 {{b | d (advisory)}}`, State = fix commit sha + DoD green, Open, the agent and escalation lines. Then one `PushNotification`
@@ -269,7 +276,7 @@ call: you brief, launch, read RETURNs and decide; you never write or edit a doc,
 1. `status-digest --brain {{docs_dir}}`: the newest handoff of {{Wx}} must say `Next phase: d` (phase b PASS, phase a on a
    NO-gate plain wave, or phase c on an advisory wave); read ONLY it; list the wave's handoffs with `ls {{docs_dir}}/handoffs/{{Wx}}-*`.
 2. Assign the MR to `{{reviewer_handle}}` (`glab mr update <N> --assignee {{reviewer_handle}}` | `gh pr edit <N> --add-reviewer
-   {{reviewer_handle}}`); NEVER merge it — the merge stays a DoD-human item and wave N+1 waits for it.
+   {{reviewer_handle}}`); evidence is already decided (handoff `Evidence:`), never re-ask; NEVER merge it — the merge stays a DoD-human item and wave N+1 waits for it.
 AGENT BUDGET: max 20 in this session (normally 3): the doc-sync executor, {{the skill-sync executor,}} one courier per batch.
 3. Doc-sync phase A: ONE `adcm-toolkits:executor` (`sonnet`) with `{{docs_dir}}/scripts/docsync-brief.md` filled — scratch
    folder `<scratchpad>/docsync-{{Wx}}`, the handoff paths, the gate report paths, the facts (MR id, pipeline, verdicts),

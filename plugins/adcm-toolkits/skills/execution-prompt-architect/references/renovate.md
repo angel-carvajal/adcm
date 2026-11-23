@@ -40,6 +40,7 @@ For EVERY block in `needed(...)` (state `missing`, `partial`, `unparsed`; RULES:
   copies the matching sentences from the current `execute.md.tmpl` (brief line PHASES) into pending waves' prompts and §1/§2b/§4;
   executed waves are never re-split or re-audited; once the execute block is ok, run SKILL.md Step 6b once for the pending waves. `--copy-scripts` also brings `plan_audit.py`, `docsync_apply.py` and (0.23.0) `spend_report.py` (thirteen SCRIPTS files: also the handoff template and the two briefs).
   Since 0.23.0 `lacks` can name `spend-report` (no `spend-report --phase` in the phase prompts) or `launch-line` (no `LAUNCH: /model` line): the executor copies them from the current `execute.md.tmpl`/phase prompts.
+  Since 0.24.0 `lacks` can name `evidence-ask` (no `mr-evidence capture` literal): the executor copies it from the current `execute.md.tmpl` (§7 phase a step 3a + the VISUAL CHECK evidence paragraph).
   Since 0.19.0 `lacks` can name `map-step` (no `map-refresh` call in §2b): the executor writes the template's §1 principle 9
   map sentences, the §2b step 1 **map** field, the step 6 `map-refresh` call and the step 7 wording.
   The executor writes the template's text: the `> **Reviewer:** <handle> (<forge>) · **Merge policy:** wait` line under the Protocol line,

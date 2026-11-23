@@ -25,6 +25,8 @@ Claude never merges an MR/PR and never pushes code to the default branch (the Re
 
 ## Reuse block
 
+**Evidence duty (0.24.0).** When the brief has `EVIDENCE: spec`, `executor-frontend` writes `qa/evidence/<Wx>.json` (the `mr-evidence` spec) and returns an `EVIDENCE-SPEC:` line with its path; it never captures, never uploads and never touches the MR: the orchestrator asks what to send, and the `mr-evidence` launcher runs after the wave's verification.
+
 The shared `## Reuse` section is a deliberate duplicate: identical in `executor` and `executor-frontend`, because an agent body has no include mechanism. Edit both copies together; a prefix check of the two `## Reuse` sections catches drift. The frontend sub-block lives only in `executor-frontend`. Both agents add the `REUSED` line and the `RULE-OF-TWO` line to their RETURN.
 
 ## Fallback

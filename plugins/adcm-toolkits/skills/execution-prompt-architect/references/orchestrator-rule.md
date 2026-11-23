@@ -6,7 +6,7 @@ In any substantive task the main session is a **pure orchestrator**: it analyzes
 briefs, launches sub-agents with an explicit `model`, reads their RETURNs and
 decides/integrates. It does NOT execute the task itself:
 
-- reading files, editing at scale, browsing and screenshots belong to sub-agents (the RETURN carries what matters);
+- reading files, editing at scale, browsing and screenshots belong to sub-agents (the RETURN carries what matters); the one exception is the deterministic `mr-evidence` script (see "MR evidence");
 - rendering HTML, publishing Artifacts and assembling the links block belong to the `artifact-courier`;
 - the state of a project comes from one `status-digest` call, never from `task.md`, `execute.md` or the plans
   (see "Status questions").
@@ -49,7 +49,17 @@ The plugin's hooks impose these; the reason a denial prints names the way out. D
   The docs repo (ai-brain) and the marketplaces commit and push to main directly.
 - The links block is the last RETURN's block of the last courier, pasted once per delivery close. Progress turns, 'Para ti' notes, answers and audits carry no links and no `=== LINKS ===` marker. No agent other than the courier returns URLs.
 - Media: a sub-agent cannot load SendUserFile, so it returns `MEDIA: unsent: <paths>`. The main session sends them with SendUserFile by path WITHOUT opening them
-  (load it with ToolSearch `select:SendUserFile`). Judging screenshots is always a sub-agent's job; the guard denies image reads on the main thread.
+  (load it with ToolSearch `select:SendUserFile`). Judging screenshots is always a sub-agent's job; the guard denies image reads on the main thread. The `mr-evidence` script is the only thing that renders or screenshots from the main thread: it prints paths, never images, and the main session never opens them.
+
+## MR evidence
+
+Every UI MR can carry screenshots and/or video in its description. Sub-agents cannot ask, so the orchestrator (never a sub-agent) does.
+- Ask once with AskUserQuestion: `screenshots | video | both | none`. UI waves: phase a step 3a (after preconditions, plan-audit and status-digest, before any executor); ad-hoc `executor-frontend` MRs: before sending the brief; `dependency-renovate`: inside its single ask round. Record the answer as `Evidence:` in the handoff; phase c reuses it, phase d never re-asks.
+- Answer ≠ none: the `executor-frontend` brief carries `EVIDENCE: spec qa/evidence/<Wx>.json` and its RETURN `EVIDENCE-SPEC: <path>`. The agent only writes the spec; it never captures, uploads or reads `.env*`.
+- Source: the branch's local dev server with seed data, loopback only. Warn when asking: a dev server pointed at a production DB cannot be detected. Login uses `EVIDENCE_USER` / `EVIDENCE_PASS` from `.env.local`, read only by the script, never in media, logs or the MR.
+- After the simplify pass and the full DoD-auto are green: push → `glab mr create` → ONE Bash call (pass `timeout: 600000`, the 10-minute cap) `mr-evidence run --spec qa/evidence/<Wx>.json --mode <answer> --mr <N>` (`run` = `capture` + `attach`; exit 0 ok). The script prints paths only; the media still goes to the phone via `MEDIA: unsent`.
+- Phase c touching UI (answer ≠ none): `mr-evidence run --spec qa/evidence/<Wx>.json --mode <answer> --mr <N> --note` (`--mode` = media only; `--note` = refreshed MR note instead of the description body; always via the `mr-evidence` launcher). GitLab only; on GitHub the section says "adjuntar a mano".
+- A failure never blocks the MR: open it with `## Evidencia: pendiente (<reason>)` between `<!-- evidence:start -->` and `<!-- evidence:end -->` (so a later `mr-evidence` run replaces it) and record the reason in the handoff `Evidence:` label.
 
 ## Phase sessions and doc-sync
 
@@ -111,7 +121,7 @@ both it and a capture agent. The orchestrator never implements first and never a
 output, with the orchestrator's decisions applied) · `DOD-SLICE` (`command → expected
 result`, run before returning) · `STOP IF` (conditions to stop and report instead of
 improvising) · `FORBIDDEN` (paths, actions, dependency changes) · `RETURN` (exact shape
-of the answer). The brief carries the investigation; the sub-agent never re-derives it.
+of the answer) · `EVIDENCE` (executor-frontend only, when Evidence ≠ none: `spec qa/evidence/<Wx>.json`; RETURN adds `EVIDENCE-SPEC:`). The brief carries the investigation; the sub-agent never re-derives it.
 
 ## RETURN: short and structured
 

@@ -1304,6 +1304,14 @@ def case_mr_format(ctx, t):
     t.has(body, "- build: pass", "verification rows")
     t.has(body, "Changelog: `%s` (entry 2026-10-25)." % CHANGELOG, "changelog pointer")
     t.ok("{{" not in body, "every placeholder rendered")
+    t.ok("## Evidencia" not in body, "no evidence block without --evidence")
+    ev = os.path.join(os.path.dirname(plan), "evidence-test.md")
+    with open(ev, "w") as fh:
+        fh.write("<!-- evidence:start -->\n## Evidencia\n- shot\n<!-- evidence:end -->\n")
+    changelog(ctx, repo, plan, "--wave", "patch-minor", "--format", "mr", "--verify", "build=pass", "--evidence", ev, "--write")
+    body = read(target) or ""
+    t.has(body, "## Evidencia", "evidence block rendered")
+    t.ok(body.index("### Visual smoke") < body.index("## Evidencia") < body.index("### Not in this MR"), "evidence sits after Visual smoke")
 
 
 def case_changelog_run_id_keyed(ctx, t):

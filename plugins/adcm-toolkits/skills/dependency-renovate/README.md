@@ -74,7 +74,7 @@ verdict line; 64 is a usage error in every subcommand.
 ## What it will not do
 
 Merge, schedule a merge, or push to the default branch; change `user.email`; bump `node`, `npm`, `pnpm`, `yarn`, `corepack`, `bun` or `deno`
-as dependencies; decide a runtime major the repo does not declare; edit source code for a patch or minor bump; put screenshots or logs in an
+as dependencies; decide a runtime major the repo does not declare; edit source code for a patch or minor bump; put logs (or anything but the deps_smoke shots in the `## Evidencia` block) in an
 MR; print `.npmrc` or `.env` values.
 
 ## Structure

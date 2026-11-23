@@ -15,8 +15,8 @@ DELIVERABLE (log every step under {{scratch}}/logs):
      `deps-smoke diff {{scratch}}/smoke/before {{scratch}}/smoke/after-patch-minor --noise {{scratch}}/smoke/before-2 --out {{scratch}}/smoke/diff-patch-minor`.
   4. On a failure bisect the wave (≤3 halvings), move the culprit to needs-code or held, verify again.
   5. `deps-check changelog {{repo}} --plan {{plan}} --wave patch-minor --verify build=pass --verify e2e="pass n/n (base n/n)" --smoke {{scratch}}/smoke/diff-patch-minor/diff.json --write` (one `--verify step=result` per step run),
-     then the same command plus `--format mr` (the MR body needs the same `--verify` and `--smoke`). Entries are keyed by run-id (<date>-<sha7>).
-  6. `deps-check preflight {{repo}}` must still say identity ok; commit. dry_run yes → stop: branch kept, no push, no MR. Else `git push -u origin {{branch}} {{push_opts}}`, then
+     then the same command plus `--format mr` (the MR body needs the same `--verify` and `--smoke`; plus `--evidence {{evidence_file}}` when it is set). Entries are keyed by run-id (<date>-<sha7>).
+  6. `deps-check preflight {{repo}}` must still say identity ok; commit. dry_run yes → stop: branch kept, no push, no MR. Else `git push -u origin {{branch}} {{push_opts}}`, then, if the orchestrator asked for evidence (`{{evidence_file}}` set; empty = no), `mr-evidence attach --files {{scratch}}/smoke/diff-patch-minor --repo {{repo}} --md-out {{evidence_file}}` and re-render the body (step 5 `--format mr`, now with `--evidence {{evidence_file}}`); no new capture; then
      `glab mr create --draft -s {{branch}} -b {{default_branch}} -a {{reviewer}} --reviewer {{reviewer}} -l dependencies --remove-source-branch -y -t "chore(deps): patch and minor bumps {{run_id}}" -d "$(cat {{scratch}}/mr/patch-minor.md)"`.
   SHOOT = `deps-smoke shoot --base {{base_url}} --routes {{routes}} --serve "{{serve_cmd}}" --ready {{ready_url}} --env PORT={{port}} --env HOST=127.0.0.1 --node-pin {{node_pin}} --out <dir>`.
   e2e and SHOOT run in the background and are awaited (a foreground Bash call is capped at 10 minutes). Before each, `lsof -iTCP:{{port}} -sTCP:LISTEN` prints nothing (127.0.0.1 and ::1).

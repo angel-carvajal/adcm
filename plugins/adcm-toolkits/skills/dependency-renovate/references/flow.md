@@ -29,6 +29,7 @@ The main session fills the `{{placeholders}}` of the four briefs in `templates/`
 | `{{changelog_path}}` | the Delivery `Changelog`, else `docs/dependencies/CHANGELOG.md` |
 | `{{branches}}` `{{tip}}` `{{changed_routes}}` | the wave branches in merge order · the last of them · the `changed` and `resized` routes of every `diff.json` with their PNG paths |
 | `{{dry_run}}` | `yes` for a dry run, else `no` |
+| `{{evidence_file}}` | `<S>/mr/evidence.md` when the round's evidence question said yes; empty when the user said no |
 
 ## Modes
 
@@ -61,6 +62,7 @@ The main session fills the `{{placeholders}}` of the four briefs in `templates/`
 - Each blocker prints one `Para ti:` line with the exact owner command, for example `git -C <repo> config user.email dev@example.com`.
   The skill never runs it and never changes `user.email` or any git config: the owner does, with `!`.
 - Missing values (expected identity, `@reviewer-handle`, smoke routes) are asked in ONE AskUserQuestion round, then preflight runs again.
+  The same round carries one more question: upload the diff/after shots to the MR? (yes | no; no video for renovate). yes → the `## Evidencia` block below.
   Identity is checked again before every commit.
 - `dependencies.md` exists → read it once (Policy: Rules, Verification, Smoke, Delivery). The repo is never re-scanned.
 - `deps-smoke doctor` must end `DOCTOR: ready` (Node 20+, playwright-core, Chrome); otherwise it is a `Para ti` line.
@@ -110,6 +112,8 @@ The main session fills the `{{placeholders}}` of the four briefs in `templates/`
 
    ```
    git push -u origin <branch> -o ci.skip
+   mr-evidence attach --files <S>/smoke/diff-<slug> --repo <repo> --md-out {{evidence_file}}   # only if {{evidence_file}} is set (round said yes); before glab mr create
+   deps-check changelog <repo> --plan <plan> --wave <id> --format mr --evidence {{evidence_file}} --write   # same flags as the body render
    glab mr create --draft -s <branch> -b <default> -a @reviewer-handle --reviewer @reviewer-handle -l dependencies --remove-source-branch -y -t "<title>" -d "$(cat <S>/mr/patch-minor.md)"
    ```
 
@@ -121,6 +125,7 @@ reuse the other process).
 
 `deps-smoke shoot --base http://localhost:3000 --routes /,/compare --out <S>/smoke/after-patch-minor --serve "npm start" --ready http://localhost:3000/ --env PORT=3000 --env HOST=127.0.0.1`
 
+- Evidence (answer yes): `mr-evidence attach --files <S>/smoke/diff-<slug> --repo <repo> --md-out <S>/mr/evidence.md` runs BEFORE `glab mr create`, uploads the diff/after PNGs already shot (no new capture) and the MR body renders them under `## Evidencia` (`deps-check changelog --format mr --evidence <S>/mr/evidence.md`). On a GitHub repo the block says "adjuntar a mano". Canonical rule: `skills/execution-prompt-architect/references/orchestrator-rule.md`, section "MR evidence".
 - The same command with `--out <S>/smoke/before`, then `<S>/smoke/before-2`, runs on `<default>` before the bump; the briefs add `--node-pin <ver>`
   (the plan's `smoke.node_pin`) to every shoot.
 - The built-in shooter is the only one: never a project shot script (`--with`), because a bump of the project's Playwright changes its driver
@@ -201,7 +206,7 @@ conflicting or pipeline-less (`nopipeline(!n)`) MR · no secrets in diffs, MR bo
 - Live run with verdict `ship`: `glab mr update <iid> --ready` per MR in merge order, after `deps-check status <repo>` shows no failed,
   conflicting or pipeline-less MR (`STATUS: ok(!a,!b)`). `STATUS: unparsed` (exit 2) means glab is missing, unauthenticated or cannot
   resolve the host (an SSH-alias remote may need `GITLAB_HOST` or `-R`): a `Para ti` line.
-- The PNGs of changed routes (`diff-<slug>.png` and the after shots) go out with `SendUserFile`: sub-agents cannot. After them, only on verdict `ship` (a `fix-first` stop already notified in §6), one `PushNotification` (`Claude finished in <folder>`; same status, load and skip rules as §6), then the final message.
+- The PNGs of changed routes (`diff-<slug>.png` and the after shots) go out with `SendUserFile`: sub-agents cannot (they also go to the MR when the evidence question said yes). After them, only on verdict `ship` (a `fix-first` stop already notified in §6), one `PushNotification` (`Claude finished in <folder>`; same status, load and skip rules as §6), then the final message.
 - The final message names MRs by iid (no links block: no artifacts) and carries the `Para ti` lines:
   - merge order `MR !a → !b → !c`: each merge retargets the next MR and clears its head pipeline, so the Reviewer re-runs it;
   - the never-auto decisions and the runtime decision (EOL date, candidate LTS lines);

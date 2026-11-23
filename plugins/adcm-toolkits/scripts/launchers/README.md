@@ -20,6 +20,8 @@ they carry the executable bit, no manifest key. Where that hook does not run (cl
 Recording needs Node 20+, so it puts the newest nvm 2x install (version order) first on PATH and falls back to the `node` already there;
 its `--doctor` flag reports what is missing (Node, Playwright, browser, ffmpeg, voice).
 
+`mr-evidence` is the same kind of Node 20+ launcher for `skills/explainer-video/scripts/evidence.mjs`: `doctor`, `check`, `capture`, `attach`, `run` take screenshots (desktop 1280 + mobile 375 per route) and a silent captioned mp4 of the branch's local dev server (loopback only; login from `EVIDENCE_USER`/`EVIDENCE_PASS` in `.env.local`, read only by the script) and upload them to a GitLab MR with `glab api projects/:id/uploads` (`attach --mr N [--note]` edits the region between `<!-- evidence:start -->` and `<!-- evidence:end -->` or, with `--note`, posts a note; `attach --files <dir>` uploads existing PNG/MP4 without a spec). It prints `EVIDENCE: ok|failed(<code>)`, `MEDIA: unsent: <paths>` and the markdown block; exits 0/1/2/3/4/5/6/64. The launcher passes `--env-file` on as `--creds-file` (Node would load it itself). Spec, markers and the production-database warning: `skills/explainer-video/references/evidence.md`.
+
 `design-board` is the launcher of the `design-direction-architect` board: `doctor` and `capture` run `skills/design-direction-architect/scripts/capture.mjs` with `node` (same Node 20+ shim as `explainer-record`);
 `init`, `check`, `build`, `mark`, `adopt`, `log` and `pack` run `design-board.py` with `python3 -B`; any other subcommand prints the usage on stderr and exits 64.
 

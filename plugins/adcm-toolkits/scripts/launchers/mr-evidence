@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+export PYTHONDONTWRITEBYTECODE=1
+self=$0
+while [ -h "$self" ]; do
+  dir=$(cd "$(dirname "$self")" && pwd -P)
+  self=$(readlink "$self")
+  case $self in /*) ;; *) self=$dir/$self ;; esac
+done
+root=$(cd "$(dirname "$self")/../.." && pwd -P)
+# The evidence recorder needs Node 20+ and the default node on PATH is often older: the newest nvm 2x (version order) wins, else PATH's node.
+NODE_BIN=$(ls -d "$HOME"/.nvm/versions/node/v2[0-9]*/bin 2>/dev/null | sort -V | tail -1)
+[ -n "$NODE_BIN" ] && PATH="$NODE_BIN:$PATH"
+# Node loads any --env-file in argv itself (and aborts on a missing one): the script reads it as --creds-file.
+for a; do
+  shift
+  case $a in
+    --env-file) set -- "$@" --creds-file ;;
+    --env-file=*) set -- "$@" "--creds-file=${a#--env-file=}" ;;
+    *) set -- "$@" "$a" ;;
+  esac
+done
+exec node "$root/skills/explainer-video/scripts/evidence.mjs" "$@"
