@@ -48,6 +48,9 @@ SITE = {
                   f"if(document.getElementById('u').value==='{USER}'&&document.getElementById('p').value==='{SECRET}')location='/app.html';else document.getElementById('e').textContent='bad'"
                   '">Go</button><p id=e></p>',
     "ext.html": '<!doctype html><title>Ext</title><h1>Ext</h1><img src="http://example.com/x.png">',
+    "font.html": '<!doctype html><title>Font</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter"><h1 style="font-family:Inter">Font</h1>',
+    "fontfetch.html": "<!doctype html><title>FontFetch</title><h1>FontFetch</h1><script>fetch('https://fonts.googleapis.com/x').catch(()=>{})</script>",
+    "fonthttp.html": '<!doctype html><title>FontHttp</title><link rel="stylesheet" href="http://fonts.googleapis.com/css2?family=Inter"><h1>FontHttp</h1>',
     "app.html": '<!doctype html><title>App</title><h1 id=welcome>Welcome</h1><div data-ready>app</div><p style="height:2000px">tall</p>',
 }
 
@@ -466,6 +469,56 @@ def case_outside_host_runtime(e):
     check(p.returncode == 6 and "failed(6)" in p.stdout, f"outside host should be rc 6 with failed(6), got {p.returncode}\n{p.stdout}{p.stderr}")
 
 
+def _no_auth_capture(e, route):
+    f = e.spec(free_port(), routes=[{"path": route, "name": "r"}])
+    d = json.load(open(f))
+    del d["auth"]
+    json.dump(d, open(f, "w"))
+    return e.run(["capture", "--spec", f, "--mode", "screenshots", "--out", e.fresh("out")])
+
+
+def case_font_cdn_link_allowed(e):
+    e.need_browser()
+    p = _no_auth_capture(e, "/font.html")
+    check(p.returncode == 0, f"a Google Fonts <link> should capture with rc 0, got {p.returncode}\n{p.stdout}{p.stderr}")
+
+
+def case_font_cdn_fetch_blocked(e):
+    e.need_browser()
+    p = _no_auth_capture(e, "/fontfetch.html")
+    check(p.returncode == 6 and "failed(6)" in p.stdout, f"fetch() to a font host should be rc 6 with failed(6), got {p.returncode}\n{p.stdout}{p.stderr}")
+
+
+def case_font_cdn_http_blocked(e):
+    e.need_browser()
+    p = _no_auth_capture(e, "/fonthttp.html")
+    check(p.returncode == 6 and "failed(6)" in p.stdout, f"an http:// font-host stylesheet should be rc 6 with failed(6), got {p.returncode}\n{p.stdout}{p.stderr}")
+
+
+def case_font_cdn_redirect_document_blocked(e):
+    e.need_browser()
+    srv = os.path.join(e.fresh("redir"), "redir.py")
+    open(srv, "w").write(
+        "import http.server, sys\n"
+        "class H(http.server.BaseHTTPRequestHandler):\n"
+        "    def do_GET(self):\n"
+        "        if self.path == '/go':\n"
+        "            self.send_response(302); self.send_header('Location', 'https://fonts.googleapis.com/css2?family=Inter'); self.send_header('Content-Length', '0'); self.end_headers()\n"
+        "        else:\n"
+        "            self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(b'<!doctype html><title>R</title>ok')\n"
+        "    def log_message(self, *a): pass\n"
+        "http.server.ThreadingHTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()\n")
+    port = free_port()
+    f = e.spec(port, routes=[{"path": "/go", "name": "go"}])
+    d = json.load(open(f))
+    del d["auth"]
+    d["serve"]["cmd"] = f"python3 {srv} {port}"
+    d["serve"]["ready"] = f"http://127.0.0.1:{port}/ok"
+    json.dump(d, open(f, "w"))
+    p = e.run(["capture", "--spec", f, "--mode", "screenshots", "--out", e.fresh("out")])
+    check(p.returncode == 6 and "failed(6)" in p.stdout, f"a loopback 302 to a font-host document should be rc 6 with failed(6), got {p.returncode}\n{p.stdout}{p.stderr}")
+
+
 def case_sigterm_kills_server(e):
     e.need_browser()
     port = free_port()
@@ -528,7 +581,7 @@ def case_run_end_to_end(e):
 
 
 CASES = [case_usage, case_host_not_loopback, case_spec_video_too_long, case_check_ok, case_launcher_env_file, case_capture_both_dry, case_server_negatives,
-         case_login_bad, case_secret_leak, case_glab_upload_argv, case_glab_413, case_body_idempotent, case_note_mode, case_spec_strictness, case_outside_host_runtime, case_sigterm_kills_server, case_413_ignores_paths, case_unbalanced_markers, case_github,
+         case_login_bad, case_secret_leak, case_glab_upload_argv, case_glab_413, case_body_idempotent, case_note_mode, case_spec_strictness, case_outside_host_runtime, case_font_cdn_link_allowed, case_font_cdn_fetch_blocked, case_font_cdn_http_blocked, case_font_cdn_redirect_document_blocked, case_sigterm_kills_server, case_413_ignores_paths, case_unbalanced_markers, case_github,
          case_run_end_to_end]
 
 

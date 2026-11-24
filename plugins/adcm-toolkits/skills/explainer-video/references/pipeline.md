@@ -123,7 +123,7 @@ All optional except `baseUrl`. Unknown keys are an error. Defaults:
 | Key | Default | Meaning |
 |---|---|---|
 | `baseUrl` | none, required | http(s) URL of the local app; `route` and `goto /path` are joined to it |
-| `allowHosts` | `["localhost", "127.0.0.1"]` | the only hostnames the page may reach (HTTP and WebSocket; ports are not compared). The first request outside, a redirect hop included, aborts the run with exit 2 |
+| `allowHosts` | `["localhost", "127.0.0.1"]` | the only hostnames the page may reach (HTTP and WebSocket; ports are not compared). The first request outside, a redirect hop included, aborts the run with exit 2. Exception: GET stylesheet/font requests to `fonts.googleapis.com` and `fonts.gstatic.com` (https only) pass; anything else to those hosts still aborts |
 | `guionesDir` | `guiones` | folder of the guiones, relative to the config file |
 | `outDir` | `out` | output folder, relative to the config file |
 | `viewport` | `{"width": 1280, "height": 800}` | video size |
@@ -204,7 +204,7 @@ removed automatically. Recording stops on Ctrl-C (exit 130) and cleans the brows
 | exit 2, `voice not ready` or `missing voice engine` with `synthesis failed (... 403 ...)` | Microsoft changed the read-aloud handshake and the installed edge-tts is older | upgrade it in the voice venv: `~/.local/share/adcm-voz/venv/bin/pip install -U edge-tts`; if it still fails, the owner chooses `REC_TTS=piper` |
 | a take fails with `could not synthesize` | the engine worked at the check and failed on a step (a long text, a dropped connection) | re-run the id; if it repeats, read the reason in the message and apply the row above |
 | `no network to the edge endpoint` | offline | connect, or the owner chooses `REC_TTS=piper` or `say` |
-| exit 2, `is outside allowHosts` | `baseUrl`, a `goto` or a page request points at another host | aim at the local stack; a CDN, font host or analytics script the app loads in dev also aborts the run: serve it locally or switch it off in dev; add a host only for another LOCAL service |
+| exit 2, `is outside allowHosts` | `baseUrl`, a `goto` or a page request points at another host | aim at the local stack; a CDN or analytics script the app loads in dev also aborts the run, and so does a font host other than the read-only Google Fonts exception (GET stylesheet/font to `fonts.googleapis.com` and `fonts.gstatic.com` passes): serve it locally or switch it off in dev; add a host only for another LOCAL service |
 | exit 2, `the app does not respond` | the local stack is down | start it; `--check` does not need it, `--dry` and recording do |
 | exit 2, `environment variable X is not set` | an `{{env:X}}` has no value | export it in the environment that launches the recorder, for example `set -a; . ./.env.local; set +a; explainer-record 01` with the file gitignored |
 | exit 2, `another recorder is running` | the lock is held | wait for it; if the pid is dead the lock is removed on the next run |

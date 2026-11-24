@@ -76,7 +76,7 @@ import sys
 import time
 import unicodedata
 
-__version__ = "0.24.0"
+__version__ = "0.24.1"
 
 KNOWN = "✅⛔⏸🔄☐🔀🔬"  # keep in sync with plans-regen.py GL ('✅⛔⏸🔄☐'), which this set extends
 GLYPH_ORDER = KNOWN[0] + KNOWN[3] + KNOWN[1:3] + KNOWN[4:]  # display order: done, doing, blocked, paused, ...

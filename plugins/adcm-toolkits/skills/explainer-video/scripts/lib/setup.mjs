@@ -11,25 +11,43 @@ const guarded = (url) => {
   }
 };
 
+const FONT_HOSTS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com']);
+const isFontAsset = (request) => {
+  try {
+    const url = new URL(request.url());
+    return (
+      url.protocol === 'https:' && url.port === '' && url.username === '' && url.password === '' &&
+      FONT_HOSTS.has(url.hostname) && request.method() === 'GET' && ['stylesheet', 'font'].includes(request.resourceType())
+    );
+  } catch {
+    return false;
+  }
+};
+
 // Every request the page makes (HTTP and WebSocket) to a host outside allowHosts is aborted and ends the run:
 // recordings only ever run against a local stack, never production. An allowed request is fetched here without
 // following redirects, so a 3xx that points outside is stopped before the outside host is contacted and each
 // allowed hop comes back through this route. EventSource streams cannot be buffered: they pass through, and the
 // request listener ends the run on any hop that leaves the list.
+// Font CDN exception: GET stylesheet/font requests to fonts.googleapis.com and fonts.gstatic.com pass. They are public,
+// static, read-only assets and the screenshot must show the real typography; a failed fetch (offline) aborts only that
+// request. Anything else to those hosts (fetch/xhr, POST, WebSocket, EventSource, documents) stays blocked, and a
+// redirect from a font asset may only point to allowHosts or the font hosts.
 export async function guardHosts(context, allowHosts, onBlocked) {
   const blocked = (url) => guarded(url) && !hostAllowed(url, allowHosts);
+  const fontHostOk = (url) => { try { return FONT_HOSTS.has(new URL(url).hostname); } catch { return false; } };
   // The run ends first: the abort makes the page's own navigation fail, and that failure must not win the exit code.
   const stop = (route, url) => {
     const ended = onBlocked(url);
     route.abort('blockedbyclient').catch(() => {});
     return ended;
   };
-  const redirectsOutside = (response, url) => {
+  const redirectsOutside = (response, url, fontAsset) => {
     const location = response.headers().location;
     if (!location || response.status() < 300 || response.status() >= 400) return null;
     try {
       const next = new URL(location, url).href;
-      return blocked(next) ? next : null;
+      return blocked(next) && !(fontAsset && fontHostOk(next)) ? next : null;
     } catch {
       return null;
     }
@@ -37,16 +55,16 @@ export async function guardHosts(context, allowHosts, onBlocked) {
   await context.route('**/*', async (route) => {
     const request = route.request();
     const url = request.url();
-    if (blocked(url)) return stop(route, url);
+    if (blocked(url) && !isFontAsset(request)) return stop(route, url);
     if (request.resourceType() === 'eventsource') return route.fallback();
     const response = await route.fetch({ maxRedirects: 0 }).catch(() => null);
     if (!response) return route.abort('failed').catch(() => {});
-    const outside = redirectsOutside(response, url);
+    const outside = redirectsOutside(response, url, isFontAsset(request));
     if (outside) return stop(route, outside);
     return route.fulfill({ response }).catch(() => {});
   });
   context.on('request', (request) => {
-    if (blocked(request.url())) onBlocked(request.url());
+    if (blocked(request.url()) && !isFontAsset(request)) onBlocked(request.url());
   });
   await context.routeWebSocket(/.*/, async (ws) => {
     if (!blocked(ws.url())) return ws.connectToServer();

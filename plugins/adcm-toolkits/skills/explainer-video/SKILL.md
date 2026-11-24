@@ -128,7 +128,7 @@ base URL; do not widen either.
    gif tools) to record, click for the viewer or narrate. The model writes guiones and
    launches commands.
 2. **Never production.** `allowHosts` defaults to `localhost` and `127.0.0.1`; a request
-   to any other host aborts the run with exit 2. Never aim `baseUrl` at a deployed
+   to any other host aborts the run with exit 2 (one read-only exception: GET stylesheet/font requests to `fonts.googleapis.com` and `fonts.gstatic.com` pass; anything else to those hosts still aborts). Never aim `baseUrl` at a deployed
    environment; add a host to `allowHosts` only for another LOCAL service, and only when the
    owner says so.
 3. **Secrets only as `{{env:VAR}}`.** No literal password, token or key in a config, guion,

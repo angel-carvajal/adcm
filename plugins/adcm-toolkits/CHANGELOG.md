@@ -1,5 +1,11 @@
 # Changelog — adcm-toolkits
 
+## 0.24.1 — 2026-11-24
+
+- **Fix: mr-evidence and explainer-record exited on Google Fonts.** The host guard now lets GET stylesheet/font requests to `fonts.googleapis.com` and
+  `fonts.gstatic.com` through (read-only public assets; offline fetch failures abort only that request). Everything else to those hosts
+  still ends the run (exit 6 in mr-evidence, exit 2 in explainer-record, which shares the guard); `allowHosts` stays loopback-only. Only `https:` with no port or userinfo qualifies. Selftest cases cover the `<link>`, `fetch()`, `http://` and redirect-to-document paths.
+
 ## 0.24.0 — 2026-11-23
 
 - **MR evidence.** New `mr-evidence` launcher (`skills/explainer-video/scripts/evidence.mjs`, spec and rules in `references/evidence.md`):

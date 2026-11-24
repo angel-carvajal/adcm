@@ -41,7 +41,7 @@ A failure never blocks the MR: open it with `## Evidencia: pendiente (<reason>)`
 
 ## Env and security
 - Credentials: `EVIDENCE_USER` / `EVIDENCE_PASS` (names configurable in `spec.auth`), read by the script from `--env-file` (default `<repo>/.env.local`), then the process environment. Agents never read `.env*`. Values and their URL-encoded forms are scrubbed from every printed line, `manifest.json` and glab arguments logged; `manifest.json` holds no auth data. The dev server does not inherit them (the credential variables are removed from its environment even when they were exported in the shell).
-- Only loopback hosts (`localhost`, `127.0.0.1`, `::1`) in `baseUrl`, `allowHosts` and `serve.ready` (exit 6; `baseUrl` and `serve.ready` must be `http:` or `https:`, `allowHosts` a non-empty list, `hold` a number: otherwise exit 64); at runtime every request outside `allowHosts` ends the run with exit 6.
+- Only loopback hosts (`localhost`, `127.0.0.1`, `::1`) in `baseUrl`, `allowHosts` and `serve.ready` (exit 6; `baseUrl` and `serve.ready` must be `http:` or `https:`, `allowHosts` a non-empty list, `hold` a number: otherwise exit 64); at runtime every request outside `allowHosts` ends the run with exit 6. Exception: GET stylesheet/font requests to `fonts.googleapis.com` and `fonts.gstatic.com` pass (public read-only assets; a failed fetch offline is not fatal); fetch/xhr, POST, WebSocket and documents to those hosts still exit 6.
 - Uploads: `glab api projects/:id/uploads --form file=@<path>` with cwd = `--repo`; the `.markdown` field of the JSON is what goes in the block. `--max-mb` (default 10) re-encodes a larger mp4 before uploading.
 - REC_CHANNEL (default `chrome`) and PW_CORE_DIR work as in `explainer-record`.
 
